@@ -18,8 +18,14 @@ function normalizeCodePage(value = "auto") {
 }
 
 function appendArchiveOptions(args, selection, options) {
-  if (selection.type) {
-    args.push(`-t${selection.type}`);
+  // 7-Zip 26.x 对 RAR5 多分卷（Volume Locator）在强制 -tRar 时反而 Open ERROR，
+  // RAR/RAR5 一律交给引擎自动识别更稳；`.split` 是内部伪类型，也不下发。
+  const forcedType = selection.type;
+  const forceable = forcedType
+    && forcedType !== "rar"
+    && !/\.split$/i.test(forcedType);
+  if (forceable) {
+    args.push(`-t${forcedType}`);
   }
 
   const codePage = normalizeCodePage(options.codePage);
