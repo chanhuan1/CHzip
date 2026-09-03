@@ -18,6 +18,7 @@
                     </div>
                 </div>
                 <div class="header-right">
+                    <button id="historyBtn" class="secondary-button task-center-btn" type="button">历史</button>
                     <button id="themeToggle" class="theme-toggle" type="button" aria-label="切换主题">
                         <span class="theme-icon" id="themeIcon">🌙</span>
                         <span id="themeText">深色</span>
@@ -402,6 +403,22 @@
             <div id="taskCenterList" class="task-center-list"></div>
             <div class="dialog-actions">
                 <button id="closeTaskCenterConfirmBtn" class="primary-button" type="button">完成</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="historyDialog" class="dialog-backdrop" hidden>
+        <div class="dialog task-center-dialog" role="dialog" aria-modal="true" aria-labelledby="historyDialogTitle">
+            <div class="dialog-head">
+                <div>
+                    <h3 id="historyDialogTitle">解压历史</h3>
+                    <p>最近 20 条解压记录，新的会覆盖最旧的。</p>
+                </div>
+                <button id="closeHistoryBtn" class="dialog-close" type="button" aria-label="关闭">×</button>
+            </div>
+            <div id="historyList" class="task-center-list"></div>
+            <div class="dialog-actions">
+                <button id="closeHistoryConfirmBtn" class="primary-button" type="button">完成</button>
             </div>
         </div>
     </div>

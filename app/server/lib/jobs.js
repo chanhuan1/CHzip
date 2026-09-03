@@ -290,6 +290,32 @@ class JobStore {
     }
     return jobs.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
   }
+
+  removeFinishedOverflow(keep = 20) {
+    const finished = [];
+    for (const name of fs.readdirSync(this.jobsDir)) {
+      if (!/^[a-f0-9]{32}\.json$/.test(name)) {
+        continue;
+      }
+      const job = this.read(name.slice(0, -5));
+      if (!job || !TERMINAL_STATUSES.has(job.status)) {
+        continue;
+      }
+      finished.push({
+        id: job.id,
+        ts: job.finishedAt || job.createdAt || "",
+      });
+    }
+    finished.sort((a, b) => String(a.ts).localeCompare(String(b.ts)));
+    const removed = [];
+    for (let index = 0; index < finished.length - keep; index += 1) {
+      const entry = finished[index];
+      fs.rmSync(this.dataDir(entry.id), { recursive: true, force: true });
+      fs.rmSync(this.jobPath(entry.id), { force: true });
+      removed.push(entry.id);
+    }
+    return removed;
+  }
 }
 
 async function requestCancellation(store, jobId, dependencies = {}) {

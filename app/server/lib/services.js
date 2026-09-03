@@ -538,9 +538,11 @@ function createServices(options = {}) {
   }
 
   function listJobs() {
+    // 历史只保留最近 keep 条，超出自动清除最旧（环形覆盖）
+    store.removeFinishedOverflow(20);
     const jobs = store.list();
     const active = [];
-    const recent = [];
+    const history = [];
     for (const job of jobs) {
       const item = {
         id: job.id,
@@ -560,9 +562,13 @@ function createServices(options = {}) {
           ? { code: job.error.code || "", message: job.error.message || "" }
           : null,
       };
-      (TERMINAL_STATUSES.has(job.status) ? recent : active).push(item);
+      if (TERMINAL_STATUSES.has(job.status)) {
+        history.push(item);
+      } else {
+        active.push(item);
+      }
     }
-    return { active, recent: recent.slice(0, 10) };
+    return { active, history: history.slice(0, 20) };
   }
 
   async function previewFile(input) {

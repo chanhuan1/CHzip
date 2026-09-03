@@ -412,7 +412,7 @@
         try {
             const data = await api.requestJson(api.apiUrl("jobs"));
             const active = data?.active || [];
-            const recent = data?.recent || [];
+            const history = data?.history || [];
             renderTaskStream(state, api, data);
             list.replaceChildren();
             if (active.length) {
@@ -424,16 +424,16 @@
                     renderTaskRow(state, api, list, job);
                 }
             }
-            if (recent.length) {
+            if (history.length) {
                 const h = document.createElement("div");
                 h.className = "task-center-section";
-                h.textContent = "最近完成";
+                h.textContent = "解压历史";
                 list.append(h);
-                for (const job of recent) {
+                for (const job of history) {
                     renderTaskRow(state, api, list, job);
                 }
             }
-            if (!active.length && !recent.length) {
+            if (!active.length && !history.length) {
                 renderTaskEmpty(list, "当前没有解压任务。关闭本页面不会中断进行中的解压。");
             }
         } catch (error) {
@@ -496,14 +496,61 @@
         }
     }
 
+    async function pollHistory(state, api) {
+        const list = state.elements.historyList;
+        if (!list) {
+            return;
+        }
+        try {
+            const data = await api.requestJson(api.apiUrl("jobs"));
+            const history = data?.history || [];
+            list.replaceChildren();
+            if (history.length) {
+                for (const job of history) {
+                    renderTaskRow(state, api, list, job);
+                }
+            } else {
+                renderTaskEmpty(list, "暂无解压历史");
+            }
+        } catch (error) {
+            list.replaceChildren();
+            renderTaskEmpty(list, `历史记录获取失败：${error.message}`);
+        }
+    }
+
+    async function openHistory(state, api) {
+        const dialog = state.elements.historyDialog;
+        if (!dialog) {
+            return;
+        }
+        dialog.hidden = false;
+        state.historyOpen = true;
+        clearInterval(state.historyTimer);
+        await pollHistory(state, api);
+        state.historyTimer = window.setInterval(() => pollHistory(state, api), 3000);
+    }
+
+    function closeHistory(state) {
+        clearInterval(state.historyTimer);
+        state.historyTimer = null;
+        state.historyOpen = false;
+        const dialog = state.elements.historyDialog;
+        if (dialog) {
+            dialog.hidden = true;
+        }
+    }
+
     root.CHzipUiJobs = {
         cancelExtract,
         cancelTaskCenter,
         checkActiveTasks,
+        closeHistory,
         closeTaskCenter,
         computeEta,
         ensureMiniPoll,
+        openHistory,
         openTaskCenter,
+        pollHistory,
         pollStatus,
         pollTaskCenter,
         pollTaskMini,

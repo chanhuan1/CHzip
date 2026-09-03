@@ -763,6 +763,20 @@
         const newTheme = uiTheme.toggleTheme();
         uiTheme.updateThemeUI(newTheme);
     });
+    els.historyBtn.addEventListener("click", () => {
+        uiJobs.openHistory(state, api);
+    });
+    els.closeHistoryBtn.addEventListener("click", () => {
+        uiJobs.closeHistory(state);
+    });
+    els.closeHistoryConfirmBtn.addEventListener("click", () => {
+        uiJobs.closeHistory(state);
+    });
+    els.historyDialog.addEventListener("click", (event) => {
+        if (event.target === els.historyDialog) {
+            uiJobs.closeHistory(state);
+        }
+    });
     els.closeTaskCenterBtn.addEventListener("click", () => {
         uiJobs.closeTaskCenter(state, api);
     });
@@ -807,6 +821,10 @@
             clearTimeout(state.taskWatchTimer);
             state.taskWatchTimer = null;
         }
+        if (state.historyTimer) {
+            clearInterval(state.historyTimer);
+            state.historyTimer = null;
+        }
     });
 
     window.addEventListener("pagehide", () => {
@@ -821,6 +839,10 @@
         if (state.taskWatchTimer) {
             clearTimeout(state.taskWatchTimer);
             state.taskWatchTimer = null;
+        }
+        if (state.historyTimer) {
+            clearInterval(state.historyTimer);
+            state.historyTimer = null;
         }
     });
 

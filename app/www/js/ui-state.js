@@ -44,6 +44,8 @@
             taskCenterOpen: false,
             taskMiniTimer: null,
             taskWatchTimer: null,
+            historyOpen: false,
+            historyTimer: null,
         };
     }
 
@@ -142,6 +144,11 @@
             closeTaskCenterBtn: $("closeTaskCenterBtn"),
             closeTaskCenterConfirmBtn: $("closeTaskCenterConfirmBtn"),
             taskStream: $("taskStream"),
+            historyBtn: $("historyBtn"),
+            historyDialog: $("historyDialog"),
+            historyList: $("historyList"),
+            closeHistoryBtn: $("closeHistoryBtn"),
+            closeHistoryConfirmBtn: $("closeHistoryConfirmBtn"),
             previewDialog: $("previewDialog"),
             previewTitle: $("previewTitle"),
             previewFileName: $("previewFileName"),
