@@ -70,3 +70,10 @@ test("parseProgress returns zero for empty", () => {
   assert.equal(result.currentFile, "");
 });
 
+test("parseProgress takes the latest carriage-return snapshot", () => {
+  const log = "  0% a.txt\r  37% b.txt\r  99% c.txt\r";
+  const result = parseProgress(log);
+  assert.equal(result.percent, 99);
+  assert.equal(result.currentFile, "c.txt");
+});
+

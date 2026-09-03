@@ -97,17 +97,26 @@ function classifySevenZipError(log, exitCode, context = {}) {
 }
 
 function parseProgress(log) {
-  const lines = String(log || "").split(/\r?\n/);
+  // 7-Zip 的进度用回车符 \r 原地覆盖（不换行），因此要按 \r 分段并取
+  // “最后一个”快照，才能拿到最新百分比；否则会一直停在最早的低值（0%）。
+  const text = String(log || "");
   let percent = 0;
   let currentFile = "";
-  for (const line of lines) {
-    const match = line.match(/\b(\d{1,3})%\s+(?:\d+\s+-\s+)?(.+)?$/);
+  for (const raw of text.split(/\r\n|\r|\n/)) {
+    const line = raw.trim();
+    const match = line.match(/(\d{1,3})\s*%/);
     if (!match) {
       continue;
     }
     percent = Math.min(100, Number(match[1]));
-    if (match[2]) {
-      currentFile = match[2].trim();
+    const tail = line.slice(match.index + match[0].length).trim();
+    if (!tail) {
+      continue;
+    }
+    const separator = tail.lastIndexOf(" - ");
+    const name = (separator >= 0 ? tail.slice(separator + 3) : tail).trim();
+    if (name) {
+      currentFile = name;
     }
   }
   return { percent, currentFile };
