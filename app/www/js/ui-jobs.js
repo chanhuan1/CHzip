@@ -125,6 +125,7 @@
             state.etaTracker = null;
             els.outputPreview.textContent = result.outputDir;
             setJobProgress(0, "任务已排队", "等待 7-Zip 启动...", state);
+            ensureMiniPoll(state, api);
             await pollStatus(state, api);
             if (state.jobId) {
                 clearInterval(state.pollTimer);
@@ -242,6 +243,62 @@
         }
     }
 
+    function applyMiniWidget(state, data) {
+        const els = state.elements;
+        const active = data?.active || [];
+        setTaskBadge(state, active.length);
+        if (!els.taskMini) {
+            return;
+        }
+        if (!active.length) {
+            els.taskMini.hidden = true;
+            return;
+        }
+        let sum = 0;
+        for (const job of active) {
+            sum += Number(job.progress) || 0;
+        }
+        const avg = active.length ? Math.round(sum / active.length) : 0;
+        if (els.taskMiniFill) {
+            els.taskMiniFill.style.width = `${Math.max(0, Math.min(100, avg))}%`;
+        }
+        if (els.taskMiniLabel) {
+            els.taskMiniLabel.textContent = active.length > 1
+                ? `${active.length} 个任务 · ${avg}%`
+                : `${statusLabel(active[0].status, active[0].phase)} · ${avg}%`;
+        }
+        els.taskMini.hidden = false;
+    }
+
+    function stopMiniPoll(state) {
+        if (state.taskMiniTimer) {
+            clearInterval(state.taskMiniTimer);
+            state.taskMiniTimer = null;
+        }
+    }
+
+    async function pollTaskMini(state, api) {
+        try {
+            const data = await api.requestJson(api.apiUrl("jobs"));
+            applyMiniWidget(state, data);
+            const count = data?.active?.length || 0;
+            if (count > 0 && !state.taskMiniTimer && !state.taskCenterOpen) {
+                state.taskMiniTimer = window.setInterval(
+                    () => pollTaskMini(state, api),
+                    2000,
+                );
+            } else if (count === 0 && state.taskMiniTimer) {
+                stopMiniPoll(state);
+            }
+        } catch (error) {
+            // 保持当前显示，下次轮询再试
+        }
+    }
+
+    function ensureMiniPoll(state, api) {
+        pollTaskMini(state, api).catch(() => {});
+    }
+
     function formatTaskTime(iso) {
         if (!iso) {
             return "";
@@ -338,7 +395,7 @@
             const data = await api.requestJson(api.apiUrl("jobs"));
             const active = data?.active || [];
             const recent = data?.recent || [];
-            setTaskBadge(state, active.length);
+            applyMiniWidget(state, data);
             list.replaceChildren();
             if (active.length) {
                 const h = document.createElement("div");
@@ -383,6 +440,7 @@
         }
         dialog.hidden = false;
         state.taskCenterOpen = true;
+        stopMiniPoll(state);
         clearInterval(state.taskCenterTimer);
         await pollTaskCenter(state, api);
         state.taskCenterTimer = window.setInterval(
@@ -391,7 +449,7 @@
         );
     }
 
-    function closeTaskCenter(state) {
+    function closeTaskCenter(state, api) {
         clearInterval(state.taskCenterTimer);
         state.taskCenterTimer = null;
         state.taskCenterOpen = false;
@@ -399,11 +457,12 @@
         if (dialog) {
             dialog.hidden = true;
         }
+        ensureMiniPoll(state, api);
     }
 
     function toggleTaskCenter(state, api) {
         if (state.taskCenterOpen) {
-            closeTaskCenter(state);
+            closeTaskCenter(state, api);
         } else {
             openTaskCenter(state, api);
         }
@@ -416,6 +475,8 @@
             setTaskBadge(state, count);
             if (count > 0 && !state.taskCenterOpen) {
                 await openTaskCenter(state, api);
+            } else if (count > 0) {
+                ensureMiniPoll(state, api);
             }
         } catch (error) {
             // 任务列表不可用时静默
@@ -428,9 +489,11 @@
         checkActiveTasks,
         closeTaskCenter,
         computeEta,
+        ensureMiniPoll,
         openTaskCenter,
         pollStatus,
         pollTaskCenter,
+        pollTaskMini,
         setJobProgress,
         setTaskBadge,
         startExtract,

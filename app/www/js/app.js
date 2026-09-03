@@ -766,15 +766,23 @@
     els.taskCenterBtn.addEventListener("click", () => {
         uiJobs.toggleTaskCenter(state, api);
     });
+    els.taskMini.addEventListener("click", () => {
+        uiJobs.openTaskCenter(state, api);
+    });
+    els.taskMini.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+            uiJobs.openTaskCenter(state, api);
+        }
+    });
     els.closeTaskCenterBtn.addEventListener("click", () => {
-        uiJobs.closeTaskCenter(state);
+        uiJobs.closeTaskCenter(state, api);
     });
     els.closeTaskCenterConfirmBtn.addEventListener("click", () => {
-        uiJobs.closeTaskCenter(state);
+        uiJobs.closeTaskCenter(state, api);
     });
     els.taskCenterDialog.addEventListener("click", (event) => {
         if (event.target === els.taskCenterDialog) {
-            uiJobs.closeTaskCenter(state);
+            uiJobs.closeTaskCenter(state, api);
         }
     });
 

@@ -42,6 +42,7 @@
             etaTracker: null,
             taskCenterTimer: null,
             taskCenterOpen: false,
+            taskMiniTimer: null,
         };
     }
 
@@ -140,6 +141,9 @@
             taskCenterList: $("taskCenterList"),
             closeTaskCenterBtn: $("closeTaskCenterBtn"),
             closeTaskCenterConfirmBtn: $("closeTaskCenterConfirmBtn"),
+            taskMini: $("taskMini"),
+            taskMiniLabel: $("taskMiniLabel"),
+            taskMiniFill: $("taskMiniFill"),
             previewDialog: $("previewDialog"),
             previewTitle: $("previewTitle"),
             previewFileName: $("previewFileName"),
