@@ -43,6 +43,7 @@
             taskCenterTimer: null,
             taskCenterOpen: false,
             taskMiniTimer: null,
+            taskWatchTimer: null,
         };
     }
 

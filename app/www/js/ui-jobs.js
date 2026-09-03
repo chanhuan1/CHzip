@@ -296,33 +296,39 @@
         stream.hidden = false;
     }
 
-    function stopMiniPoll(state) {
-        if (state.taskMiniTimer) {
-            clearInterval(state.taskMiniTimer);
-            state.taskMiniTimer = null;
-        }
-    }
-
     async function pollTaskMini(state, api) {
         try {
             const data = await api.requestJson(api.apiUrl("jobs"));
             renderTaskStream(state, api, data);
-            const count = data?.active?.length || 0;
-            if (count > 0 && !state.taskMiniTimer && !state.taskCenterOpen) {
-                state.taskMiniTimer = window.setInterval(
-                    () => pollTaskMini(state, api),
-                    1500,
-                );
-            } else if (count === 0 && state.taskMiniTimer) {
-                stopMiniPoll(state);
-            }
+            return data?.active?.length || 0;
         } catch (error) {
-            // 保持当前显示，下次轮询再试
+            return 0;
         }
     }
 
     function ensureMiniPoll(state, api) {
         pollTaskMini(state, api).catch(() => {});
+    }
+
+    // 页面打开后常驻的自适应监听：空闲约 5s 扫一次，一旦出现后台任务切到 1.5s 快刷；
+    // 任务中心弹窗打开时由弹窗自身轮询驱动（此处跳过，避免重复请求）。
+    function startTaskWatch(state, api) {
+        if (state.taskWatchTimer) {
+            return;
+        }
+        const tick = async () => {
+            try {
+                if (!state.taskCenterOpen) {
+                    const count = await pollTaskMini(state, api);
+                    state.taskWatchTimer = setTimeout(tick, count > 0 ? 1500 : 5000);
+                    return;
+                }
+            } catch (error) {
+                // 忽略，继续下一轮
+            }
+            state.taskWatchTimer = setTimeout(tick, 3000);
+        };
+        state.taskWatchTimer = setTimeout(tick, 0);
     }
 
     function formatTaskTime(iso) {
@@ -466,7 +472,6 @@
         }
         dialog.hidden = false;
         state.taskCenterOpen = true;
-        stopMiniPoll(state);
         clearInterval(state.taskCenterTimer);
         await pollTaskCenter(state, api);
         state.taskCenterTimer = window.setInterval(
@@ -518,6 +523,7 @@
         pollTaskMini,
         setJobProgress,
         startExtract,
+        startTaskWatch,
         statusLabel,
         toggleTaskCenter,
     };

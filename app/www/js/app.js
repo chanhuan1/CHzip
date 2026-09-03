@@ -799,12 +799,28 @@
             clearInterval(state.pollTimer);
             state.pollTimer = null;
         }
+        if (state.taskCenterTimer) {
+            clearInterval(state.taskCenterTimer);
+            state.taskCenterTimer = null;
+        }
+        if (state.taskWatchTimer) {
+            clearTimeout(state.taskWatchTimer);
+            state.taskWatchTimer = null;
+        }
     });
 
     window.addEventListener("pagehide", () => {
         if (state.pollTimer) {
             clearInterval(state.pollTimer);
             state.pollTimer = null;
+        }
+        if (state.taskCenterTimer) {
+            clearInterval(state.taskCenterTimer);
+            state.taskCenterTimer = null;
+        }
+        if (state.taskWatchTimer) {
+            clearTimeout(state.taskWatchTimer);
+            state.taskWatchTimer = null;
         }
     });
 
@@ -818,5 +834,5 @@
                 els.notice.textContent = `初始化失败：${error.message}`;
             }
         });
-    uiJobs.checkActiveTasks(state, api);
+    uiJobs.startTaskWatch(state, api);
 }());
