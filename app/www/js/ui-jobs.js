@@ -250,6 +250,7 @@
         }
         // 按开始先后排序，最先开始在最上面
         active.sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+        const CN = ["一", "二", "三", "四", "五", "六", "七", "八", "九"];
         stream.replaceChildren();
         active.forEach((job, index) => {
             const row = document.createElement("div");
@@ -264,33 +265,18 @@
                 }
             });
 
-            const head = document.createElement("div");
-            head.className = "task-stream-head";
-            const name = document.createElement("span");
-            name.className = "task-stream-name";
-            name.textContent = active.length > 1
-                ? `${index + 1}. ${job.archiveName || "压缩包"}`
-                : (job.archiveName || "压缩包");
-            name.title = job.archivePath || "";
+            const text = document.createElement("span");
+            text.className = "task-stream-text";
+            const name = job.archiveName || "压缩包";
+            const ordinal = index < CN.length ? CN[index] : String(index + 1);
+            text.textContent = active.length > 1 ? `任务${ordinal} · ${name}` : name;
+            text.title = job.archivePath || name;
+
             const pct = document.createElement("span");
             pct.className = "task-stream-pct";
             pct.textContent = `${Math.round(Number(job.progress) || 0)}%`;
-            head.append(name, pct);
 
-            const file = document.createElement("div");
-            file.className = "task-stream-file";
-            const current = job.currentFile;
-            file.textContent = current ? `正在解压：${current}` : "正在解压…";
-            file.title = current || "";
-
-            const bar = document.createElement("div");
-            bar.className = "task-stream-bar";
-            const fill = document.createElement("i");
-            fill.className = "task-stream-fill";
-            fill.style.width = `${Math.max(0, Math.min(100, Number(job.progress) || 0))}%`;
-            bar.append(fill);
-
-            row.append(head, file, bar);
+            row.append(text, pct);
             stream.append(row);
         });
         stream.hidden = false;

@@ -1093,8 +1093,10 @@ dd {
 
 .task-stream-row {
     display: grid;
-    gap: 4px;
-    padding: 8px 12px 9px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: 10px;
+    padding: 7px 12px;
     border: 1px solid var(--line);
     border-left: 3px solid var(--accent);
     border-radius: 8px;
@@ -1111,20 +1113,13 @@ dd {
     outline: none;
 }
 
-.task-stream-head {
-    display: flex;
-    gap: 10px;
-    align-items: baseline;
-    justify-content: space-between;
-}
-
-.task-stream-name {
+.task-stream-text {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     font-size: 12px;
-    font-weight: 600;
+    font-weight: 500;
 }
 
 .task-stream-pct {
