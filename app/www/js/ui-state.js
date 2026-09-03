@@ -40,6 +40,8 @@
             previewFileRequestId: 0,
             passwordInputSeq: 0,
             etaTracker: null,
+            taskCenterTimer: null,
+            taskCenterOpen: false,
         };
     }
 
@@ -133,6 +135,11 @@
             themeToggle: $("themeToggle"),
             themeIcon: $("themeIcon"),
             themeText: $("themeText"),
+            taskCenterBtn: $("taskCenterBtn"),
+            taskCenterDialog: $("taskCenterDialog"),
+            taskCenterList: $("taskCenterList"),
+            closeTaskCenterBtn: $("closeTaskCenterBtn"),
+            closeTaskCenterConfirmBtn: $("closeTaskCenterConfirmBtn"),
             previewDialog: $("previewDialog"),
             previewTitle: $("previewTitle"),
             previewFileName: $("previewFileName"),

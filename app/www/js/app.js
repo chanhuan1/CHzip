@@ -763,6 +763,20 @@
         const newTheme = uiTheme.toggleTheme();
         uiTheme.updateThemeUI(newTheme);
     });
+    els.taskCenterBtn.addEventListener("click", () => {
+        uiJobs.toggleTaskCenter(state, api);
+    });
+    els.closeTaskCenterBtn.addEventListener("click", () => {
+        uiJobs.closeTaskCenter(state);
+    });
+    els.closeTaskCenterConfirmBtn.addEventListener("click", () => {
+        uiJobs.closeTaskCenter(state);
+    });
+    els.taskCenterDialog.addEventListener("click", (event) => {
+        if (event.target === els.taskCenterDialog) {
+            uiJobs.closeTaskCenter(state);
+        }
+    });
 
     els.closePreviewBtn.addEventListener("click", closePreviewDialog);
     els.previewDialog.addEventListener("click", (event) => {
@@ -807,4 +821,5 @@
                 els.notice.textContent = `初始化失败：${error.message}`;
             }
         });
+    uiJobs.checkActiveTasks(state, api);
 }());

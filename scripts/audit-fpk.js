@@ -16,7 +16,7 @@ const FONT_SHA256 = "693b77d4f32ee9b8bfc995589b5fad5e99adf2832738661f5402f997842
 const LICENSE_SHA256 = "262481e844521b326f5ecd053e59b98c8b2da78c8ee1bdbb6e8174305e54935a";
 const packages = [
   {
-    fileName: "CHzip_2.5_search-fixed_x86_64.fpk",
+    fileName: "CHzip_2.6_search-fixed_x86_64.fpk",
     variant: "search-fixed",
     platform: "x86",
     sevenZipPath: "vendor/7zip/linux-x64/7zzs",
@@ -24,7 +24,7 @@ const packages = [
     machine: 62,
   },
   {
-    fileName: "CHzip_2.5_search-fixed_arm64.fpk",
+    fileName: "CHzip_2.6_search-fixed_arm64.fpk",
     variant: "search-fixed",
     platform: "arm",
     sevenZipPath: "vendor/7zip/linux-arm64/7zzs",
@@ -97,7 +97,7 @@ function auditPackage(config) {
   );
 
   const manifest = outerEntry(packagePath, "manifest").toString("utf8");
-  assert.match(manifest, /^version\s*=\s*2\.5$/m);
+  assert.match(manifest, /^version\s*=\s*2\.6$/m);
   assert.match(
     manifest,
     new RegExp(`^platform\\s*=\\s*${config.platform}$`, "m"),

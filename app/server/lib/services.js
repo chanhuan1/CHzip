@@ -537,6 +537,34 @@ function createServices(options = {}) {
     return { comment: commentMatch ? commentMatch[1].trim() : "" };
   }
 
+  function listJobs() {
+    const jobs = store.list();
+    const active = [];
+    const recent = [];
+    for (const job of jobs) {
+      const item = {
+        id: job.id,
+        status: job.status,
+        phase: job.phase || "",
+        progress: job.progress || 0,
+        currentFile: job.currentFile || "",
+        archivePath: job.archivePath || "",
+        archiveName: job.archivePath ? path.basename(job.archivePath) : "",
+        outputDir: job.outputDir || "",
+        partCount: job.partCount || 1,
+        requestId: job.requestId || "",
+        startedAt: job.startedAt || "",
+        finishedAt: job.finishedAt || "",
+        createdAt: job.createdAt || "",
+        error: job.error
+          ? { code: job.error.code || "", message: job.error.message || "" }
+          : null,
+      };
+      (TERMINAL_STATUSES.has(job.status) ? recent : active).push(item);
+    }
+    return { active, recent: recent.slice(0, 10) };
+  }
+
   async function previewFile(input) {
     const archive = info(input);
     const targetPath = input.targetPath;
@@ -589,6 +617,7 @@ function createServices(options = {}) {
     directories,
     extract,
     info,
+    listJobs,
     preview,
     previewFile,
     status,

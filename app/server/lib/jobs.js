@@ -269,6 +269,27 @@ class JobStore {
     }
     return count;
   }
+
+  list(options = {}) {
+    const maxAgeMs = options.maxAgeMs || JOB.EXPIRY_MS;
+    const now = options.now || new Date();
+    const jobs = [];
+    for (const name of fs.readdirSync(this.jobsDir)) {
+      if (!/^[a-f0-9]{32}\.json$/.test(name)) {
+        continue;
+      }
+      const job = this.read(name.slice(0, -5));
+      if (!job) {
+        continue;
+      }
+      const timestamp = job.finishedAt || job.startedAt || job.createdAt;
+      if (!timestamp || now.getTime() - new Date(timestamp).getTime() > maxAgeMs) {
+        continue;
+      }
+      jobs.push(job);
+    }
+    return jobs.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  }
 }
 
 async function requestCancellation(store, jobId, dependencies = {}) {

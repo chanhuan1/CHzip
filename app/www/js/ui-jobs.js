@@ -235,12 +235,206 @@
         return true;
     }
 
+    function setTaskBadge(state, count) {
+        const btn = state.elements.taskCenterBtn;
+        if (btn) {
+            btn.textContent = count > 0 ? `任务 ${count}` : "任务";
+        }
+    }
+
+    function formatTaskTime(iso) {
+        if (!iso) {
+            return "";
+        }
+        const d = new Date(iso);
+        if (Number.isNaN(d.getTime())) {
+            return "";
+        }
+        const pad = (n) => String(n).padStart(2, "0");
+        return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    }
+
+    function renderTaskEmpty(list, text) {
+        const empty = document.createElement("div");
+        empty.className = "task-center-empty";
+        empty.textContent = text;
+        list.append(empty);
+    }
+
+    function renderTaskRow(state, api, list, job) {
+        const terminal = ["success", "failed", "cancelled"].includes(job.status);
+        const row = document.createElement("div");
+        row.className = `task-row task-${job.status}`;
+
+        const main = document.createElement("div");
+        main.className = "task-row-main";
+
+        const head = document.createElement("div");
+        head.className = "task-row-head";
+        const name = document.createElement("strong");
+        name.className = "task-row-name";
+        name.textContent = job.archiveName || "压缩包";
+        name.title = job.archivePath || "";
+        const status = document.createElement("span");
+        status.className = "task-row-status";
+        status.textContent = terminal
+            ? statusLabel(job.status, job.phase)
+            : `${statusLabel(job.status, job.phase)} · ${Math.round(Number(job.progress) || 0)}%`;
+        head.append(name, status);
+        main.append(head);
+
+        if (!terminal) {
+            const track = document.createElement("div");
+            track.className = "task-row-track";
+            const fill = document.createElement("div");
+            fill.className = "task-row-fill";
+            fill.style.width = `${Math.max(0, Math.min(100, Number(job.progress) || 0))}%`;
+            track.append(fill);
+            main.append(track);
+            const meta = document.createElement("div");
+            meta.className = "task-row-meta";
+            const started = formatTaskTime(job.startedAt);
+            meta.textContent = [
+                job.currentFile ? `正在处理：${job.currentFile}` : "",
+                started ? `开始于 ${started}` : "",
+            ].filter(Boolean).join(" · ");
+            main.append(meta);
+        } else {
+            const meta = document.createElement("div");
+            meta.className = "task-row-meta";
+            if (job.status === "success") {
+                meta.textContent = `已解压到：${job.outputDir || ""}`;
+                meta.title = job.outputDir || "";
+            } else if (job.status === "failed") {
+                meta.textContent = job.error?.message || "解压失败";
+            } else {
+                meta.textContent = "已停止";
+            }
+            main.append(meta);
+        }
+
+        const actions = document.createElement("div");
+        actions.className = "task-row-actions";
+        if (!terminal) {
+            const stop = document.createElement("button");
+            stop.type = "button";
+            stop.className = "danger-button task-stop-btn";
+            stop.textContent = "停止";
+            stop.addEventListener("click", () => {
+                cancelTaskCenter(state, api, job.id);
+            });
+            actions.append(stop);
+        }
+        row.append(main, actions);
+        list.append(row);
+    }
+
+    async function pollTaskCenter(state, api) {
+        const list = state.elements.taskCenterList;
+        if (!list) {
+            return;
+        }
+        try {
+            const data = await api.requestJson(api.apiUrl("jobs"));
+            const active = data?.active || [];
+            const recent = data?.recent || [];
+            setTaskBadge(state, active.length);
+            list.replaceChildren();
+            if (active.length) {
+                const h = document.createElement("div");
+                h.className = "task-center-section";
+                h.textContent = "进行中";
+                list.append(h);
+                for (const job of active) {
+                    renderTaskRow(state, api, list, job);
+                }
+            }
+            if (recent.length) {
+                const h = document.createElement("div");
+                h.className = "task-center-section";
+                h.textContent = "最近完成";
+                list.append(h);
+                for (const job of recent) {
+                    renderTaskRow(state, api, list, job);
+                }
+            }
+            if (!active.length && !recent.length) {
+                renderTaskEmpty(list, "当前没有解压任务。关闭本页面不会中断进行中的解压。");
+            }
+        } catch (error) {
+            list.replaceChildren();
+            renderTaskEmpty(list, `任务列表获取失败：${error.message}`);
+        }
+    }
+
+    async function cancelTaskCenter(state, api, jobId) {
+        try {
+            await api.postApi("cancel", { jobId });
+        } catch (error) {
+            // 下一次轮询会反映真实状态
+        }
+        await pollTaskCenter(state, api);
+    }
+
+    async function openTaskCenter(state, api) {
+        const dialog = state.elements.taskCenterDialog;
+        if (!dialog) {
+            return;
+        }
+        dialog.hidden = false;
+        state.taskCenterOpen = true;
+        clearInterval(state.taskCenterTimer);
+        await pollTaskCenter(state, api);
+        state.taskCenterTimer = window.setInterval(
+            () => pollTaskCenter(state, api),
+            1000,
+        );
+    }
+
+    function closeTaskCenter(state) {
+        clearInterval(state.taskCenterTimer);
+        state.taskCenterTimer = null;
+        state.taskCenterOpen = false;
+        const dialog = state.elements.taskCenterDialog;
+        if (dialog) {
+            dialog.hidden = true;
+        }
+    }
+
+    function toggleTaskCenter(state, api) {
+        if (state.taskCenterOpen) {
+            closeTaskCenter(state);
+        } else {
+            openTaskCenter(state, api);
+        }
+    }
+
+    async function checkActiveTasks(state, api) {
+        try {
+            const data = await api.requestJson(api.apiUrl("jobs"));
+            const count = data?.active?.length || 0;
+            setTaskBadge(state, count);
+            if (count > 0 && !state.taskCenterOpen) {
+                await openTaskCenter(state, api);
+            }
+        } catch (error) {
+            // 任务列表不可用时静默
+        }
+    }
+
     root.CHzipUiJobs = {
         cancelExtract,
+        cancelTaskCenter,
+        checkActiveTasks,
+        closeTaskCenter,
         computeEta,
+        openTaskCenter,
         pollStatus,
+        pollTaskCenter,
         setJobProgress,
+        setTaskBadge,
         startExtract,
         statusLabel,
+        toggleTaskCenter,
     };
 }(typeof window !== "undefined" ? window : globalThis));

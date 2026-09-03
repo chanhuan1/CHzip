@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CHzip - 飞牛智能分卷解压</title>
-    <link rel="stylesheet" href="./index.cgi/css/style.css?v=2.5">
+    <link rel="stylesheet" href="./index.cgi/css/style.css?v=2.6">
 </head>
 <body>
     <main class="app-shell">
@@ -22,6 +22,7 @@
                         <span class="theme-icon" id="themeIcon">🌙</span>
                         <span id="themeText">深色</span>
                     </button>
+                    <button id="taskCenterBtn" class="secondary-button task-center-btn" type="button">任务</button>
                     <div id="toolStatus" class="status-badge">正在检测引擎</div>
                 </div>
             </header>
@@ -388,6 +389,22 @@
         </div>
     </div>
 
+    <div id="taskCenterDialog" class="dialog-backdrop" hidden>
+        <div class="dialog task-center-dialog" role="dialog" aria-modal="true" aria-labelledby="taskCenterDialogTitle">
+            <div class="dialog-head">
+                <div>
+                    <h3 id="taskCenterDialogTitle">后台解压任务</h3>
+                    <p>解压在后台进行，关闭本页面不会中断；重新打开时会自动恢复显示。</p>
+                </div>
+                <button id="closeTaskCenterBtn" class="dialog-close" type="button" aria-label="关闭">×</button>
+            </div>
+            <div id="taskCenterList" class="task-center-list"></div>
+            <div class="dialog-actions">
+                <button id="closeTaskCenterConfirmBtn" class="primary-button" type="button">完成</button>
+            </div>
+        </div>
+    </div>
+
     <div id="commentDialog" class="dialog-backdrop" hidden>
         <div class="dialog comment-dialog" role="dialog" aria-modal="true" aria-labelledby="commentDialogTitle">
             <div class="dialog-head">
@@ -411,17 +428,17 @@
         </div>
     </div>
 
-    <script src="./index.cgi/js/password-store.js?v=2.5"></script>
-    <script src="./index.cgi/js/tree.js?v=2.5"></script>
-    <script src="./index.cgi/js/api-client.js?v=2.5"></script>
-    <script src="./index.cgi/js/ui-state.js?v=2.5"></script>
-    <script src="./index.cgi/js/ui-tree.js?v=2.5"></script>
-    <script src="./index.cgi/js/ui-dialogs.js?v=2.5"></script>
-    <script src="./index.cgi/js/ui-jobs.js?v=2.5"></script>
-    <script src="./index.cgi/js/ui-passwords.js?v=2.5"></script>
-    <script src="./index.cgi/js/ui-preview.js?v=2.5"></script>
-    <script src="./index.cgi/js/ui-theme.js?v=2.5"></script>
-    <script src="./index.cgi/js/ui-comment.js?v=2.5"></script>
-    <script src="./index.cgi/js/app.js?v=2.5"></script>
+    <script src="./index.cgi/js/password-store.js?v=2.6"></script>
+    <script src="./index.cgi/js/tree.js?v=2.6"></script>
+    <script src="./index.cgi/js/api-client.js?v=2.6"></script>
+    <script src="./index.cgi/js/ui-state.js?v=2.6"></script>
+    <script src="./index.cgi/js/ui-tree.js?v=2.6"></script>
+    <script src="./index.cgi/js/ui-dialogs.js?v=2.6"></script>
+    <script src="./index.cgi/js/ui-jobs.js?v=2.6"></script>
+    <script src="./index.cgi/js/ui-passwords.js?v=2.6"></script>
+    <script src="./index.cgi/js/ui-preview.js?v=2.6"></script>
+    <script src="./index.cgi/js/ui-theme.js?v=2.6"></script>
+    <script src="./index.cgi/js/ui-comment.js?v=2.6"></script>
+    <script src="./index.cgi/js/app.js?v=2.6"></script>
 </body>
 </html>

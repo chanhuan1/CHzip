@@ -175,6 +175,8 @@ async function routeRequest(api, request, services) {
       codePage: request.body.codePage || "auto",
       requestId,
     });
+  } else if (api === "jobs") {
+    data = services.listJobs();
   } else {
     const error = new Error("不存在的接口");
     error.code = "NOT_FOUND";
