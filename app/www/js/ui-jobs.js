@@ -236,58 +236,64 @@
         return true;
     }
 
-    function setTaskBadge(state, count) {
-        const btn = state.elements.taskCenterBtn;
-        if (btn) {
-            btn.textContent = count > 0 ? `任务 ${count}` : "任务";
-        }
-    }
-
-    const MINI_CN_NUM = ["一", "二", "三", "四", "五", "六", "七", "八", "九"];
-
-    function miniOrdinal(index) {
-        return index < MINI_CN_NUM.length ? MINI_CN_NUM[index] : String(index + 1);
-    }
-
-    function applyMiniWidget(state, data) {
+    function renderTaskStream(state, api, data) {
         const els = state.elements;
+        const stream = els.taskStream;
+        if (!stream) {
+            return;
+        }
         const active = (data?.active || []).slice();
-        setTaskBadge(state, active.length);
-        if (!els.taskMini) {
-            return;
-        }
         if (!active.length) {
-            els.taskMini.hidden = true;
-            if (els.taskMiniItems) {
-                els.taskMiniItems.replaceChildren();
-            }
+            stream.hidden = true;
+            stream.replaceChildren();
             return;
         }
-        // 按开始先后排序：最先开始的是任务一
+        // 按开始先后排序，最先开始在最上面
         active.sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
-        const container = els.taskMiniItems || els.taskMini;
-        container.replaceChildren();
+        stream.replaceChildren();
         active.forEach((job, index) => {
-            const multi = active.length > 1;
-            const item = document.createElement("div");
-            item.className = "task-mini-item";
-            const text = document.createElement("span");
-            text.className = "task-mini-text";
-            const prefix = multi ? `任务${miniOrdinal(index)} · ` : "";
-            text.textContent = `${prefix}${statusLabel(job.status, job.phase)} · ${Math.round(Number(job.progress) || 0)}%`;
-            const track = document.createElement("span");
-            track.className = "task-mini-track";
-            const fill = document.createElement("span");
-            fill.className = "task-mini-fill";
+            const row = document.createElement("div");
+            row.className = "task-stream-row";
+            row.setAttribute("role", "button");
+            row.tabIndex = 0;
+            row.title = "点击查看详情 / 停止";
+            row.addEventListener("click", () => openTaskCenter(state, api));
+            row.addEventListener("keydown", (event) => {
+                if (event.key === "Enter") {
+                    openTaskCenter(state, api);
+                }
+            });
+
+            const head = document.createElement("div");
+            head.className = "task-stream-head";
+            const name = document.createElement("span");
+            name.className = "task-stream-name";
+            name.textContent = active.length > 1
+                ? `${index + 1}. ${job.archiveName || "压缩包"}`
+                : (job.archiveName || "压缩包");
+            name.title = job.archivePath || "";
+            const pct = document.createElement("span");
+            pct.className = "task-stream-pct";
+            pct.textContent = `${Math.round(Number(job.progress) || 0)}%`;
+            head.append(name, pct);
+
+            const file = document.createElement("div");
+            file.className = "task-stream-file";
+            const current = job.currentFile;
+            file.textContent = current ? `正在解压：${current}` : "正在解压…";
+            file.title = current || "";
+
+            const bar = document.createElement("div");
+            bar.className = "task-stream-bar";
+            const fill = document.createElement("i");
+            fill.className = "task-stream-fill";
             fill.style.width = `${Math.max(0, Math.min(100, Number(job.progress) || 0))}%`;
-            track.append(fill);
-            item.append(text, track);
-            if (multi) {
-                item.title = job.archiveName || job.archivePath || "";
-            }
-            container.append(item);
+            bar.append(fill);
+
+            row.append(head, file, bar);
+            stream.append(row);
         });
-        els.taskMini.hidden = false;
+        stream.hidden = false;
     }
 
     function stopMiniPoll(state) {
@@ -300,12 +306,12 @@
     async function pollTaskMini(state, api) {
         try {
             const data = await api.requestJson(api.apiUrl("jobs"));
-            applyMiniWidget(state, data);
+            renderTaskStream(state, api, data);
             const count = data?.active?.length || 0;
             if (count > 0 && !state.taskMiniTimer && !state.taskCenterOpen) {
                 state.taskMiniTimer = window.setInterval(
                     () => pollTaskMini(state, api),
-                    2000,
+                    1500,
                 );
             } else if (count === 0 && state.taskMiniTimer) {
                 stopMiniPoll(state);
@@ -415,7 +421,7 @@
             const data = await api.requestJson(api.apiUrl("jobs"));
             const active = data?.active || [];
             const recent = data?.recent || [];
-            applyMiniWidget(state, data);
+            renderTaskStream(state, api, data);
             list.replaceChildren();
             if (active.length) {
                 const h = document.createElement("div");
@@ -491,11 +497,7 @@
     async function checkActiveTasks(state, api) {
         try {
             const data = await api.requestJson(api.apiUrl("jobs"));
-            const count = data?.active?.length || 0;
-            setTaskBadge(state, count);
-            if (count > 0 && !state.taskCenterOpen) {
-                await openTaskCenter(state, api);
-            } else if (count > 0) {
+            if ((data?.active?.length || 0) > 0) {
                 ensureMiniPoll(state, api);
             }
         } catch (error) {
@@ -515,7 +517,6 @@
         pollTaskCenter,
         pollTaskMini,
         setJobProgress,
-        setTaskBadge,
         startExtract,
         statusLabel,
         toggleTaskCenter,

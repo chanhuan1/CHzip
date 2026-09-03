@@ -763,17 +763,6 @@
         const newTheme = uiTheme.toggleTheme();
         uiTheme.updateThemeUI(newTheme);
     });
-    els.taskCenterBtn.addEventListener("click", () => {
-        uiJobs.toggleTaskCenter(state, api);
-    });
-    els.taskMini.addEventListener("click", () => {
-        uiJobs.openTaskCenter(state, api);
-    });
-    els.taskMini.addEventListener("keydown", (event) => {
-        if (event.key === "Enter") {
-            uiJobs.openTaskCenter(state, api);
-        }
-    });
     els.closeTaskCenterBtn.addEventListener("click", () => {
         uiJobs.closeTaskCenter(state, api);
     });

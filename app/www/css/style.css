@@ -1081,6 +1081,88 @@ dd {
     to { background-position: -200% 0; }
 }
 
+.task-stream {
+    display: grid;
+    gap: 8px;
+    margin-bottom: 14px;
+}
+
+.task-stream[hidden] {
+    display: none;
+}
+
+.task-stream-row {
+    display: grid;
+    gap: 4px;
+    padding: 8px 12px 9px;
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--accent);
+    border-radius: 8px;
+    background: var(--surface);
+    box-shadow: 0 2px 8px rgba(18, 31, 36, 0.05);
+    cursor: pointer;
+    text-align: left;
+    transition: border-color 0.15s ease;
+}
+
+.task-stream-row:hover,
+.task-stream-row:focus-visible {
+    border-color: var(--accent);
+    outline: none;
+}
+
+.task-stream-head {
+    display: flex;
+    gap: 10px;
+    align-items: baseline;
+    justify-content: space-between;
+}
+
+.task-stream-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.task-stream-pct {
+    flex: none;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "lnum" 1, "tnum" 1;
+}
+
+.task-stream-file {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 11px;
+    color: var(--muted);
+    font-family: ui-monospace, Consolas, "SFMono-Regular", Menlo, monospace;
+}
+
+.task-stream-bar {
+    height: 5px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--track);
+    box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.task-stream-fill {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #4da3ff, var(--accent));
+    background-size: 200% 100%;
+    animation: mini-flow 2.2s linear infinite;
+    transition: width 0.4s ease;
+}
+
 .task-mini-items {
     display: grid;
     gap: 6px;
