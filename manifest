@@ -1,5 +1,5 @@
 appname               = CHzip
-version               = 2.7
+version               = 2.8
 display_name          = CHzip
 desc                  = `<div><strong>CHzip 飞牛智能分卷解压</strong><br/>一款面向 fnOS 文件管理器右键场景的专业压缩包工具：解压、预览、注释、密码管理一站完成。<br/><br/><strong>🎯 核心能力</strong><br/>• 主流格式全覆盖：7Z、ZIP、RAR、TAR、GZ、BZ2、XZ、ZST、CAB、ISO、ARJ、LZH 等<br/>• 分卷原生支持：.7z.001、.zip.001、通用 .001、zip(.z01)、RAR 新式/旧式分卷自动合并<br/>• 智能文件树预览：搜索过滤、勾选部分文件选择性解压<br/>• 自动识别已授权共享目录，解压输出安全可控<br/>• 多代码页：UTF-8、GBK、Big5、Shift-JIS、韩文，中文乱码不再是问题<br/><br/><strong>✨ 增强体验</strong><br/>• 文件免解压预览：文本/代码（语法高亮）、图片直读<br/>• 深色模式：跟随系统并可手动切换，暗色下界面清晰不刺眼<br/>• 解压进度：实时百分比、当前文件、预计剩余时间，支持随时取消<br/>• 压缩包注释：查看与编辑 ZIP/7Z 注释<br/>• 密码管理器：本地保存常用解压密码，一键填入<br/><br/><strong>🔒 安全设计</strong><br/>• 路径越权防护（目录遍历拦截）与授权目录白名单<br/>• 临时密码文件用后即焚（多次随机覆写再删除）<br/>• 诊断日志自动脱敏，隐私不外泄<br/><br/><strong>⚠️ 权限提示</strong><br/>请在 fnOS 应用设置中授予 CHzip 对源文件与目标目录的读写权限；首次使用无法读取时，在文件管理器给所在文件夹“新增应用”授权即可。</div>`
 platform              = x86

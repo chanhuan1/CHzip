@@ -77,3 +77,11 @@ test("parseProgress takes the latest carriage-return snapshot", () => {
   assert.equal(result.currentFile, "c.txt");
 });
 
+test("classifySevenZipError detects overlong filename", () => {
+  const result = classifySevenZipError(
+    "ERROR: Cannot open output file : errno=36 : File name too long : /x/很长的.mp4",
+    2,
+  );
+  assert.equal(result.code, "FILE_NAME_TOO_LONG");
+});
+

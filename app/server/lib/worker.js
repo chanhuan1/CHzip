@@ -389,7 +389,12 @@ async function runWorker(jobId, options = {}) {
     const cancelled = job.status === "cancelling"
       || Boolean(job.cancelRequestedAt)
       || error.code === "CANCELLED";
-    cleanupOutput(job);
+    // 文件名过长属于“个别文件写不进”的环境限制，其余文件可能已成功解压，
+    // 此时保留输出目录而不是整包清空。
+    const keepPartial = error.code === "FILE_NAME_TOO_LONG";
+    if (!keepPartial) {
+      cleanupOutput(job);
+    }
     store.update(jobId, (current) => ({
       ...current,
       status: cancelled ? "cancelled" : "failed",

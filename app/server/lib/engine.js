@@ -78,6 +78,12 @@ function classifySevenZipError(log, exitCode, context = {}) {
   if (/data error|crc failed|headers error|unexpected end of data/.test(text)) {
     return { code: "DAMAGED", message: "压缩包已损坏或数据校验失败" };
   }
+  if (/file name too long|errno\s*=\s*36|name too long/.test(text)) {
+    return {
+      code: "FILE_NAME_TOO_LONG",
+      message: "压缩包内有文件因文件名过长（超出文件系统 255 字节限制）无法写入；其余文件已尽量解压，输出目录已保留",
+    };
+  }
   if (exitCode === 255) {
     if (context.phase === "preview") {
       return {
