@@ -2,6 +2,7 @@
 
 const { spawn } = require("node:child_process");
 const fs = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
 const {
   classifySevenZipError,
@@ -12,6 +13,7 @@ const { JobStore } = require("./jobs");
 const {
   buildExtractArgs,
   buildListArgs,
+  buildStdoutExtractArgs,
 } = require("./sevenzip");
 const {
   findNestedTar,
@@ -29,6 +31,7 @@ const {
 } = require("./diagnostics");
 const {
   overwriteFileSync,
+  truncateUtf8Name,
 } = require("./fs-utils");
 
 function appendJobLog(store, jobId, chunk, phase) {
@@ -220,6 +223,130 @@ function cleanupOutput(job) {
   }
 }
 
+function internalPathFromTarget(target, outputDir) {
+  const out = `${path.resolve(outputDir)}${path.sep}`;
+  const value = String(target || "");
+  if (value.startsWith(out)) {
+    return value.slice(out.length);
+  }
+  return value.replace(/^[/\\]+/, "");
+}
+
+function uniqueRescuePath(outputDir, internal) {
+  const parsed = path.parse(internal);
+  const dir = path.join(outputDir, parsed.dir);
+  fs.mkdirSync(dir, { recursive: true, mode: 0o750 });
+  let base = truncateUtf8Name(parsed.base, 230);
+  let candidate = path.join(dir, base);
+  let index = 2;
+  while (fs.existsSync(candidate)) {
+    const dot = base.lastIndexOf(".");
+    const stem = dot > 0 ? base.slice(0, dot) : base;
+    const ext = dot > 0 ? base.slice(dot) : "";
+    candidate = path.join(dir, `${stem} (${index})${ext}`);
+    index += 1;
+  }
+  return candidate;
+}
+
+function streamSingleToFile(tool, args, dest) {
+  return new Promise((resolve, reject) => {
+    let child;
+    try {
+      child = spawn(tool.path, args, {
+        stdio: ["ignore", "pipe", "pipe"],
+        windowsHide: true,
+      });
+    } catch (error) {
+      reject(error);
+      return;
+    }
+    let errorText = "";
+    let settled = false;
+    const out = fs.createWriteStream(dest, { mode: 0o644 });
+    child.stderr.on("data", (chunk) => {
+      errorText = `${errorText}${chunk.toString("utf8")}`.slice(-8192);
+    });
+    child.stdout.pipe(out);
+    child.once("error", (error) => {
+      settled = true;
+      out.destroy();
+      reject(error);
+    });
+    out.on("error", (error) => {
+      if (!settled) {
+        settled = true;
+        child.kill("SIGKILL");
+      }
+      reject(error);
+    });
+    child.once("close", (code) => {
+      out.end(() => {
+        if (code !== 0) {
+          try {
+            fs.rmSync(dest, { force: true });
+          } catch (cleanupError) {
+            // ignore
+          }
+          const error = new Error(errorText || `7-Zip 退出码 ${code}`);
+          error.code = "RESCUE_FAILED";
+          error.log = errorText;
+          error.exitCode = code;
+          reject(error);
+          return;
+        }
+        resolve(dest);
+      });
+    });
+  });
+}
+
+async function rescueTooLongNameFiles({
+  tool,
+  job,
+  log,
+  password = "",
+}) {
+  const re = /File name too long :\s*([^\r\n]+)/g;
+  const targets = new Set();
+  const text = String(log || "");
+  let match;
+  while ((match = re.exec(text))) {
+    const target = match[1].trim();
+    if (target) {
+      targets.add(target);
+    }
+  }
+  const rescued = [];
+  const failed = [];
+  for (const target of targets) {
+    const internal = internalPathFromTarget(target, job.outputDir);
+    if (!internal) {
+      failed.push(target);
+      continue;
+    }
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "chzip-rescue-"));
+    const listFile = path.join(tempDir, "list.txt");
+    const dest = uniqueRescuePath(job.outputDir, internal);
+    try {
+      fs.writeFileSync(listFile, `${internal}\n`, { encoding: "utf8" });
+      const args = buildStdoutExtractArgs(job.selection, {
+        archivePath: job.archivePath,
+        password,
+        codePage: job.codePage || "auto",
+        selectionFile: listFile,
+      });
+      await streamSingleToFile(tool, args, dest);
+      rescued.push(dest);
+    } catch (error) {
+      failed.push(internal);
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  }
+  return { rescued, failed };
+}
+
 function cancellationError() {
   const error = new Error("任务已取消");
   error.code = "CANCELLED";
@@ -389,20 +516,39 @@ async function runWorker(jobId, options = {}) {
     const cancelled = job.status === "cancelling"
       || Boolean(job.cancelRequestedAt)
       || error.code === "CANCELLED";
-    // 文件名过长属于“个别文件写不进”的环境限制，其余文件可能已成功解压，
-    // 此时保留输出目录而不是整包清空。
+    // 文件名过长属于“个别文件写不进”的环境限制：保留已解压输出，
+    // 并尝试把超长文件按“截断后的文件名”单条救回来。
+    let rescuedNote = "";
+    if (error.code === "FILE_NAME_TOO_LONG") {
+      try {
+        const { rescued } = await rescueTooLongNameFiles({
+          tool,
+          job,
+          log: error.log || "",
+          password,
+        });
+        if (rescued.length) {
+          rescuedNote = `已把 ${rescued.length} 个超长文件名文件按截断后的名称保存。`;
+        }
+      } catch (rescueError) {
+        // 救援失败按普通失败处理，但仍保留已解压的输出
+      }
+    }
     const keepPartial = error.code === "FILE_NAME_TOO_LONG";
     if (!keepPartial) {
       cleanupOutput(job);
     }
+    const finalOk = Boolean(rescuedNote) && !cancelled;
     store.update(jobId, (current) => ({
       ...current,
-      status: cancelled ? "cancelled" : "failed",
-      phase: cancelled ? "cancelled" : "failed",
+      status: cancelled ? "cancelled" : finalOk ? "success" : "failed",
+      phase: cancelled ? "cancelled" : finalOk ? "complete" : "failed",
       processGroupPid: null,
       currentFile: "",
+      progress: finalOk ? 100 : current.progress,
       finishedAt: new Date().toISOString(),
-      error: cancelled
+      note: rescuedNote || current.note || "",
+      error: cancelled || finalOk
         ? null
         : {
           code: error.code || "ENGINE",
@@ -411,18 +557,21 @@ async function runWorker(jobId, options = {}) {
     }));
     safeDiagnosticWrite(logger, {
       event: "worker",
-      status: cancelled ? "cancelled" : "failed",
+      status: cancelled ? "cancelled" : finalOk ? "success" : "failed",
       requestId: job.requestId || "",
       jobId,
-      error: {
-        code: error.code || "ENGINE",
-        message: error.message || "解压失败",
-        errno: error.errno ?? null,
-        syscall: error.syscall || "",
-        exitCode: error.exitCode ?? null,
-        signal: error.signal || "",
-        logTail: String(error.log || "").slice(-8192),
-      },
+      note: rescuedNote || "",
+      error: cancelled || finalOk
+        ? null
+        : {
+          code: error.code || "ENGINE",
+          message: error.message || "解压失败",
+          errno: error.errno ?? null,
+          syscall: error.syscall || "",
+          exitCode: error.exitCode ?? null,
+          signal: error.signal || "",
+          logTail: String(error.log || "").slice(-8192),
+        },
     });
   } finally {
     closeSourceDescriptors(sourceDescriptors);

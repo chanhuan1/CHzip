@@ -93,6 +93,31 @@ function atomicWriteFile(filePath, content, options = {}) {
   }
 }
 
+function truncateUtf8Name(name, byteLimit = 230) {
+  const value = String(name || "");
+  if (Buffer.byteLength(value, "utf8") <= byteLimit) {
+    return value;
+  }
+  const dotIndex = value.lastIndexOf(".");
+  const ext = dotIndex > 0 ? value.slice(dotIndex) : "";
+  const stem = dotIndex > 0 ? value.slice(0, dotIndex) : value;
+  const stemBudget = Math.max(1, byteLimit - Buffer.byteLength(ext, "utf8"));
+  let out = "";
+  let bytes = 0;
+  for (const char of stem) {
+    const size = Buffer.byteLength(char, "utf8");
+    if (bytes + size > stemBudget) {
+      break;
+    }
+    out += char;
+    bytes += size;
+  }
+  const candidate = `${out}${ext}` || value.slice(0, byteLimit);
+  return Buffer.byteLength(candidate, "utf8") <= byteLimit
+    ? candidate
+    : candidate.slice(0, byteLimit);
+}
+
 function overwriteFileSync(filePath, passes = CRYPTO.PASSWORD_OVERWRITE_PASSES) {
   if (!filePath) {
     return;
@@ -126,5 +151,6 @@ module.exports = {
   atomicWriteFile,
   overwriteFileSync,
   sleepSync,
+  truncateUtf8Name,
   withFileLock,
 };
