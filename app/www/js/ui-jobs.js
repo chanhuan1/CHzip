@@ -243,30 +243,50 @@
         }
     }
 
+    const MINI_CN_NUM = ["一", "二", "三", "四", "五", "六", "七", "八", "九"];
+
+    function miniOrdinal(index) {
+        return index < MINI_CN_NUM.length ? MINI_CN_NUM[index] : String(index + 1);
+    }
+
     function applyMiniWidget(state, data) {
         const els = state.elements;
-        const active = data?.active || [];
+        const active = (data?.active || []).slice();
         setTaskBadge(state, active.length);
         if (!els.taskMini) {
             return;
         }
         if (!active.length) {
             els.taskMini.hidden = true;
+            if (els.taskMiniItems) {
+                els.taskMiniItems.replaceChildren();
+            }
             return;
         }
-        let sum = 0;
-        for (const job of active) {
-            sum += Number(job.progress) || 0;
-        }
-        const avg = active.length ? Math.round(sum / active.length) : 0;
-        if (els.taskMiniFill) {
-            els.taskMiniFill.style.width = `${Math.max(0, Math.min(100, avg))}%`;
-        }
-        if (els.taskMiniLabel) {
-            els.taskMiniLabel.textContent = active.length > 1
-                ? `${active.length} 个任务 · ${avg}%`
-                : `${statusLabel(active[0].status, active[0].phase)} · ${avg}%`;
-        }
+        // 按开始先后排序：最先开始的是任务一
+        active.sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+        const container = els.taskMiniItems || els.taskMini;
+        container.replaceChildren();
+        active.forEach((job, index) => {
+            const multi = active.length > 1;
+            const item = document.createElement("div");
+            item.className = "task-mini-item";
+            const text = document.createElement("span");
+            text.className = "task-mini-text";
+            const prefix = multi ? `任务${miniOrdinal(index)} · ` : "";
+            text.textContent = `${prefix}${statusLabel(job.status, job.phase)} · ${Math.round(Number(job.progress) || 0)}%`;
+            const track = document.createElement("span");
+            track.className = "task-mini-track";
+            const fill = document.createElement("span");
+            fill.className = "task-mini-fill";
+            fill.style.width = `${Math.max(0, Math.min(100, Number(job.progress) || 0))}%`;
+            track.append(fill);
+            item.append(text, track);
+            if (multi) {
+                item.title = job.archiveName || job.archivePath || "";
+            }
+            container.append(item);
+        });
         els.taskMini.hidden = false;
     }
 

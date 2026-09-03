@@ -1021,8 +1021,8 @@ dd {
     display: inline-flex;
     flex-direction: column;
     gap: 3px;
-    min-width: 108px;
-    max-width: 150px;
+    min-width: 132px;
+    max-width: 208px;
     padding: 5px 9px 6px;
     border: 1px solid var(--line-strong);
     border-radius: 8px;
@@ -1079,6 +1079,29 @@ dd {
 @keyframes mini-flow {
     from { background-position: 200% 0; }
     to { background-position: -200% 0; }
+}
+
+.task-mini-items {
+    display: grid;
+    gap: 6px;
+    min-width: 0;
+}
+
+.task-mini-item {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+}
+
+.task-mini-item .task-mini-track {
+    display: block;
+}
+
+.task-mini:focus-visible {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(39, 134, 220, 0.16);
 }
 
 .job-copy p {

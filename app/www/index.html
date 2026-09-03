@@ -23,10 +23,9 @@
                         <span id="themeText">深色</span>
                     </button>
                     <button id="taskCenterBtn" class="secondary-button task-center-btn" type="button">任务</button>
-                    <button id="taskMini" class="task-mini" type="button" hidden aria-label="后台解压任务">
-                        <span class="task-mini-text" id="taskMiniLabel">解压中 · 0%</span>
-                        <span class="task-mini-track"><span class="task-mini-fill" id="taskMiniFill"></span></span>
-                    </button>
+                    <div id="taskMini" class="task-mini" role="button" tabindex="0" aria-label="后台解压任务" hidden>
+                        <div id="taskMiniItems" class="task-mini-items"></div>
+                    </div>
                     <div id="toolStatus" class="status-badge">正在检测引擎</div>
                 </div>
             </header>
