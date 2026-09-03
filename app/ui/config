@@ -1,0 +1,45 @@
+{
+    ".url": {
+        "CHzip.Application": {
+            "title": "CHzip",
+            "icon": "images/icon_{0}.png",
+            "type": "iframe",
+            "protocol": "http",
+            "url": "/cgi/ThirdParty/CHzip/index.cgi",
+            "allUsers": false,
+            "fileTypes": [
+                "001",
+                "7z",
+                "zip",
+                "rar",
+                "tar",
+                "tgz",
+                "tbz",
+                "tbz2",
+                "txz",
+                "gz",
+                "bz2",
+                "xz",
+                "zst",
+                "zstd",
+                "tzst",
+                "cab",
+                "iso",
+                "arj",
+                "lzh",
+                "lha"
+            ],
+            "noDisplay": false
+        }
+    },
+    "desktop": {
+        "CHzip.Application": {
+            "title": "CHzip",
+            "icon": "images/icon_64.png",
+            "type": "iframe",
+            "protocol": "http",
+            "url": "/cgi/ThirdParty/CHzip/index.cgi",
+            "allUsers": false
+        }
+    }
+}

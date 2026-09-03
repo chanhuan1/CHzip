@@ -1,0 +1,9 @@
+.omx
+.DS_Store
+*.fpk
+build/
+dist/
+.codex-cache/
+*.log
+diagnostics*.json
+.xinzip-*
