@@ -29,6 +29,12 @@
     --success-soft: #e9f6ef;
     --control-bg: #ffffff;
     --track: #dbe4e6;
+    --radius-xs: 6px;
+    --radius-sm: 10px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-xl: 20px;
+    --radius-pill: 999px;
     --shadow: 0 12px 34px rgba(31, 48, 55, 0.1);
     --preview-bg: #1e1e1e;
     --preview-ink: #d4d4d4;
@@ -182,7 +188,7 @@ dd {
 .brand-icon {
     width: 44px;
     height: 44px;
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     object-fit: cover;
 }
 
@@ -208,7 +214,7 @@ dd {
     min-width: 116px;
     padding: 8px 12px;
     border: 1px solid var(--line);
-    border-radius: 8px;
+    border-radius: var(--radius-pill);
     color: var(--muted);
     background: var(--surface);
     text-align: center;
@@ -233,7 +239,7 @@ dd {
 .settings-panel,
 .job-bar {
     border: 1px solid var(--line);
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     background: var(--surface);
     box-shadow: var(--shadow);
 }
@@ -252,7 +258,7 @@ dd {
     width: 68px;
     height: 68px;
     border: 2px solid var(--accent);
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     color: var(--accent-dark);
     background: var(--accent-soft);
     font-size: 16px;
@@ -313,7 +319,7 @@ dd {
     margin-top: 9px;
     padding: 9px 11px;
     border: 1px solid #ecd29a;
-    border-radius: 6px;
+    border-radius: var(--radius-md);
     color: var(--warning);
     background: var(--warning-soft);
     font-size: 12px;
@@ -337,7 +343,7 @@ dd {
     min-height: 38px;
     padding: 10px 13px;
     border: 1px solid var(--line);
-    border-radius: 6px;
+    border-radius: var(--radius-md);
     color: var(--muted);
     background: rgba(255, 255, 255, 0.7);
     font-size: 13px;
@@ -433,7 +439,7 @@ dd {
     width: 100%;
     min-height: 39px;
     border: 1px solid var(--line-strong);
-    border-radius: 6px;
+    border-radius: var(--radius-md);
     outline: none;
     color: var(--ink);
     background: var(--control-bg);
@@ -480,7 +486,7 @@ dd {
     align-items: center;
     min-height: 34px;
     padding: 2px 7px 2px calc(7px + var(--tree-depth, 0) * 18px);
-    border-radius: 5px;
+    border-radius: var(--radius-sm);
 }
 
 .tree-row:hover {
@@ -512,7 +518,7 @@ dd {
     width: 15px;
     height: 13px;
     border: 1.5px solid currentColor;
-    border-radius: 2px;
+    border-radius: 4px;
     color: #7a8b91;
 }
 
@@ -570,7 +576,7 @@ dd {
     min-height: 39px;
     padding: 0 44px 0 10px;
     border: 1px solid var(--line-strong);
-    border-radius: 6px;
+    border-radius: var(--radius-md);
     outline: none;
     color: var(--ink);
     background: var(--control-bg);
@@ -590,7 +596,7 @@ dd {
     padding: 0;
     border: 0;
     border-left: 1px solid var(--line);
-    border-radius: 0 5px 5px 0;
+    border-radius: 0 calc(var(--radius-md) - 1px) calc(var(--radius-md) - 1px) 0;
     color: var(--muted);
     background: var(--surface-soft);
     font-size: 15px;
@@ -607,7 +613,7 @@ dd {
     padding: 5px;
     overflow: auto;
     border: 1px solid var(--line-strong);
-    border-radius: 6px;
+    border-radius: var(--radius-md);
     background: var(--surface);
     box-shadow: 0 12px 28px rgba(31, 48, 55, 0.16);
 }
@@ -621,7 +627,7 @@ dd {
     padding: 0 9px;
     overflow: hidden;
     border: 0;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     color: var(--ink);
     background: transparent;
     text-align: left;
@@ -652,7 +658,7 @@ dd {
     min-width: 0;
     padding: 9px;
     border: 1px solid var(--line);
-    border-radius: 6px;
+    border-radius: var(--radius-md);
     background: var(--surface-soft);
 }
 
@@ -735,7 +741,7 @@ dd {
     min-width: 0;
     padding: 8px 9px;
     border: 1px solid var(--line);
-    border-radius: 6px;
+    border-radius: var(--radius-md);
     background: var(--surface-soft);
 }
 
@@ -752,7 +758,7 @@ dd {
 .result-path {
     padding: 10px 11px;
     border: 1px solid var(--line);
-    border-radius: 6px;
+    border-radius: var(--radius-md);
     overflow-wrap: anywhere;
     color: var(--ink);
     background: var(--surface-soft);
@@ -796,7 +802,7 @@ dd {
     gap: 8px;
     padding: 7px 8px;
     border: 1px solid var(--line);
-    border-radius: 5px;
+    border-radius: var(--radius-sm);
     font-size: 11px;
 }
 
@@ -835,7 +841,7 @@ dd {
     position: relative;
     height: 12px;
     overflow: hidden;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     background: var(--track);
     box-shadow: inset 0 0 0 1px var(--line);
 }
@@ -844,7 +850,7 @@ dd {
     position: relative;
     width: 0%;
     height: 100%;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     background: linear-gradient(180deg, #7ec2ff, var(--accent));
     transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
     will-change: width;
@@ -901,8 +907,9 @@ dd {
 
 .task-center-btn {
     min-height: 30px;
-    padding: 0 10px;
+    padding: 0 16px;
     font-size: 12px;
+    border-radius: var(--radius-pill);
 }
 
 .task-center-dialog {
@@ -943,7 +950,7 @@ dd {
     align-items: center;
     padding: 10px 12px;
     border: 1px solid var(--line);
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     background: var(--surface-soft);
 }
 
@@ -979,14 +986,14 @@ dd {
 .task-row-track {
     height: 7px;
     overflow: hidden;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     background: var(--track);
     box-shadow: inset 0 0 0 1px var(--line);
 }
 
 .task-row-fill {
     height: 100%;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     background: linear-gradient(180deg, #7ec2ff, var(--accent));
     transition: width 0.3s ease;
 }
@@ -1025,7 +1032,7 @@ dd {
     max-width: 208px;
     padding: 5px 9px 6px;
     border: 1px solid var(--line-strong);
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     background: var(--surface-soft);
     color: var(--ink);
     cursor: pointer;
@@ -1060,7 +1067,7 @@ dd {
     position: relative;
     height: 4px;
     overflow: hidden;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     background: var(--track);
     box-shadow: inset 0 0 0 1px var(--line);
 }
@@ -1069,7 +1076,7 @@ dd {
     display: block;
     height: 100%;
     width: 0%;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     background: linear-gradient(90deg, #4da3ff, var(--accent));
     background-size: 200% 100%;
     animation: mini-flow 2.4s linear infinite;
@@ -1099,7 +1106,7 @@ dd {
     padding: 7px 12px;
     border: 1px solid var(--line);
     border-left: 3px solid var(--accent);
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     background: var(--surface);
     box-shadow: 0 2px 8px rgba(18, 31, 36, 0.05);
     cursor: pointer;
@@ -1143,7 +1150,7 @@ dd {
 .task-stream-bar {
     height: 5px;
     overflow: hidden;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     background: var(--track);
     box-shadow: inset 0 0 0 1px var(--line);
 }
@@ -1151,7 +1158,7 @@ dd {
 .task-stream-fill {
     display: block;
     height: 100%;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     background: linear-gradient(90deg, #4da3ff, var(--accent));
     background-size: 200% 100%;
     animation: mini-flow 2.2s linear infinite;
@@ -1200,7 +1207,7 @@ dd {
 .dialog-close {
     min-height: 38px;
     padding: 0 14px;
-    border-radius: 6px;
+    border-radius: var(--radius-md);
     font-weight: 600;
     white-space: nowrap;
 }
@@ -1251,7 +1258,7 @@ dd {
     max-height: min(680px, calc(100vh - 40px));
     overflow: hidden;
     border: 1px solid var(--line);
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     background: var(--surface);
     box-shadow: 0 24px 70px rgba(18, 31, 36, 0.24);
 }
@@ -1282,6 +1289,7 @@ dd {
     min-height: 34px;
     padding: 0;
     border: 0;
+    border-radius: var(--radius-pill);
     color: var(--muted);
     background: var(--surface-soft);
     font-size: 22px;
@@ -1323,7 +1331,7 @@ dd {
     min-height: 38px;
     padding: 0 8px 0 calc(8px + var(--directory-depth, 0) * 18px);
     border: 0;
-    border-radius: 5px;
+    border-radius: var(--radius-sm);
     color: var(--ink);
     background: transparent;
     text-align: left;
@@ -1442,7 +1450,7 @@ dd {
     min-width: 0;
     overflow: hidden;
     border: 1px solid var(--line-strong);
-    border-radius: 6px;
+    border-radius: var(--radius-md);
 }
 
 .password-record-head,
@@ -1537,7 +1545,7 @@ dd {
     min-height: 39px;
     padding: 0 10px;
     border: 1px solid var(--line-strong);
-    border-radius: 6px;
+    border-radius: var(--radius-md);
     outline: none;
     color: var(--ink);
     background: var(--control-bg);
@@ -1561,7 +1569,7 @@ dd {
 .dialog-inline-error {
     padding: 9px 10px;
     border: 1px solid #efc4bd;
-    border-radius: 6px;
+    border-radius: var(--radius-md);
     color: var(--danger);
     background: var(--danger-soft);
     font-size: 13px;
@@ -1753,7 +1761,7 @@ dd {
     padding: 6px 12px;
     background: var(--surface-soft);
     border: 1px solid var(--line);
-    border-radius: 20px;
+    border-radius: var(--radius-pill);
     color: var(--ink);
     font-size: 13px;
     transition: all 0.2s ease;
@@ -1783,7 +1791,7 @@ dd {
 
 .preview-dialog {
     background: var(--preview-bg);
-    border-radius: 12px;
+    border-radius: var(--radius-xl);
     width: 90vw;
     max-width: 900px;
     height: 80vh;
@@ -1819,7 +1827,7 @@ dd {
     color: var(--muted);
     cursor: pointer;
     padding: 4px 8px;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
 }
 
 .preview-header .preview-close:hover {
@@ -1866,7 +1874,7 @@ dd {
     max-width: 100%;
     max-height: 100%;
     object-fit: contain;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
 }
 
@@ -1889,7 +1897,7 @@ dd {
 .preview-actions button {
     padding: 6px 12px;
     font-size: 12px;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     border: 1px solid var(--line);
     background: var(--surface);
     color: var(--ink);
@@ -1937,7 +1945,7 @@ dd {
     border: none;
     cursor: pointer;
     padding: 2px 4px;
-    border-radius: 3px;
+    border-radius: var(--radius-xs);
     font-size: 12px;
     color: var(--muted);
     transition: opacity 0.2s ease;
@@ -1963,7 +1971,7 @@ dd {
     max-height: 400px;
     padding: 12px;
     border: 1px solid var(--line);
-    border-radius: 6px;
+    border-radius: var(--radius-md);
     background: var(--surface-soft);
     color: var(--ink);
     font-family: "SF Mono", "Fira Code", "Consolas", monospace;
@@ -1984,7 +1992,7 @@ dd {
     max-height: 400px;
     padding: 12px;
     border: 1px solid var(--line);
-    border-radius: 6px;
+    border-radius: var(--radius-md);
     background: var(--surface-soft);
     color: var(--ink);
     font-family: "SF Mono", "Fira Code", "Consolas", monospace;
