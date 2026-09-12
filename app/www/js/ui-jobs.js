@@ -501,9 +501,14 @@
         if (!list) {
             return;
         }
+        const clearBtn = state.elements.clearHistoryBtn;
         try {
             const data = await api.requestJson(api.apiUrl("jobs"));
             const history = data?.history || [];
+            // 无记录时禁用清空按钮；二次确认中或正在清空时不干扰按钮状态
+            if (clearBtn && !state.historyClearPending && !state.historyClearing) {
+                clearBtn.disabled = history.length === 0;
+            }
             list.replaceChildren();
             if (history.length) {
                 for (const job of history) {
@@ -515,6 +520,54 @@
         } catch (error) {
             list.replaceChildren();
             renderTaskEmpty(list, `历史记录获取失败：${error.message}`);
+        }
+    }
+
+    function resetClearHistoryConfirm(state) {
+        if (state.historyClearTimer) {
+            clearTimeout(state.historyClearTimer);
+            state.historyClearTimer = null;
+        }
+        state.historyClearPending = false;
+        const button = state.elements.clearHistoryBtn;
+        if (button && !state.historyClearing) {
+            button.textContent = "清空记录";
+        }
+    }
+
+    // 清空历史是不可撤销的批量操作，因此用按钮内联二次确认（不弹原生对话框），
+    // 首次点击变为“确认清空？”，4 秒内再点一次才真正执行。
+    async function clearHistory(state, api) {
+        const button = state.elements.clearHistoryBtn;
+        if (!button || state.historyClearing) {
+            return;
+        }
+        if (!state.historyClearPending) {
+            state.historyClearPending = true;
+            button.textContent = "确认清空？";
+            state.historyClearTimer = window.setTimeout(
+                () => resetClearHistoryConfirm(state),
+                4000,
+            );
+            return;
+        }
+        resetClearHistoryConfirm(state);
+        state.historyClearing = true;
+        button.disabled = true;
+        button.textContent = "正在清空...";
+        let cleared = false;
+        try {
+            await api.postApi("clear-history", {});
+            cleared = true;
+            await pollHistory(state, api);
+            setNotice("解压历史已清空。", "success", state);
+        } catch (error) {
+            setNotice(`清空历史失败：${error.message}`, "error", state);
+            recordDiagnosticError(error, state);
+        } finally {
+            state.historyClearing = false;
+            button.textContent = "清空记录";
+            button.disabled = cleared;
         }
     }
 
@@ -534,6 +587,7 @@
         clearInterval(state.historyTimer);
         state.historyTimer = null;
         state.historyOpen = false;
+        resetClearHistoryConfirm(state);
         const dialog = state.elements.historyDialog;
         if (dialog) {
             dialog.hidden = true;
@@ -544,6 +598,7 @@
         cancelExtract,
         cancelTaskCenter,
         checkActiveTasks,
+        clearHistory,
         closeHistory,
         closeTaskCenter,
         computeEta,
@@ -554,6 +609,7 @@
         pollStatus,
         pollTaskCenter,
         pollTaskMini,
+        resetClearHistoryConfirm,
         setJobProgress,
         startExtract,
         startTaskWatch,

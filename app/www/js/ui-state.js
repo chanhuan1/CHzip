@@ -46,6 +46,9 @@
             taskWatchTimer: null,
             historyOpen: false,
             historyTimer: null,
+            historyClearPending: false,
+            historyClearTimer: null,
+            historyClearing: false,
         };
     }
 
@@ -149,6 +152,7 @@
             historyList: $("historyList"),
             closeHistoryBtn: $("closeHistoryBtn"),
             closeHistoryConfirmBtn: $("closeHistoryConfirmBtn"),
+            clearHistoryBtn: $("clearHistoryBtn"),
             previewDialog: $("previewDialog"),
             previewTitle: $("previewTitle"),
             previewFileName: $("previewFileName"),

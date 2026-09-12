@@ -772,6 +772,9 @@
     els.closeHistoryConfirmBtn.addEventListener("click", () => {
         uiJobs.closeHistory(state);
     });
+    els.clearHistoryBtn.addEventListener("click", () => {
+        uiJobs.clearHistory(state, api);
+    });
     els.historyDialog.addEventListener("click", (event) => {
         if (event.target === els.historyDialog) {
             uiJobs.closeHistory(state);
@@ -825,6 +828,10 @@
             clearInterval(state.historyTimer);
             state.historyTimer = null;
         }
+        if (state.historyClearTimer) {
+            clearTimeout(state.historyClearTimer);
+            state.historyClearTimer = null;
+        }
     });
 
     window.addEventListener("pagehide", () => {
@@ -843,6 +850,10 @@
         if (state.historyTimer) {
             clearInterval(state.historyTimer);
             state.historyTimer = null;
+        }
+        if (state.historyClearTimer) {
+            clearTimeout(state.historyClearTimer);
+            state.historyClearTimer = null;
         }
     });
 

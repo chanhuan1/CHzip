@@ -229,6 +229,41 @@ Requests cancellation of a running job.
 
 **Response**: Same as `status`.
 
+### `jobs`
+
+Lists extraction tasks: in-progress ones and recent history.
+
+**Parameters**: none.
+
+**Response**:
+```json
+{
+  "active": [
+    { "id": "hex32", "status": "running", "phase": "extracting", "progress": 42,
+      "archiveName": "photos.7z.001", "outputDir": "/vol1/...", "partCount": 3 }
+  ],
+  "history": [
+    { "id": "hex32", "status": "success", "finishedAt": "ISO timestamp",
+      "archiveName": "docs.zip", "outputDir": "/vol1/...", "error": null }
+  ]
+}
+```
+
+`history` is capped at the 20 most recent finished tasks; older entries are dropped automatically.
+
+### `clear-history`
+
+Manually clears the extraction history. Only finished tasks (`success` / `failed` /
+`cancelled`) are removed — in-progress tasks are never touched, and already-extracted
+files are left on disk.
+
+**Parameters**: none (POST).
+
+**Response**:
+```json
+{ "removed": 7 }
+```
+
 ### `diagnostics`
 
 Generates a diagnostic report for troubleshooting.

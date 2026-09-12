@@ -177,6 +177,8 @@ async function routeRequest(api, request, services) {
     });
   } else if (api === "jobs") {
     data = services.listJobs();
+  } else if (api === "clear-history") {
+    data = services.clearHistory();
   } else {
     const error = new Error("不存在的接口");
     error.code = "NOT_FOUND";

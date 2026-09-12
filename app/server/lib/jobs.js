@@ -316,6 +316,26 @@ class JobStore {
     }
     return removed;
   }
+
+  // 手动清空历史：只删已结束（success/failed/cancelled）的任务记录，
+  // 不碰进行中的任务，也不删除已解压出来的文件（outputDir 归用户所有）。
+  removeAllFinished() {
+    const removed = [];
+    for (const name of fs.readdirSync(this.jobsDir)) {
+      if (!/^[a-f0-9]{32}\.json$/.test(name)) {
+        continue;
+      }
+      const id = name.slice(0, -5);
+      const job = this.read(id);
+      if (!job || !TERMINAL_STATUSES.has(job.status)) {
+        continue;
+      }
+      fs.rmSync(this.dataDir(id), { recursive: true, force: true });
+      fs.rmSync(this.jobPath(id), { force: true });
+      removed.push(id);
+    }
+    return removed;
+  }
 }
 
 async function requestCancellation(store, jobId, dependencies = {}) {

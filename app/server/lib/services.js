@@ -571,6 +571,13 @@ function createServices(options = {}) {
     return { active, history: history.slice(0, 20) };
   }
 
+  // 手动清空解压历史：仅移除已结束任务的记录，进行中的任务与
+  // 已解压的文件都不受影响。
+  function clearHistory() {
+    const removed = store.removeAllFinished();
+    return { removed: removed.length };
+  }
+
   async function previewFile(input) {
     const archive = info(input);
     const targetPath = input.targetPath;
@@ -617,6 +624,7 @@ function createServices(options = {}) {
 
   return {
     cancel,
+    clearHistory,
     comment,
     createDirectory,
     diagnostics,

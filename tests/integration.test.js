@@ -59,6 +59,8 @@ test("createServices initializes with all required methods", () => {
   assert.equal(typeof services.directories, "function");
   assert.equal(typeof services.createDirectory, "function");
   assert.equal(typeof services.diagnostics, "function");
+  assert.equal(typeof services.listJobs, "function");
+  assert.equal(typeof services.clearHistory, "function");
 });
 
 test("JobStore create and read lifecycle", () => {
@@ -346,4 +348,119 @@ test("JobStore create generates unique IDs", () => {
     ids.add(job.id);
   }
   assert.equal(ids.size, 100);
+});
+
+function createTestJob(store, overrides = {}) {
+  return store.create({
+    archivePath: "/test/archive.zip",
+    outputDir: "/test/output",
+    selection: { format: "zip", type: "zip" },
+    sevenZipPath: "/usr/bin/7z",
+    sevenZipSource: "system",
+    partCount: 1,
+    sourceFingerprint: [],
+    ...overrides,
+  });
+}
+
+test("JobStore removeAllFinished clears finished jobs and keeps active ones", () => {
+  const store = new JobStore(tmpDir);
+  const success = createTestJob(store);
+  store.update(success.id, (current) => ({
+    ...current,
+    status: "success",
+    finishedAt: new Date().toISOString(),
+  }));
+  const failed = createTestJob(store);
+  store.update(failed.id, (current) => ({
+    ...current,
+    status: "failed",
+    finishedAt: new Date().toISOString(),
+  }));
+  const cancelled = createTestJob(store);
+  store.update(cancelled.id, (current) => ({
+    ...current,
+    status: "cancelled",
+    finishedAt: new Date().toISOString(),
+  }));
+  const running = createTestJob(store);
+  store.update(running.id, (current) => ({
+    ...current,
+    status: "running",
+    startedAt: new Date().toISOString(),
+    workerPid: process.pid,
+  }));
+
+  const removed = store.removeAllFinished();
+
+  assert.equal(removed.length, 3);
+  assert.ok(removed.includes(success.id));
+  assert.ok(removed.includes(failed.id));
+  assert.ok(removed.includes(cancelled.id));
+  assert.equal(store.read(success.id), null);
+  assert.equal(store.read(failed.id), null);
+  assert.equal(store.read(cancelled.id), null);
+  assert.ok(store.read(running.id));
+});
+
+test("JobStore removeAllFinished removes job data directories", () => {
+  const store = new JobStore(tmpDir);
+  const job = createTestJob(store);
+  fs.writeFileSync(
+    path.join(store.dataDir(job.id), "password.txt"),
+    "secret",
+    { encoding: "utf8", mode: 0o600 },
+  );
+  store.update(job.id, (current) => ({
+    ...current,
+    status: "success",
+    finishedAt: new Date().toISOString(),
+  }));
+
+  assert.ok(fs.existsSync(store.dataDir(job.id)));
+  store.removeAllFinished();
+  assert.equal(fs.existsSync(store.dataDir(job.id)), false);
+});
+
+test("JobStore removeAllFinished keeps extracted output directories", () => {
+  const store = new JobStore(tmpDir);
+  const outputDir = path.join(tmpDir, "extracted-output");
+  fs.mkdirSync(outputDir, { recursive: true });
+  fs.writeFileSync(path.join(outputDir, "file.txt"), "payload");
+
+  const job = createTestJob(store, { outputDir });
+  store.update(job.id, (current) => ({
+    ...current,
+    status: "success",
+    finishedAt: new Date().toISOString(),
+  }));
+
+  store.removeAllFinished();
+
+  assert.equal(store.read(job.id), null);
+  assert.ok(fs.existsSync(outputDir), "清空历史不应删除已解压的文件");
+  assert.ok(fs.existsSync(path.join(outputDir, "file.txt")));
+});
+
+test("services.clearHistory empties history and reports count", () => {
+  const store = services.store;
+  const job = createTestJob(store, {
+    archivePath: path.join(tmpDir, "test.zip"),
+    outputDir: path.join(tmpDir, "out"),
+    sevenZipPath: process.execPath,
+    sevenZipSource: "test",
+  });
+  store.update(job.id, (current) => ({
+    ...current,
+    status: "success",
+    finishedAt: new Date().toISOString(),
+  }));
+
+  assert.equal(services.listJobs().history.length, 1);
+  assert.deepEqual(services.clearHistory(), { removed: 1 });
+  assert.equal(services.listJobs().history.length, 0);
+});
+
+test("services.clearHistory on empty history is a no-op", () => {
+  assert.deepEqual(services.clearHistory(), { removed: 0 });
 });
