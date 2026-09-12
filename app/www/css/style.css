@@ -580,7 +580,9 @@ dd {
 }
 
 .tree-icon-folder-body {
-    fill: url(#chzipFolderBody);
+    /* 末尾的 var(--folder-tab) 是兜底：万一渐变引用无法解析，退化成平涂琥珀色，
+       而不是按 fill:none 渲染成“看不见的文件夹”。 */
+    fill: url(#chzipFolderBody) var(--folder-tab);
 }
 
 .tree-icon.file {
