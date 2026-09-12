@@ -16,10 +16,9 @@
         return `${value.toFixed(digits)} ${units[unit]}`;
     }
 
-    // 用内联 SVG 代替原先 CSS 画的圆角方框：文件夹为实心双色调
-    // （页签平涂 + 主体竖向渐变，渐变为 index.html 中的 #chzipFolderBody），
-    // 文件为单色描边 + 折角。文件类图标颜色由 CSS 的 color 驱动
-    // （currentColor），浅色/深色主题自动适配。
+    // 用内联 SVG 代替原先 CSS 画的圆角方框：文件夹与文件都是实心双色调，
+    // 主体用竖向渐变（渐变为 index.html 中的 #chzipFolderBody / #chzipFileBody），
+    // 顶部平涂部分分别为页签与折角。
     const TREE_ICONS = {
         folder: '<svg viewBox="0 0 16 16" focusable="false" aria-hidden="true">'
             + '<path class="tree-icon-tab" d="M2.5 6V2.42A1.2 1.2 0 0 1 3.7 1.22'
@@ -29,8 +28,11 @@
             + 'V6.2A1.6 1.6 0 0 1 2.6 4.6Z"/>'
             + "</svg>",
         file: '<svg viewBox="0 0 16 16" focusable="false" aria-hidden="true">'
-            + '<path class="tree-icon-body" d="M3.6 2.4H9.2L12.8 6V13.6H3.6Z"/>'
-            + '<path class="tree-icon-fold" d="M9.2 2.4V6H12.8"/>'
+            + '<path class="tree-icon-file-body" d="M3.9 1.25H9.5L13.5 5.25V13.35'
+            + 'A1.4 1.4 0 0 1 12.1 14.75H3.9A1.4 1.4 0 0 1 2.5 13.35'
+            + 'V2.65A1.4 1.4 0 0 1 3.9 1.25Z"/>'
+            + '<path class="tree-icon-fold" d="M9.5 1.25L13.5 5.25H10.7'
+            + 'A1.2 1.2 0 0 1 9.5 4.05Z"/>'
             + "</svg>",
     };
 

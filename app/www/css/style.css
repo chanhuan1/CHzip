@@ -32,6 +32,9 @@
     --folder-tab: #efa92a;
     --folder-top: #f9cb52;
     --folder-bottom: #d9921a;
+    --file-top: #63aeee;
+    --file-bottom: #1d6cb8;
+    --file-fold: #b8dcfa;
     --radius-xs: 6px;
     --radius-sm: 10px;
     --radius-md: 12px;
@@ -71,6 +74,9 @@
     --folder-tab: #f5b937;
     --folder-top: #fbd15f;
     --folder-bottom: #e09e28;
+    --file-top: #74bbff;
+    --file-bottom: #2b7cc4;
+    --file-fold: #c5e2ff;
     --shadow: 0 12px 34px rgba(0, 0, 0, 0.4);
     --preview-bg: #0d0d0d;
     --preview-ink: #e0e0e0;
@@ -101,6 +107,9 @@
         --folder-tab: #f5b937;
         --folder-top: #fbd15f;
         --folder-bottom: #e09e28;
+        --file-top: #74bbff;
+        --file-bottom: #2b7cc4;
+        --file-fold: #c5e2ff;
         --shadow: 0 12px 34px rgba(0, 0, 0, 0.4);
         --preview-bg: #0d0d0d;
         --preview-ink: #e0e0e0;
@@ -541,6 +550,14 @@ dd {
     stop-color: var(--folder-bottom);
 }
 
+#chzipFileBody .file-stop-top {
+    stop-color: var(--file-top);
+}
+
+#chzipFileBody .file-stop-bottom {
+    stop-color: var(--file-bottom);
+}
+
 .tree-icon {
     display: inline-flex;
     align-items: center;
@@ -556,20 +573,13 @@ dd {
     height: 100%;
 }
 
-.tree-icon-body {
-    fill: currentColor;
-    fill-opacity: 0.18;
-    stroke: currentColor;
-    stroke-width: 1.3;
-    stroke-linejoin: round;
+/* 文件：实心双色调，主体竖向渐变 + 折角浅色平涂（折角读作翻起的纸背）。 */
+.tree-icon-file-body {
+    fill: url(#chzipFileBody) var(--file-bottom);
 }
 
 .tree-icon-fold {
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 1.3;
-    stroke-linejoin: round;
-    stroke-linecap: round;
+    fill: var(--file-fold);
 }
 
 /* 文件夹：实心双色调（页签平涂 + 主体竖向渐变），贴近文件管理器观感。
@@ -583,10 +593,6 @@ dd {
     /* 末尾的 var(--folder-tab) 是兜底：万一渐变引用无法解析，退化成平涂琥珀色，
        而不是按 fill:none 渲染成“看不见的文件夹”。 */
     fill: url(#chzipFolderBody) var(--folder-tab);
-}
-
-.tree-icon.file {
-    color: var(--accent);
 }
 
 .tree-label {
