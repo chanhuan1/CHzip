@@ -29,6 +29,9 @@
     --success-soft: #e9f6ef;
     --control-bg: #ffffff;
     --track: #dbe4e6;
+    --folder-tab: #efa92a;
+    --folder-top: #f9cb52;
+    --folder-bottom: #d9921a;
     --radius-xs: 6px;
     --radius-sm: 10px;
     --radius-md: 12px;
@@ -65,6 +68,9 @@
     --success-soft: #1a3a2a;
     --control-bg: #34383b;
     --track: #33373a;
+    --folder-tab: #f5b937;
+    --folder-top: #fbd15f;
+    --folder-bottom: #e09e28;
     --shadow: 0 12px 34px rgba(0, 0, 0, 0.4);
     --preview-bg: #0d0d0d;
     --preview-ink: #e0e0e0;
@@ -90,6 +96,11 @@
         --warning-soft: #3a2e1a;
         --success: #4dd68a;
         --success-soft: #1a3a2a;
+        --control-bg: #34383b;
+        --track: #33373a;
+        --folder-tab: #f5b937;
+        --folder-top: #fbd15f;
+        --folder-bottom: #e09e28;
         --shadow: 0 12px 34px rgba(0, 0, 0, 0.4);
         --preview-bg: #0d0d0d;
         --preview-ink: #e0e0e0;
@@ -513,6 +524,23 @@ dd {
     visibility: hidden;
 }
 
+/* 文件夹图标的渐变只声明一次，供所有文件夹图标引用，避免重复 id。
+   渐变色用 CSS 规则驱动（presentation 属性不支持 var()），随主题切换。 */
+.icon-defs {
+    position: absolute;
+    width: 0;
+    height: 0;
+    overflow: hidden;
+}
+
+#chzipFolderBody .folder-stop-top {
+    stop-color: var(--folder-top);
+}
+
+#chzipFolderBody .folder-stop-bottom {
+    stop-color: var(--folder-bottom);
+}
+
 .tree-icon {
     display: inline-flex;
     align-items: center;
@@ -544,12 +572,15 @@ dd {
     stroke-linecap: round;
 }
 
-.tree-icon.folder {
-    color: var(--warning);
+/* 文件夹：实心双色调（页签平涂 + 主体竖向渐变），贴近文件管理器观感。
+   渐变只定义一次（见 index.html 的 #chzipFolderBody），按 objectBoundingBox
+   作用于各自图标，避免每个图标重复声明 id。 */
+.tree-icon-tab {
+    fill: var(--folder-tab);
 }
 
-.tree-icon.folder .tree-icon-body {
-    fill-opacity: 0.26;
+.tree-icon-folder-body {
+    fill: url(#chzipFolderBody);
 }
 
 .tree-icon.file {
