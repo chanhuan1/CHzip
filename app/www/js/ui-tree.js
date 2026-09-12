@@ -29,6 +29,15 @@
             + "</svg>",
     };
 
+    // 预览按钮的“眼睛”图标：不用 emoji（各平台字形/配色不一致，Linux 上
+    // 还可能落到替代字体），改为矢量图标，与树图标同一套 currentColor 方案。
+    const PREVIEW_EYE_ICON = '<svg viewBox="0 0 16 16" focusable="false" aria-hidden="true">'
+        + '<path class="tree-preview-eye" d="M1.6 8C3.1 5.3 5.4 3.6 8 3.6'
+        + 'C10.6 3.6 12.9 5.3 14.4 8C12.9 10.7 10.6 12.4 8 12.4'
+        + 'C5.4 12.4 3.1 10.7 1.6 8Z"/>'
+        + '<circle class="tree-preview-pupil" cx="8" cy="8" r="2.1"/>'
+        + "</svg>";
+
     function createTreeIcon(isDirectory) {
         const icon = document.createElement("span");
         icon.className = `tree-icon ${isDirectory ? "folder" : "file"}`;
@@ -138,7 +147,7 @@
             const previewBtn = document.createElement("button");
             previewBtn.type = "button";
             previewBtn.className = "tree-preview-btn";
-            previewBtn.textContent = "👁";
+            previewBtn.innerHTML = PREVIEW_EYE_ICON;
             previewBtn.title = "预览文件";
             previewBtn.setAttribute("aria-label", `预览 ${node.name}`);
             previewBtn.addEventListener("click", (event) => {
