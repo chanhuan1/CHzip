@@ -57,25 +57,10 @@
         return theme;
     }
 
-    function updateThemeUI(theme, elements) {
-        if (!elements) {
-            return;
-        }
-        const icon = document.getElementById("themeIcon");
-        const text = document.getElementById("themeText");
-        if (icon) {
-            icon.textContent = theme === "dark" ? "☀️" : "🌙";
-        }
-        if (text) {
-            text.textContent = theme === "dark" ? "浅色" : "深色";
-        }
-    }
-
     root.CHzipTheme = {
         applyTheme,
         getCurrentTheme,
         initTheme,
         toggleTheme,
-        updateThemeUI,
     };
 }(typeof window !== "undefined" ? window : globalThis));

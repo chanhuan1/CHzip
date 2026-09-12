@@ -20,8 +20,8 @@
     const passwordManager = uiPasswords.createPasswordManager(state, passwordStore);
     const commentManager = uiComment.createCommentManager(state, api);
 
-    const initialTheme = uiTheme.initTheme();
-    uiTheme.updateThemeUI(initialTheme);
+    // 主题按钮的图标与文案由 [data-theme] 纯 CSS 驱动，这里只负责应用主题。
+    uiTheme.initTheme();
 
     state.onPreviewFile = previewFile;
     state.onAvailabilityChange = updateActionAvailability;
@@ -396,8 +396,8 @@
             }
             previewContent = result.content;
             const fileType = uiPreview.getFileType(entry.name);
+            els.previewIcon.classList.toggle("is-image", fileType === "image");
             if (fileType === "image") {
-                els.previewIcon.textContent = "🖼️";
                 try {
                     const binaryString = atob(result.content);
                     const bytes = new Uint8Array(binaryString.length);
@@ -413,7 +413,6 @@
                     els.previewBody.innerHTML = '<div class="preview-error">图片预览失败</div>';
                 }
             } else {
-                els.previewIcon.textContent = "📄";
                 const formatted = uiPreview.formatTextPreview(result.content);
                 const pre = document.createElement("pre");
                 pre.className = "preview-text";
@@ -760,8 +759,7 @@
     });
 
     els.themeToggle.addEventListener("click", () => {
-        const newTheme = uiTheme.toggleTheme();
-        uiTheme.updateThemeUI(newTheme);
+        uiTheme.toggleTheme();
     });
     els.historyBtn.addEventListener("click", () => {
         uiJobs.openHistory(state, api);

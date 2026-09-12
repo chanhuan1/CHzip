@@ -32,8 +32,14 @@
                 <div class="header-right">
                     <button id="historyBtn" class="secondary-button task-center-btn" type="button">历史</button>
                     <button id="themeToggle" class="theme-toggle" type="button" aria-label="切换主题">
-                        <span class="theme-icon" id="themeIcon">🌙</span>
-                        <span id="themeText">深色</span>
+                        <span class="theme-icon" aria-hidden="true">
+                            <svg class="theme-icon-moon" viewBox="0 0 16 16" focusable="false"><path d="M12.55 3.2A5.82 5.82 0 1 0 12.55 12.8A4.9 4.9 0 0 1 12.55 3.2Z"/></svg>
+                            <svg class="theme-icon-sun" viewBox="0 0 16 16" focusable="false"><circle cx="8" cy="8" r="3.1"/><path d="M8 1.4V3.5M8 12.5V14.6M1.4 8H3.5M12.5 8H14.6M3.34 3.34L4.83 4.83M11.17 11.17L12.66 12.66M12.66 3.34L11.17 4.83M4.83 11.17L3.34 12.66"/></svg>
+                        </span>
+                        <span class="theme-label">
+                            <span class="theme-label-dark">深色</span>
+                            <span class="theme-label-light">浅色</span>
+                        </span>
                     </button>
                     <div id="toolStatus" class="status-badge">正在检测引擎</div>
                 </div>
@@ -386,7 +392,10 @@
         <div class="preview-dialog" role="dialog" aria-modal="true" aria-labelledby="previewTitle">
             <div class="preview-header">
                 <h3 id="previewTitle">
-                    <span id="previewIcon">📄</span>
+                    <span id="previewIcon" class="preview-icon" aria-hidden="true">
+                        <svg class="preview-icon-doc" viewBox="0 0 16 16" focusable="false"><path d="M3.8 1.6H8.6L12.2 5.2V14.4H3.8Z"/><path d="M8.6 1.6V5.2H12.2"/></svg>
+                        <svg class="preview-icon-image" viewBox="0 0 16 16" focusable="false"><rect x="2.2" y="3.2" width="11.6" height="9.6" rx="1.6"/><circle class="preview-icon-dot" cx="5.8" cy="6.6" r="1.1"/><path d="M2.6 11.4L5.8 8.2L8.4 10.8L10.8 8.4L13.6 11.2"/></svg>
+                    </span>
                     <span id="previewFileName">file.txt</span>
                 </h3>
                 <button id="closePreviewBtn" class="preview-close" type="button" aria-label="关闭">×</button>

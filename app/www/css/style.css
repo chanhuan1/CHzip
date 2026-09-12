@@ -1849,9 +1849,45 @@ dd {
     background: var(--accent-soft);
 }
 
-.theme-toggle .theme-icon {
-    font-size: 16px;
-    line-height: 1;
+/* 图标与文案完全由 data-theme 驱动（纯 CSS），不再靠 JS 同步，
+   因此不可能出现按钮显示与实际主题不一致的情况。
+   浅色下显示「月亮 + 深色」= 点击后切到深色，反之亦然。
+   显示规则的选择器优先级刻意高于隐藏规则，避免使用 !important。 */
+.theme-icon svg,
+.theme-label span {
+    display: none;
+}
+
+.theme-icon svg {
+    width: 16px;
+    height: 16px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.4;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.theme-icon .theme-icon-moon,
+.theme-label .theme-label-dark {
+    display: block;
+}
+
+.theme-label .theme-label-dark {
+    display: inline;
+}
+
+[data-theme="dark"] .theme-icon .theme-icon-moon,
+[data-theme="dark"] .theme-label .theme-label-dark {
+    display: none;
+}
+
+[data-theme="dark"] .theme-icon .theme-icon-sun {
+    display: block;
+}
+
+[data-theme="dark"] .theme-label .theme-label-light {
+    display: inline;
 }
 
 /* ===== File Preview Dialog ===== */
@@ -1895,6 +1931,35 @@ dd {
     display: flex;
     align-items: center;
     gap: 8px;
+}
+
+/* 预览弹窗标题图标：由 .is-image 切换文档/图片两种图标，不再用 emoji。 */
+.preview-icon svg {
+    display: none;
+    width: 15px;
+    height: 15px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.4;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.preview-icon .preview-icon-doc {
+    display: block;
+}
+
+.preview-icon.is-image .preview-icon-doc {
+    display: none;
+}
+
+.preview-icon.is-image .preview-icon-image {
+    display: block;
+}
+
+.preview-icon .preview-icon-dot {
+    fill: currentColor;
+    stroke: none;
 }
 
 .preview-header .preview-close {

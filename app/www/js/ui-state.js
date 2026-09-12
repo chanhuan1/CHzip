@@ -140,8 +140,6 @@
             addPasswordBtn: $("addPasswordBtn"),
             editPasswordBtn: $("editPasswordBtn"),
             themeToggle: $("themeToggle"),
-            themeIcon: $("themeIcon"),
-            themeText: $("themeText"),
             taskCenterDialog: $("taskCenterDialog"),
             taskCenterList: $("taskCenterList"),
             closeTaskCenterBtn: $("closeTaskCenterBtn"),
