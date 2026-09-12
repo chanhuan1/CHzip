@@ -999,11 +999,27 @@ dd {
 }
 
 .task-row-meta {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    min-width: 0;
+    overflow: hidden;
+    font-size: 11px;
+    color: var(--muted);
+}
+
+.task-row-time {
+    flex: none;
+    color: var(--ink);
+    font-variant-numeric: lining-nums tabular-nums;
+    font-feature-settings: "lnum" 1, "tnum" 1;
+}
+
+.task-row-detail {
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 11px;
-    color: var(--muted);
 }
 
 .task-row-actions {

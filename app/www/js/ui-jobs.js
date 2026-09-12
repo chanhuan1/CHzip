@@ -317,7 +317,9 @@
         state.taskWatchTimer = setTimeout(tick, 0);
     }
 
-    function formatTaskTime(iso) {
+    // 历史记录需要完整日期（可能跨天/跨周），因此按本地时区输出
+    // YYYY-MM-DD HH:MM:SS，各段补零以便纵向对齐。
+    function formatTaskDateTime(iso) {
         if (!iso) {
             return "";
         }
@@ -326,7 +328,8 @@
             return "";
         }
         const pad = (n) => String(n).padStart(2, "0");
-        return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+            + ` ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
     }
 
     function renderTaskEmpty(list, text) {
@@ -334,6 +337,32 @@
         empty.className = "task-center-empty";
         empty.textContent = text;
         list.append(empty);
+    }
+
+    // 元信息行拆成「时间 + 详情」两个 span：时间不参与省略（flex: none），
+    // 详情过长时优先被截断，保证日期时间始终可见。
+    function appendTaskMeta(container, timeText, timeTitle, detailText, detailTitle) {
+        const meta = document.createElement("div");
+        meta.className = "task-row-meta";
+        if (timeText) {
+            const time = document.createElement("span");
+            time.className = "task-row-time";
+            time.textContent = timeText;
+            if (timeTitle) {
+                time.title = timeTitle;
+            }
+            meta.append(time);
+        }
+        if (detailText) {
+            const detail = document.createElement("span");
+            detail.className = "task-row-detail";
+            detail.textContent = detailText;
+            if (detailTitle) {
+                detail.title = detailTitle;
+            }
+            meta.append(detail);
+        }
+        container.append(meta);
     }
 
     function renderTaskRow(state, api, list, job) {
@@ -366,26 +395,42 @@
             fill.style.width = `${Math.max(0, Math.min(100, Number(job.progress) || 0))}%`;
             track.append(fill);
             main.append(track);
-            const meta = document.createElement("div");
-            meta.className = "task-row-meta";
-            const started = formatTaskTime(job.startedAt);
-            meta.textContent = [
-                job.currentFile ? `正在处理：${job.currentFile}` : "",
+            const started = formatTaskDateTime(job.startedAt);
+            appendTaskMeta(
+                main,
                 started ? `开始于 ${started}` : "",
-            ].filter(Boolean).join(" · ");
-            main.append(meta);
+                "",
+                job.currentFile ? `正在处理：${job.currentFile}` : "",
+                job.currentFile || "",
+            );
         } else {
-            const meta = document.createElement("div");
-            meta.className = "task-row-meta";
+            const finished = formatTaskDateTime(
+                job.finishedAt || job.startedAt || job.createdAt,
+            );
+            const started = formatTaskDateTime(job.startedAt);
+            const timeTitle = [
+                finished ? `完成于 ${finished}` : "",
+                started ? `开始于 ${started}` : "",
+            ].filter(Boolean).join("，");
             if (job.status === "success") {
-                meta.textContent = `已解压到：${job.outputDir || ""}`;
-                meta.title = job.outputDir || "";
+                appendTaskMeta(
+                    main,
+                    finished,
+                    timeTitle,
+                    `已解压到：${job.outputDir || ""}`,
+                    job.outputDir || "",
+                );
             } else if (job.status === "failed") {
-                meta.textContent = job.error?.message || "解压失败";
+                appendTaskMeta(
+                    main,
+                    finished,
+                    timeTitle,
+                    job.error?.message || "解压失败",
+                    "",
+                );
             } else {
-                meta.textContent = "已停止";
+                appendTaskMeta(main, finished, timeTitle, "已停止", "");
             }
-            main.append(meta);
         }
 
         const actions = document.createElement("div");
@@ -603,6 +648,7 @@
         closeTaskCenter,
         computeEta,
         ensureMiniPoll,
+        formatTaskDateTime,
         openHistory,
         openTaskCenter,
         pollHistory,
