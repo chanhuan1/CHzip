@@ -16,6 +16,27 @@
         return `${value.toFixed(digits)} ${units[unit]}`;
     }
 
+    // 用内联 SVG 代替原先 CSS 画的圆角方框：文件夹带页签、文件带折角，
+    // 形状可辨识度更高；颜色仍由 CSS 的 color 控制（currentColor），
+    // 因此浅色/深色主题自动适配。
+    const TREE_ICONS = {
+        folder: '<svg viewBox="0 0 16 16" focusable="false" aria-hidden="true">'
+            + '<path class="tree-icon-body" d="M2 3.6H5.5L6.9 5.2H14V12.4H2Z"/>'
+            + "</svg>",
+        file: '<svg viewBox="0 0 16 16" focusable="false" aria-hidden="true">'
+            + '<path class="tree-icon-body" d="M3.6 2.4H9.2L12.8 6V13.6H3.6Z"/>'
+            + '<path class="tree-icon-fold" d="M9.2 2.4V6H12.8"/>'
+            + "</svg>",
+    };
+
+    function createTreeIcon(isDirectory) {
+        const icon = document.createElement("span");
+        icon.className = `tree-icon ${isDirectory ? "folder" : "file"}`;
+        icon.setAttribute("aria-hidden", "true");
+        icon.innerHTML = isDirectory ? TREE_ICONS.folder : TREE_ICONS.file;
+        return icon;
+    }
+
     function appendSearchFileRow(container, entry, state, treeApi) {
         const row = document.createElement("div");
         row.className = "tree-row tree-search-row";
@@ -41,9 +62,7 @@
             updateSelectionSummary(state);
         });
 
-        const icon = document.createElement("span");
-        icon.className = "tree-icon file";
-        icon.setAttribute("aria-hidden", "true");
+        const icon = createTreeIcon(false);
 
         const label = document.createElement("span");
         label.className = "tree-label";
@@ -103,9 +122,7 @@
             renderTree(state, treeApi);
         });
 
-        const icon = document.createElement("span");
-        icon.className = `tree-icon ${node.type === "directory" ? "folder" : "file"}`;
-        icon.setAttribute("aria-hidden", "true");
+        const icon = createTreeIcon(node.type === "directory");
 
         const label = document.createElement("span");
         label.className = "tree-label";
