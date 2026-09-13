@@ -6,7 +6,7 @@
 
 面向 **fnOS（飞牛私有云）文件管理器右键场景**的专业压缩包处理工具 —— 解压 · 分卷 · 选择性解压 · 文件预览 · 密码管理，一键完成。
 
-[![版本](https://img.shields.io/badge/版本-v2.4-2786dc?style=flat-square)](https://github.com/chanhuan1/CHzip/releases)
+[![版本](https://img.shields.io/badge/版本-v2.9-2786dc?style=flat-square)](https://github.com/chanhuan1/CHzip/releases)
 [![平台](https://img.shields.io/badge/平台-fnOS%20(x86_64%20·%20arm64)-2786dc?style=flat-square)]()
 [![Stars](https://img.shields.io/github/stars/chanhuan1/CHzip?style=flat-square&label=Stars&color=2786dc)](https://github.com/chanhuan1/CHzip/stargazers)
 [![Forks](https://img.shields.io/github/forks/chanhuan1/CHzip?style=flat-square&label=Forks&color=2786dc)](https://github.com/chanhuan1/CHzip/forks)
@@ -98,6 +98,30 @@ CHzip/
 
 ## 🕒 更新日志
 
+### v2.9（2026-09-13）
+- **矢量图标化**：将剩余 5 处 UI emoji（文件夹/文件树图标、预览眼睛、主题月亮）替换为 SVG，解决部分系统字体缺失导致的方框问题。
+- **主题切换修复**：深色/浅色模式切换后图标正确跟随变化。
+- **历史记录增强**：显示解压日期时间；新增手动「清空历史」按钮。
+- **圆角统一**：引入设计 token 统一控件圆角。
+- **构建优化**：去除重复 staging 调用，减少 I/O 浪费。
+
+### v2.8（2026-09-03）
+- **超长文件名自动截断**：解压时遇到文件名超过文件系统限制（errno 36），自动截断为安全长度并保留扩展名，避免整包解压失败。
+- **部分提取保留**：识别超长文件名错误，保留已提取的部分文件。
+
+### v2.7（2026-09-03）
+- **解压历史记录**：记录最近 20 次解压任务，支持自动覆盖。
+- **任务中心改版**：顶部实时任务流，去掉独立任务按钮；每个后台任务在右上角独立显示迷你进度。
+- **跨页面任务续看**：所有打开窗口自动检测后台任务。
+- **进度解析修复**：正确解析 7-Zip 的 `\r` 回车进度，百分比实时更新。
+
+### v2.6（2026-09-03）
+- **任务中心**：后台 detached worker + 文件态任务，支持取消与页面刷新后续看进度。
+
+### v2.5（2026-09-03）
+- **RAR5 多卷修复**：不再强制指定 `-tRar`，直接打开多卷 RAR5。
+- **README 美化**：添加徽章和 Star History。
+
 ### v2.4（2026-09-03）
 - **深色模式修复**：下拉框/输入框/按钮/弹窗等控件改用主题色，暗色下清晰不刺眼（含原生控件 `color-scheme` 适配）。
 - **进度条重做**：圆角高光轨道 + 成功/失败着色 + 启动期呼吸动画 + **预计剩余时间**；任务状态按阶段显示。
@@ -120,7 +144,7 @@ CHzip/
 ## 🛠️ 开发 / 构建 / 测试
 
 ```bash
-npm test                 # node --test，84 个用例
+npm test                 # node --test，98 个用例
 node --check app/server/api.js   # 语法检查
 node scripts/build-fpk.js        # 构建 dist/*.fpk（双架构，需 fnpack）
 node scripts/audit-fpk.js        # 发布审计（校验和/版本/架构/搜索特性）
