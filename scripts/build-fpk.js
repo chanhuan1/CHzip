@@ -241,16 +241,17 @@ function main() {
   const options = parseArguments(process.argv.slice(2));
   for (const variant of options.variants) {
     for (const platform of options.platforms) {
-      const stageDir = prepareStage({
-        rootDir,
-        buildRoot,
-        platform,
-        variant,
-      });
       if (options.stageOnly) {
-        console.log(stageDir);
+        console.log(prepareStage({
+          rootDir,
+          buildRoot,
+          platform,
+          variant,
+        }));
         continue;
       }
+      // prepareStage 由 buildPlatform 内部调用；此处不要重复调用，
+      // 否则会把刚铺好的 staging 立刻删掉再重铺一遍（纯浪费 I/O）。
       const outputPath = buildPlatform({
         rootDir,
         buildRoot,
