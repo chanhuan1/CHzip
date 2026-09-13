@@ -110,7 +110,12 @@ function parseProgress(log) {
   let currentFile = "";
   for (const raw of text.split(/\r\n|\r|\n/)) {
     const line = raw.trim();
-    const match = line.match(/(\d{1,3})\s*%/);
+    // 行首连续百分比串：覆盖"挤一行多百分比"场景；文件名前的 % 不误吃。
+    const run = /^\s*(?:\d{1,3}\s*%\s*)*/.exec(line)[0];
+    const headMatches = [...run.matchAll(/(\d{1,3})\s*%/g)];
+    const match = headMatches.length
+      ? headMatches[headMatches.length - 1]
+      : line.match(/(\d{1,3})\s*%/);
     if (!match) {
       continue;
     }

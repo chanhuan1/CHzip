@@ -77,6 +77,32 @@ test("parseProgress takes the latest carriage-return snapshot", () => {
   assert.equal(result.currentFile, "c.txt");
 });
 
+test("parseProgress takes the last percent when updates share one line", () => {
+  const log = "  0%  1%  3%  5%  6%  8%  10%  11%  13%  15%  16%  18%  20%";
+  const result = parseProgress(log);
+  assert.equal(result.percent, 20);
+  assert.equal(result.currentFile, "");
+});
+
+test("parseProgress keeps the previous file when a packed line has no name", () => {
+  const log = "  0% a.txt\r  37% b.txt\r  99% c.txt\r  12%  18%";
+  const result = parseProgress(log);
+  assert.equal(result.percent, 18);
+  assert.equal(result.currentFile, "c.txt");
+});
+
+test("parseProgress ignores percent inside a file name", () => {
+  const result = parseProgress("  42% 折扣50%.mp4\n");
+  assert.equal(result.percent, 42);
+  assert.equal(result.currentFile, "折扣50%.mp4");
+});
+
+test("parseProgress handles a packed line followed by a name", () => {
+  const result = parseProgress("  0%  5%  12% - file.txt\n");
+  assert.equal(result.percent, 12);
+  assert.equal(result.currentFile, "- file.txt");
+});
+
 test("classifySevenZipError detects overlong filename", () => {
   const result = classifySevenZipError(
     "ERROR: Cannot open output file : errno=36 : File name too long : /x/很长的.mp4",
