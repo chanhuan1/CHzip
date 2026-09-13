@@ -29,10 +29,12 @@ chzip/
 │   ├── server/              # Backend (Node.js CGI)
 │   │   ├── api.js           # CGI entry point + router
 │   │   ├── sync-authorized-paths.js
-│   │   └── lib/             # 15 library modules
+│   │   └── lib/             # 20 library modules
 │   │       ├── archive.js        # Format/volume classification
 │   │       ├── archive-service.js # Archive inspection
 │   │       ├── authorization-paths.js
+│   │       ├── constants.js      # Timeouts, limits, permission modes
+│   │       ├── diagnostic-service.js # Diagnostic report builder
 │   │       ├── diagnostics.js    # Logging + redaction
 │   │       ├── engine.js         # 7-Zip spawn + error classification
 │   │       ├── fs-utils.js       # Shared lock/write utilities
@@ -46,6 +48,7 @@ chzip/
 │   │       ├── services.js       # Service composition root
 │   │       ├── source.js         # File fingerprinting
 │   │       ├── source-access.js  # Source file inspection
+│   │       ├── watcher.js        # Directory watching + archive detection
 │   │       └── worker.js         # Background extraction worker
 │   ├── ui/                  # CGI shell scripts
 │   ├── www/                 # Frontend (vanilla JS, no framework)
@@ -125,8 +128,23 @@ on your `PATH`.
 
 ## Release Checklist
 
-1. Update version in `manifest` and `package.json`
+1. Bump the version in **four** places — there is no single source of truth,
+   and the manifest version is what actually ships:
+   - `manifest` — `version = X.Y`
+   - `package.json` — `"version": "X.Y"` (not read by the build, easy to miss)
+   - `app/www/index.html` — asset cache-busting `?v=X.Y` (1 CSS + 12 JS).
+     Leave the brand icon at `?v=1.0.0` unless that file itself changed.
+   - `scripts/audit-fpk.js` — the two `fileName` assertions and the manifest
+     version regex
 2. Run `npm test`
-3. Run `npm run test:release` (requires built FPK files)
-4. Build packages: `node scripts/build-fpk.js --platform all --variant all`
-5. Verify packages: `node scripts/audit-fpk.js`
+3. Build: `node scripts/build-fpk.js --platform all --variant all`.
+   Make sure `build/staging/` is empty first — the script's recursive cleanup
+   deletes ~70 files at once and trips the bulk-delete safety hook (threshold
+   50), which yields no artifacts at all. Move the contents aside instead.
+4. Move any older `.fpk` out of `dist/`, then
+   `cd dist && shasum -a 256 *.fpk > SHA256SUMS.txt` (otherwise the glob pulls
+   historical versions into the checksum file).
+5. Verify: `npm run test:release` (requires the built FPK files). Note it does
+   **not** check icons or UI features — only manifest version/platform, 7-Zip
+   arch + ELF machine, font hashes and CSS font declarations. For UI changes,
+   unpack `app.tgz` and verify those separately.
