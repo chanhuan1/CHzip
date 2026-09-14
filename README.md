@@ -98,6 +98,19 @@ CHzip/
 
 ## 🕒 更新日志
 
+### v3.1（2026-09-14）
+- **解压吞吐优化**：进度回写由「每个 7z chunk 都落盘」改为「≥200ms 或百分比跳变 ≥1 才落盘」，热路径 payload 从 ~64KB 降到 <1KB，减少同步 IO 对事件循环的阻塞。
+- **增量进度解析**：新增 `createProgressTracker`（StringDecoder + 增量解析），chunk 边界切断多字节 UTF-8 字符不再产生乱码，解析复杂度从 O(日志总长) 降到 O(新字节数)。
+- **列表校验进程内化**：删除 `listing-validator.js` 独立子进程，worker 直接 spawn 7z 流式校验，每个任务少一次 node 启动 + 64KB JSON 往返。
+- **陈旧锁回收**：`jobs.withLock` 改用 `acquireFileLock`（staleMs=30s），worker 被 SIGKILL 后任务不再永久卡死。
+- **过期清理节流**：用 `cleanup.stamp` mtime 跨请求节流（≥60s），只在用户主动动作接口触发，不再挂在 1s 轮询上。
+- **前端统一轮询器**：`createPoller` 递归 setTimeout + in-flight 守卫，消除请求堆积/乱序覆盖；页面隐藏降频 30s，空闲退避 5s→15s→30s。
+- **文件树渲染**：选中计数改为一次后序预聚合 O(节点数)；分批渲染（每批 200 节点）；容器级事件委托；勾选只做定向复选框刷新，不再整树重建。
+- **大文本预览截断**：渲染上限 20000 行、高亮 3000 行（超出提示，复制仍复制全文）；`escapeHtml` 改为纯字符串替换。
+- **死代码清理**：删除 `watcher.js`、`listing-validator.js`、`watcher.test.js` 及多个死函数，lib/ 模块 20→18。
+- **测试**：98→172（+74），新增 perf-batch1 / worker-progress / ui-preview / ui-tree。
+- 版本号升至 3.1。
+
 ### v3.0（2026-09-13）
 - **修复进度条下方显示整串百分比**：7-Zip 在非 TTY 管道下会把多次进度更新挤在
   同一行，解析时只取第一个百分比，导致进度停在 0%、且剩余百分比串被当作文件名
