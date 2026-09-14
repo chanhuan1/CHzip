@@ -3,6 +3,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { spawn, spawnSync } = require("node:child_process");
+const { StringDecoder } = require("node:string_decoder");
 const { LIMITS, TIMEOUTS } = require("./constants");
 
 const SYSTEM_COMMANDS = ["7zzs", "7zz", "7z", "7za", "7zr"];
@@ -17,7 +18,7 @@ function executableFile(filePath) {
   }
 }
 
-function findSevenZip(options = {}) {
+function locateSevenZip(options = {}) {
   const envPath = options.envPath || process.env.CHZIP_SEVENZIP_PATH;
   if (envPath && executableFile(envPath)) {
     return { path: envPath, source: "env" };
@@ -47,6 +48,34 @@ function findSevenZip(options = {}) {
   }
 
   return null;
+}
+
+// 进程内缓存。CGI 下每个请求是一个独立进程，所以缓存的生命周期天然就是
+// 「单次请求」——不会出现「换了 7z 却读到旧路径」的陈旧问题。
+// 一次 extract 请求里 findSevenZip 会被调 2~3 次，兜底分支每次最多起 5 个
+// `sh -c command -v`，重复探测纯属浪费。
+// 只有使用默认参数的调用才走缓存；带 vendorRoot/envPath 覆盖的调用
+// （测试注入）必须每次真实探测。
+let cachedSevenZip;
+let hasCachedSevenZip = false;
+
+function findSevenZip(options = {}) {
+  const cacheable = Object.keys(options).length === 0;
+  if (cacheable && hasCachedSevenZip) {
+    return cachedSevenZip;
+  }
+  const result = locateSevenZip(options);
+  if (cacheable) {
+    cachedSevenZip = result;
+    hasCachedSevenZip = true;
+  }
+  return result;
+}
+
+// 仅供测试：清空进程内探测缓存。
+function resetSevenZipCache() {
+  cachedSevenZip = undefined;
+  hasCachedSevenZip = false;
 }
 
 function classifySevenZipError(log, exitCode, context = {}) {
@@ -102,14 +131,34 @@ function classifySevenZipError(log, exitCode, context = {}) {
   };
 }
 
-function parseProgress(log) {
-  // 7-Zip 的进度用回车符 \r 原地覆盖（不换行），因此要按 \r 分段并取
-  // “最后一个”快照，才能拿到最新百分比；否则会一直停在最早的低值（0%）。
-  const text = String(log || "");
-  let percent = 0;
-  let currentFile = "";
-  for (const raw of text.split(/\r\n|\r|\n/)) {
-    const line = raw.trim();
+// carry 上限：正常 7-Zip 进度行都很短，这里只是防御「整段输出没有任何
+// 换行/回车」的病态输入导致 carry 无限增长。保留尾部是因为我们只取
+// 「最后一个」百分比/文件名。
+const PROGRESS_CARRY_LIMIT = 64 * 1024;
+
+// 7-Zip 的进度用回车符 \r 原地覆盖（不换行），因此要按行分段并取
+// “最后一个”快照，才能拿到最新百分比；否则会一直停在最早的低值（0%）。
+//
+// 这里做成**增量**解析器：原实现每个 chunk 都把整段累积日志（最多 64KB）
+// split 一遍再逐行正则，整体是 O(chunk 数 × 日志长度)，随解压推进越来越慢；
+// 增量版每次只处理新到的字节 + 当前那一行。
+//
+// 语义与「一次性扫描整段日志」完全一致：percent 取最后一个带百分比的片段，
+// currentFile 取最后一个带非空文件名的片段。
+//
+// 解码器内置在这里，因为 chunk 边界可能切断多字节 UTF-8 字符；
+// write() 会返回本次真正解出的文本，调用方用它拼日志，避免二次解码。
+function createProgressTracker() {
+  const decoder = new StringDecoder("utf8");
+  // committed 只由「已完整结束的行」推进；未完成的行每次都从 committed
+  // 重新算一遍（不累积），否则一个尚未收尾的部分行会把中间态写进状态，
+  // 而后续补齐又因为 tail 为空不回写，导致残留一个错误的文件名。
+  const committed = { percent: 0, currentFile: "" };
+  let carry = "";
+  let ended = false;
+
+  const applyLineTo = (state, raw) => {
+    const line = String(raw).trim();
     // 行首连续百分比串：覆盖"挤一行多百分比"场景；文件名前的 % 不误吃。
     const run = /^\s*(?:\d{1,3}\s*%\s*)*/.exec(line)[0];
     const headMatches = [...run.matchAll(/(\d{1,3})\s*%/g)];
@@ -117,20 +166,81 @@ function parseProgress(log) {
       ? headMatches[headMatches.length - 1]
       : line.match(/(\d{1,3})\s*%/);
     if (!match) {
-      continue;
+      return;
     }
-    percent = Math.min(100, Number(match[1]));
+    state.percent = Math.min(100, Number(match[1]));
     const tail = line.slice(match.index + match[0].length).trim();
     if (!tail) {
-      continue;
+      return;
     }
     const separator = tail.lastIndexOf(" - ");
     const name = (separator >= 0 ? tail.slice(separator + 3) : tail).trim();
     if (name) {
-      currentFile = name;
+      state.currentFile = name;
     }
-  }
-  return { percent, currentFile };
+  };
+
+  const consumeCompleteLines = () => {
+    let index;
+    // \r\n / \r / \n 都当分隔符：\r\n 会多切出一个空片段，
+    // 而空片段不产生任何匹配，等价于原实现按 /\r\n|\r|\n/ 切分。
+    while ((index = carry.search(/[\r\n]/)) >= 0) {
+      applyLineTo(committed, carry.slice(0, index));
+      carry = carry.slice(index + 1);
+    }
+  };
+
+  const absorb = (text) => {
+    if (!text) {
+      return;
+    }
+    carry += text;
+    consumeCompleteLines();
+    if (carry.length > PROGRESS_CARRY_LIMIT) {
+      carry = carry.slice(-PROGRESS_CARRY_LIMIT);
+    }
+  };
+
+  // 当前可观测状态 = 已提交状态 + 当前这一行（尚未收尾）的贡献。
+  const snapshot = () => {
+    if (!carry) {
+      return { percent: committed.percent, currentFile: committed.currentFile };
+    }
+    const state = {
+      percent: committed.percent,
+      currentFile: committed.currentFile,
+    };
+    applyLineTo(state, carry);
+    return state;
+  };
+
+  return {
+    write(chunk) {
+      const text = Buffer.isBuffer(chunk) ? decoder.write(chunk) : String(chunk);
+      absorb(text);
+      return { ...snapshot(), text };
+    },
+    // 流结束时调用，冲刷解码器里可能残留的半个多字节字符。
+    flush() {
+      if (ended) {
+        return { ...snapshot(), text: "" };
+      }
+      ended = true;
+      const text = decoder.end();
+      absorb(text);
+      return { ...snapshot(), text };
+    },
+    state() {
+      return snapshot();
+    },
+  };
+}
+
+function parseProgress(log) {
+  const tracker = createProgressTracker();
+  tracker.write(String(log || ""));
+  tracker.flush();
+  return tracker.state();
 }
 
 function runSevenZipSync(tool, args, options = {}) {
@@ -166,38 +276,6 @@ function runSevenZipSync(tool, args, options = {}) {
   return { exitCode: result.status, log, stdout: result.stdout || "", stderr: result.stderr || "" };
 }
 
-function runSevenZipValidateSync(tool, args, options = {}) {
-  const helperPath = path.join(__dirname, "listing-validator.js");
-  const result = spawnSync(process.execPath, [
-    helperPath,
-    tool.path,
-    options.cwd || "",
-    ...args,
-  ], {
-    encoding: "utf8",
-    timeout: options.timeout || TIMEOUTS.SEVENZIP_SYNC_MS,
-    maxBuffer: options.maxBuffer || LIMITS.MAX_VALIDATE_OUTPUT_BYTES,
-    windowsHide: true,
-  });
-  const log = `${result.stdout || ""}${result.stderr || ""}`;
-  if (result.error) {
-    throw result.error;
-  }
-  if (result.status !== 0) {
-    const classified = classifySevenZipError(log, result.status, {
-      ...options,
-      passwordProvided: options.passwordProvided
-        ?? args.some((argument) => /^-p./s.test(argument)),
-    });
-    const error = new Error(classified.message);
-    error.code = classified.code;
-    error.exitCode = result.status;
-    error.log = log;
-    throw error;
-  }
-  return JSON.parse(result.stdout || "{}");
-}
-
 function spawnSevenZip(tool, args, options = {}) {
   return spawn(tool.path, args, {
     cwd: options.cwd,
@@ -209,10 +287,12 @@ function spawnSevenZip(tool, args, options = {}) {
 
 module.exports = {
   classifySevenZipError,
+  createProgressTracker,
   executableFile,
   findSevenZip,
+  locateSevenZip,
   parseProgress,
+  resetSevenZipCache,
   runSevenZipSync,
-  runSevenZipValidateSync,
   spawnSevenZip,
 };

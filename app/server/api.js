@@ -4,9 +4,8 @@
 
 const crypto = require("node:crypto");
 const querystring = require("node:querystring");
-const { LIMITS } = require("./lib/constants");
+const { LIMITS, TIMEOUTS } = require("./lib/constants");
 const { createServices } = require("./lib/services");
-const { runWorker } = require("./lib/worker");
 const {
   safeDiagnosticWrite,
 } = require("./lib/diagnostics");
@@ -100,6 +99,25 @@ function parseJsonBody(rawBody) {
 
 function normalizeApiName(query, body) {
   return String(query.api || query._api || body.api || "").trim();
+}
+
+// 只有用户主动动作的接口才值得顺带做过期清理；status/preview/info 这些
+// 会被高频轮询或反复调用的接口不触发（清理本身要全量扫 jobs 目录）。
+const CLEANUP_APIS = new Set(["extract", "jobs", "clear-history"]);
+
+// 判断本次请求是否真的有请求体。GET/HEAD 没有 body，若仍去等 stdin，
+// 宿主不关闭 stdin 时就会白等到 30s 超时。
+function hasRequestBody(env = process.env) {
+  const rawLength = env.CONTENT_LENGTH;
+  if (rawLength !== undefined && rawLength !== "") {
+    return Number.parseInt(rawLength, 10) > 0;
+  }
+  const method = String(env.REQUEST_METHOD || "").toUpperCase();
+  if (method === "GET" || method === "HEAD") {
+    return false;
+  }
+  // 方法未知（非 CGI 直接调用）时保持原行为，避免漏读请求体。
+  return true;
 }
 
 async function routeRequest(api, request, services) {
@@ -223,14 +241,18 @@ async function main() {
   let api = "";
   try {
     const query = querystring.parse(process.env.QUERY_STRING || "");
-    const rawBody = await withTimeout(
-      readRequestBody(),
-      30 * 1000,
-      "请求读取超时",
-    );
+    const rawBody = hasRequestBody()
+      ? await withTimeout(
+        readRequestBody(),
+        TIMEOUTS.REQUEST_READ_MS,
+        "请求读取超时",
+      )
+      : "";
     const body = parseJsonBody(rawBody);
     api = normalizeApiName(query, body);
-    services.store.cleanupExpired();
+    if (CLEANUP_APIS.has(api)) {
+      services.store.cleanupExpiredIfDue();
+    }
 
     if (
       api === "extract"
@@ -286,6 +308,10 @@ async function runCli() {
   try {
     if (process.argv[2] === "--worker") {
       const jobId = process.argv[3];
+      // 惰性加载：解压 worker 及其依赖（engine/jobs/sevenzip/nested/source）
+      // 只在 --worker 分支需要。常规 CGI 请求（尤其是 1s 一次的 status 轮询）
+      // 不应为此付出模块加载成本。
+      const { runWorker } = require("./lib/worker");
       await runWorker(jobId, {
         runtimeRoot: process.env.CHZIP_RUNTIME_ROOT,
       });
@@ -317,6 +343,8 @@ if (require.main === module) {
 }
 
 module.exports = {
+  CLEANUP_APIS,
+  hasRequestBody,
   main,
   normalizeApiName,
   parseJsonBody,

@@ -32,6 +32,13 @@ function findNestedTar(rootDir) {
         stack.push(entryPath);
       } else if (entry.isFile() && /\.tar$/i.test(entry.name)) {
         files.push(entryPath);
+        // 「必须唯一」的语义不变：0 个或多个 .tar 都算不支持。
+        // 一旦发现第 2 个就立刻失败，不必再遍历剩余子树。
+        if (files.length > 1) {
+          const error = new Error("未找到唯一的内部 TAR 归档");
+          error.code = "UNSUPPORTED";
+          throw error;
+        }
       }
     }
   }

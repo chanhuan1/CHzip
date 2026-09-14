@@ -82,7 +82,59 @@
         return (node.children || []).flatMap(collectDescendantFiles);
     }
 
-    function selectionState(node, selectedPaths) {
+    // 一次后序遍历算出每个节点的 {fileCount, selectedCount}。
+    //
+    // 原实现对**每个节点**都递归收集整棵子树的文件路径、再 filter 一遍，
+    // 全树渲染的代价是 O(节点数 × 深度)，并且伴随大量临时数组分配/GC。
+    // 预聚合后是严格的 O(节点数)，每个节点只走一次。
+    // 返回以节点对象为键的 Map（依赖同一棵树的对象标识不变）。
+    function computeSelectionCounts(nodes, selectedPaths) {
+        const counts = new Map();
+        const walk = (node) => {
+            if (!node) {
+                return { fileCount: 0, selectedCount: 0 };
+            }
+            if (node.type === "file") {
+                const entry = {
+                    fileCount: 1,
+                    selectedCount: selectedPaths.has(node.path) ? 1 : 0,
+                };
+                counts.set(node, entry);
+                return entry;
+            }
+            let fileCount = 0;
+            let selectedCount = 0;
+            for (const child of node.children || []) {
+                const childCounts = walk(child);
+                fileCount += childCounts.fileCount;
+                selectedCount += childCounts.selectedCount;
+            }
+            const entry = { fileCount, selectedCount };
+            counts.set(node, entry);
+            return entry;
+        };
+        for (const node of nodes || []) {
+            walk(node);
+        }
+        return counts;
+    }
+
+    function stateFromCounts(counts) {
+        if (!counts || counts.fileCount === 0 || counts.selectedCount === 0) {
+            return "unchecked";
+        }
+        if (counts.selectedCount === counts.fileCount) {
+            return "checked";
+        }
+        return "mixed";
+    }
+
+    function selectionState(node, selectedPaths, counts) {
+        // 有预聚合结果时直接查表（正常渲染路径）。
+        if (counts && counts.has(node)) {
+            return stateFromCounts(counts.get(node));
+        }
+        // 回退路径：没有预计算时保持原有行为，逐节点递归。
         const files = collectDescendantFiles(node);
         if (files.length === 0) {
             return "unchecked";
@@ -207,10 +259,12 @@
     return {
         buildTree,
         collectDescendantFiles,
+        computeSelectionCounts,
         createSearchScheduler,
         filterTree,
         renderBatches,
         searchFiles,
         selectionState,
+        stateFromCounts,
     };
 }));

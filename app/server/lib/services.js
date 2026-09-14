@@ -9,7 +9,6 @@ const { inspectArchive } = require("./archive-service");
 const {
   findSevenZip,
   runSevenZipSync,
-  runSevenZipValidateSync,
 } = require("./engine");
 const {
   JobStore,
@@ -88,12 +87,36 @@ function requireTool(findTool) {
   return tool;
 }
 
+// 对外的任务视图：只暴露前端真正消费的字段。
+// 原始 job 还带 log（最大 64KB）、sourceFingerprint、selectionFile、
+// passwordFile（绝对路径）等内部状态，status 每秒轮询一次，全量回传既浪费
+// 带宽/序列化开销，也会把内部路径泄露给前端。
+function toJobView(job) {
+  return {
+    id: job.id,
+    status: job.status,
+    phase: job.phase || "",
+    progress: job.progress || 0,
+    currentFile: job.currentFile || "",
+    archivePath: job.archivePath || "",
+    archiveName: job.archivePath ? path.basename(job.archivePath) : "",
+    outputDir: job.outputDir || "",
+    partCount: job.partCount || 1,
+    requestId: job.requestId || "",
+    startedAt: job.startedAt || "",
+    finishedAt: job.finishedAt || "",
+    createdAt: job.createdAt || "",
+    error: job.error
+      ? { code: job.error.code || "", message: job.error.message || "" }
+      : null,
+  };
+}
+
 function createServices(options = {}) {
   const runtimeRoot = options.runtimeRoot || defaultRuntimeRoot();
   const store = options.store || new JobStore(runtimeRoot);
   const findTool = options.findTool || findSevenZip;
   const runSync = options.runSync || runSevenZipSync;
-  const validateListing = options.validateListing || runSevenZipValidateSync;
   const discoverRoots = options.discoverRoots || discoverAuthorizedRoots;
   const getCapabilities = options.getDirectoryCapabilities
     || getDirectoryCapabilities;
@@ -110,6 +133,8 @@ function createServices(options = {}) {
   });
   const maxNestedPreviewBytes = options.maxNestedPreviewBytes
     || LIMITS.MAX_NESTED_PREVIEW_BYTES;
+  const maxPreviewFileBytes = options.maxPreviewFileBytes
+    || LIMITS.MAX_PREVIEW_FILE_BYTES;
   const spawnWorker = options.spawnWorker || ((jobId) => {
     const apiPath = path.resolve(__dirname, "..", "api.js");
     const child = spawn(process.execPath, [apiPath, "--worker", jobId], {
@@ -186,48 +211,16 @@ function createServices(options = {}) {
     }
   }
 
-  const validateArchive = options.validateArchive || ((archive, input) => {
-    return withPreparedArchive(archive, input, (listingArchive) => {
-      let effectiveSelection = listingArchive.selection;
-      let args = buildListArgs(effectiveSelection, {
-        archivePath: listingArchive.filePath,
-        password: input.password || "",
-        codePage: input.codePage || "auto",
-      });
-      let validation = validateListing(listingArchive.tool, args, {
-        cwd: listingArchive.directory,
-      });
-      if (!effectiveSelection.format && validation.format) {
-        effectiveSelection = {
-          ...effectiveSelection,
-          format: validation.format,
-        };
-        if ((input.codePage || "auto") !== "auto") {
-          args = buildListArgs(effectiveSelection, {
-            archivePath: listingArchive.filePath,
-            password: input.password || "",
-            codePage: input.codePage || "auto",
-          });
-          validation = validateListing(listingArchive.tool, args, {
-            cwd: listingArchive.directory,
-          });
-        }
-      }
-      return {
-        format: effectiveSelection.format,
-        type: effectiveSelection.type,
-        entryCount: validation.entryCount,
-      };
-    });
-  });
-
   function info(input) {
     const tool = requireTool(findTool);
     return inspectArchive(input.path, { sevenZip: tool });
   }
 
-  function preview(input) {
-    const archive = info(input);
+  // providedArchive：调用方（extract）已经解析过同一个压缩包时可以直接传入，
+  // 避免 inspectArchive 在同一请求内跑两遍（分卷多时这一遍是逐级 stat 的
+  // 重活，见 archive-service.inspectArchive → source-access.inspectSourceFile）。
+  function preview(input, providedArchive = null) {
+    const archive = providedArchive || info(input);
     if (archive.missingParts.length) {
       const error = new Error(archive.warnings[0]);
       error.code = "MISSING_VOLUME";
@@ -340,7 +333,8 @@ function createServices(options = {}) {
 
     let previewResult = null;
     if (Array.isArray(input.selectedPaths)) {
-      previewResult = preview(input);
+      // 复用上面已经解析好的 archive，别再 inspectArchive 一遍。
+      previewResult = preview(input, archive);
     }
 
     const roots = discoverRoots(archive.filePath);
@@ -490,7 +484,7 @@ function createServices(options = {}) {
     if (!job) {
       throw new Error("任务不存在或已过期");
     }
-    return job;
+    return toJobView(job);
   }
 
   async function cancel(input) {
@@ -538,30 +532,14 @@ function createServices(options = {}) {
   }
 
   function listJobs() {
-    // 历史只保留最近 keep 条，超出自动清除最旧（环形覆盖）
-    store.removeFinishedOverflow(20);
-    const jobs = store.list();
+    // 历史只保留最近 20 条，超出自动清除最旧（环形覆盖）。
+    // listAndTrimHistory 在**一次**目录遍历里同时完成「溢出修剪」与「列出」，
+    // 取代原先 removeFinishedOverflow() + list() 各扫一遍目录的做法。
+    const { jobs } = store.listAndTrimHistory(20);
     const active = [];
     const history = [];
     for (const job of jobs) {
-      const item = {
-        id: job.id,
-        status: job.status,
-        phase: job.phase || "",
-        progress: job.progress || 0,
-        currentFile: job.currentFile || "",
-        archivePath: job.archivePath || "",
-        archiveName: job.archivePath ? path.basename(job.archivePath) : "",
-        outputDir: job.outputDir || "",
-        partCount: job.partCount || 1,
-        requestId: job.requestId || "",
-        startedAt: job.startedAt || "",
-        finishedAt: job.finishedAt || "",
-        createdAt: job.createdAt || "",
-        error: job.error
-          ? { code: job.error.code || "", message: job.error.message || "" }
-          : null,
-      };
+      const item = toJobView(job);
       if (TERMINAL_STATUSES.has(job.status)) {
         history.push(item);
       } else {
@@ -588,16 +566,28 @@ function createServices(options = {}) {
     const selectionFile = path.join(previewDir, "selection.txt");
     fs.writeFileSync(selectionFile, targetPath, { encoding: "utf8", mode: 0o600 });
     try {
-      const result = spawnSync(archive.tool, buildStdoutExtractArgs(archive.selection, {
+      // 注意：archive.tool 是 { path, source } 对象，spawnSync 的第一个参数
+      // 必须是可执行文件路径字符串（其余调用点走 runSevenZipSync，由它取
+      // tool.path）。这里原先直接传了对象，会让 spawnSync 抛
+      // ERR_INVALID_ARG_TYPE，导致 preview-file 接口一直不可用。
+      const result = spawnSync(archive.tool.path, buildStdoutExtractArgs(archive.selection, {
         archivePath: archive.filePath,
         password: input.password || "",
         codePage: input.codePage || "auto",
         selectionFile,
       }), {
         cwd: archive.directory,
-        maxBuffer: LIMITS.MAX_PREVIEW_OUTPUT_BYTES,
+        maxBuffer: maxPreviewFileBytes,
         encoding: null,
       });
+      // maxBuffer 触顶时 spawnSync 会杀掉子进程并给出 ENOBUFS。
+      // 转成明确的业务错误码，前端才能提示"文件太大"而不是报未知错误。
+      if (result.error && result.error.code === "ENOBUFS") {
+        const limitMiB = Math.round(maxPreviewFileBytes / 1024 / 1024);
+        const error = new Error(`文件超过预览上限（${limitMiB} MiB），无法预览`);
+        error.code = "PREVIEW_TOO_LARGE";
+        throw error;
+      }
       if (result.status !== 0) {
         const error = new Error(String(result.stderr || "预览文件失败"));
         error.code = "PREVIEW_FAILED";

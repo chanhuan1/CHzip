@@ -45,6 +45,27 @@
         + '<circle class="tree-preview-pupil" cx="8" cy="8" r="2.1"/>'
         + "</svg>";
 
+    const RENDER_BATCH_SIZE = 200;
+
+    // ---------------------------------------------------------------- 渲染期索引
+    //
+    // 原先每个节点各自挂 click/change 监听，一次重渲染就要销毁重建上千个监听器；
+    // 勾选/展开也直接全量 renderTree（重建整棵树 + 重建全部监听器）。
+    // 现在改为：容器级事件委托（每棵树只挂 2 个监听）+ 渲染期建立
+    // 「path → 节点 / path → 复选框」索引，勾选时只更新受影响的复选框。
+    //
+    // 页面里只有一棵文件树，因此这些模块级变量是安全的。
+    let nodeIndex = new Map();
+    let checkboxIndex = new Map();
+    let activeState = null;
+    let activeTreeApi = null;
+    // 当前这棵树的选中计数（path→node 的 Map 的反向：以节点对象为键）。
+    // 必须放在模块级而不是 renderTree 的闭包里：分批渲染可能跨多帧，
+    // 用户在这期间勾选会让"渲染开始时算的 counts"过期，
+    // 后续批次就会渲染出与 state.selectedPaths 矛盾的复选框状态。
+    let activeCounts = new Map();
+    const delegatedContainers = new WeakSet();
+
     function createTreeIcon(isDirectory) {
         const icon = document.createElement("span");
         icon.className = `tree-icon ${isDirectory ? "folder" : "file"}`;
@@ -53,8 +74,13 @@
         return icon;
     }
 
+    function registerRow(row, path) {
+        row.dataset.path = path;
+        return row;
+    }
+
     function appendSearchFileRow(container, entry, state, treeApi) {
-        const row = document.createElement("div");
+        const row = registerRow(document.createElement("div"), entry.path);
         row.className = "tree-row tree-search-row";
         row.style.setProperty("--tree-depth", "0");
         row.title = entry.path;
@@ -69,14 +95,7 @@
         checkbox.className = "tree-checkbox";
         checkbox.checked = state.selectedPaths.has(entry.path);
         checkbox.setAttribute("aria-label", `选择 ${entry.path}`);
-        checkbox.addEventListener("change", () => {
-            if (checkbox.checked) {
-                state.selectedPaths.add(entry.path);
-            } else {
-                state.selectedPaths.delete(entry.path);
-            }
-            updateSelectionSummary(state);
-        });
+        checkboxIndex.set(entry.path, checkbox);
 
         const icon = createTreeIcon(false);
 
@@ -93,8 +112,8 @@
         container.append(row);
     }
 
-    function appendTreeNode(container, node, depth, state, treeApi) {
-        const row = document.createElement("div");
+    function appendTreeNode(container, node, depth, state, treeApi, counts) {
+        const row = registerRow(document.createElement("div"), node.path);
         row.className = "tree-row";
         row.style.setProperty("--tree-depth", String(depth));
         row.title = node.path;
@@ -108,35 +127,20 @@
         } else {
             toggle.textContent = "›";
             toggle.classList.toggle("is-open", state.expandedPaths.has(node.path));
-            toggle.setAttribute("aria-label", state.expandedPaths.has(node.path) ? "折叠目录" : "展开目录");
-            toggle.addEventListener("click", () => {
-                if (state.expandedPaths.has(node.path)) {
-                    state.expandedPaths.delete(node.path);
-                } else {
-                    state.expandedPaths.add(node.path);
-                }
-                renderTree(state, treeApi);
-            });
+            toggle.setAttribute(
+                "aria-label",
+                state.expandedPaths.has(node.path) ? "折叠目录" : "展开目录",
+            );
         }
 
         const checkbox = document.createElement("input");
         checkbox.type = "checkbox";
         checkbox.className = "tree-checkbox";
-        const nodeState = treeApi.selectionState(node, state.selectedPaths);
+        const nodeState = treeApi.selectionState(node, state.selectedPaths, counts);
         checkbox.checked = nodeState === "checked";
         checkbox.indeterminate = nodeState === "mixed";
         checkbox.setAttribute("aria-label", `选择 ${node.path}`);
-        checkbox.addEventListener("change", () => {
-            const paths = treeApi.collectDescendantFiles(node);
-            for (const filePath of paths) {
-                if (checkbox.checked) {
-                    state.selectedPaths.add(filePath);
-                } else {
-                    state.selectedPaths.delete(filePath);
-                }
-            }
-            renderTree(state, treeApi);
-        });
+        checkboxIndex.set(node.path, checkbox);
 
         const icon = createTreeIcon(node.type === "directory");
 
@@ -157,22 +161,33 @@
             previewBtn.innerHTML = PREVIEW_EYE_ICON;
             previewBtn.title = "预览文件";
             previewBtn.setAttribute("aria-label", `预览 ${node.name}`);
-            previewBtn.addEventListener("click", (event) => {
-                event.stopPropagation();
-                if (state.onPreviewFile) {
-                    state.onPreviewFile(node.path);
-                }
-            });
             row.append(previewBtn);
         }
 
         container.append(row);
+    }
 
-        if (hasChildren && state.expandedPaths.has(node.path)) {
-            for (const child of node.children) {
-                appendTreeNode(container, child, depth + 1, state, treeApi);
+    // 把「可见节点」摊平成一个列表（只包含已展开的分支），
+    // 以便分批渲染，避免一次性同步建出成百上千个 DOM 节点。
+    function flattenVisibleNodes(nodes, state) {
+        const out = [];
+        const walk = (node, depth) => {
+            out.push({ node, depth });
+            if (
+                node.type === "directory"
+                && node.children
+                && node.children.length
+                && state.expandedPaths.has(node.path)
+            ) {
+                for (const child of node.children) {
+                    walk(child, depth + 1);
+                }
             }
+        };
+        for (const node of nodes || []) {
+            walk(node, 0);
         }
+        return out;
     }
 
     function updateSelectionSummary(state) {
@@ -195,6 +210,143 @@
         state.onAvailabilityChange?.();
     }
 
+    function syncCheckbox(path, counts, treeApi) {
+        const checkbox = checkboxIndex.get(path);
+        const node = nodeIndex.get(path);
+        if (!checkbox || !node) {
+            return;
+        }
+        const nodeState = treeApi.stateFromCounts(counts.get(node));
+        checkbox.checked = nodeState === "checked";
+        checkbox.indeterminate = nodeState === "mixed";
+    }
+
+    // 勾选变化只做数据更新 + 受影响复选框的定向刷新，
+    // 不再整棵树重建（原先勾选一个文件就要重建整棵树和全部监听器）。
+    function applySelectionChange(path, checked, state, treeApi) {
+        const node = nodeIndex.get(path);
+        if (!node) {
+            // 搜索结果行：只有单个文件、没有对应的树节点。
+            if (checked) {
+                state.selectedPaths.add(path);
+            } else {
+                state.selectedPaths.delete(path);
+            }
+            updateSelectionSummary(state);
+            return;
+        }
+        const affected = treeApi.collectDescendantFiles(node);
+        for (const filePath of affected) {
+            if (checked) {
+                state.selectedPaths.add(filePath);
+            } else {
+                state.selectedPaths.delete(filePath);
+            }
+        }
+
+        activeCounts = treeApi.computeSelectionCounts(state.tree, state.selectedPaths);
+        for (const filePath of affected) {
+            syncCheckbox(filePath, activeCounts, treeApi);
+        }
+        syncCheckbox(path, activeCounts, treeApi);
+
+        // 祖先链的"部分选中"状态需要跟着变。
+        let parentPath = node.parentPath || "";
+        const visited = new Set();
+        while (parentPath && !visited.has(parentPath)) {
+            visited.add(parentPath);
+            syncCheckbox(parentPath, activeCounts, treeApi);
+            const parentNode = nodeIndex.get(parentPath);
+            parentPath = parentNode ? (parentNode.parentPath || "") : "";
+        }
+        for (const top of state.tree) {
+            syncCheckbox(top.path, activeCounts, treeApi);
+        }
+
+        updateSelectionSummary(state);
+    }
+
+    function rowPathFromEvent(event, selector) {
+        const target = event.target;
+        if (!target || typeof target.closest !== "function") {
+            return null;
+        }
+        const hit = target.closest(selector);
+        if (!hit) {
+            return null;
+        }
+        const row = hit.closest(".tree-row");
+        if (!row) {
+            return null;
+        }
+        const path = row.dataset.path;
+        return path === undefined ? null : path;
+    }
+
+    function ensureDelegatedHandlers(container) {
+        if (delegatedContainers.has(container)) {
+            return;
+        }
+        delegatedContainers.add(container);
+
+        container.addEventListener("click", (event) => {
+            const state = activeState;
+            const treeApi = activeTreeApi;
+            if (!state || !treeApi) {
+                return;
+            }
+            const previewPath = rowPathFromEvent(event, ".tree-preview-btn");
+            if (previewPath !== null) {
+                event.stopPropagation();
+                if (state.onPreviewFile) {
+                    state.onPreviewFile(previewPath);
+                }
+                return;
+            }
+            const togglePath = rowPathFromEvent(event, ".tree-toggle");
+            if (togglePath === null) {
+                return;
+            }
+            const node = nodeIndex.get(togglePath);
+            if (!node || node.type !== "directory"
+                || !(node.children && node.children.length)) {
+                return;
+            }
+            if (state.expandedPaths.has(togglePath)) {
+                state.expandedPaths.delete(togglePath);
+            } else {
+                state.expandedPaths.add(togglePath);
+            }
+            renderTree(state, treeApi);
+        });
+
+        container.addEventListener("change", (event) => {
+            const state = activeState;
+            const treeApi = activeTreeApi;
+            if (!state || !treeApi) {
+                return;
+            }
+            const target = event.target;
+            if (!target || !target.classList
+                || !target.classList.contains("tree-checkbox")) {
+                return;
+            }
+            const path = rowPathFromEvent(event, ".tree-checkbox");
+            if (path === null) {
+                return;
+            }
+            applySelectionChange(path, Boolean(target.checked), state, treeApi);
+        });
+    }
+
+    function scheduleFrame(callback) {
+        if (typeof window !== "undefined" && window.requestAnimationFrame) {
+            window.requestAnimationFrame(callback);
+        } else {
+            setTimeout(callback, 0);
+        }
+    }
+
     function renderSearchResults(query, renderId, state, treeApi) {
         const els = state.elements;
         const matches = treeApi.searchFiles(state.entries, query);
@@ -207,14 +359,8 @@
         }
 
         treeApi.renderBatches(matches, {
-            batchSize: 200,
-            scheduleFrame(callback) {
-                if (window.requestAnimationFrame) {
-                    window.requestAnimationFrame(callback);
-                } else {
-                    window.setTimeout(callback, 0);
-                }
-            },
+            batchSize: RENDER_BATCH_SIZE,
+            scheduleFrame,
             isCurrent() {
                 return (
                     renderId === state.searchRenderId
@@ -234,6 +380,11 @@
     function renderTree(state, treeApi) {
         const els = state.elements;
         const renderId = ++state.searchRenderId;
+        activeState = state;
+        activeTreeApi = treeApi;
+        nodeIndex = new Map();
+        checkboxIndex = new Map();
+        ensureDelegatedHandlers(els.fileTree);
         els.fileTree.replaceChildren();
         if (!state.previewReady && !state.previewLimited) {
             const empty = document.createElement("div");
@@ -259,11 +410,38 @@
             return;
         }
 
-        const fragment = document.createDocumentFragment();
-        for (const node of state.tree) {
-            appendTreeNode(fragment, node, 0, state, treeApi);
+        // 一次后序遍历算好每个节点的文件数/已选数：原实现是每个节点各递归一次，
+        // 整棵树渲染的代价是 O(节点数 × 深度)。
+        // activeCounts 是共享的：分批渲染期间用户改勾选时，applySelectionChange
+        // 会把它刷新，尚未渲染的批次读到的就是最新值。
+        activeCounts = treeApi.computeSelectionCounts(state.tree, state.selectedPaths);
+        const flat = flattenVisibleNodes(state.tree, state);
+        for (const item of flat) {
+            nodeIndex.set(item.node.path, item.node);
         }
-        els.fileTree.append(fragment);
+
+        // 分批渲染：先出首批，其余按帧补齐，避免一次性同步建 DOM 卡住主线程。
+        treeApi.renderBatches(flat, {
+            batchSize: RENDER_BATCH_SIZE,
+            scheduleFrame,
+            isCurrent() {
+                return renderId === state.searchRenderId;
+            },
+            renderBatch(items) {
+                const fragment = document.createDocumentFragment();
+                for (const item of items) {
+                    appendTreeNode(
+                        fragment,
+                        item.node,
+                        item.depth,
+                        state,
+                        treeApi,
+                        activeCounts,
+                    );
+                }
+                els.fileTree.append(fragment);
+            },
+        });
         updateSelectionSummary(state);
     }
 

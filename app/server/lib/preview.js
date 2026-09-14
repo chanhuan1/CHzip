@@ -1,6 +1,5 @@
 "use strict";
 
-const fs = require("node:fs");
 const path = require("node:path");
 const { StringDecoder } = require("node:string_decoder");
 
@@ -309,24 +308,6 @@ function createTechnicalListValidator(options = {}) {
   };
 }
 
-function validateTechnicalListFile(filePath, options = {}) {
-  const descriptor = fs.openSync(filePath, "r");
-  const buffer = Buffer.alloc(64 * 1024);
-  const validator = createTechnicalListValidator(options);
-  try {
-    for (;;) {
-      const bytesRead = fs.readSync(descriptor, buffer, 0, buffer.length, null);
-      if (!bytesRead) {
-        break;
-      }
-      validator.write(buffer.subarray(0, bytesRead));
-    }
-    return validator.end();
-  } finally {
-    fs.closeSync(descriptor);
-  }
-}
-
 module.exports = {
   createTechnicalListValidator,
   DEFAULT_MAX_BYTES,
@@ -335,5 +316,4 @@ module.exports = {
   PreviewLimitError,
   normalizeEntryPath,
   parseTechnicalList,
-  validateTechnicalListFile,
 };

@@ -10,13 +10,18 @@ const TIMEOUTS = Object.freeze({
   LOCK_RETRY_MS: 5,
   LOCK_MAX_ATTEMPTS: 200,
   STALE_LOCK_MS: 30 * 1000,
+  // 过期任务清理的最小间隔：清理要全量扫 jobs 目录，不能挂在 1s 一次的
+  // status 轮询上。用 runtimeRoot 下的 cleanup.stamp mtime 做跨请求节流。
+  CLEANUP_MIN_INTERVAL_MS: 60 * 1000,
 });
 
 const LIMITS = Object.freeze({
   MAX_CONCURRENT_EXTRACTS: 3,
   MAX_REQUEST_BODY_BYTES: 16 * 1024 * 1024,
   MAX_PREVIEW_OUTPUT_BYTES: 64 * 1024 * 1024,
-  MAX_VALIDATE_OUTPUT_BYTES: 8 * 1024 * 1024,
+  // 单文件免解压预览的上限。7z -so 会把整个目标文件吐进内存，必须封顶，
+  // 否则弱内存的 NAS 上峰值 RSS 会失控。比前端 10 MiB 的门槛留一点余量。
+  MAX_PREVIEW_FILE_BYTES: 12 * 1024 * 1024,
   MAX_NESTED_PREVIEW_BYTES: 8 * 1024 * 1024 * 1024,
   MAX_NESTED_DISK_USAGE_RATIO: 0.8,
   MAX_PREVIEW_ENTRIES: 100000,

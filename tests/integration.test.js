@@ -25,7 +25,6 @@ beforeEach(() => {
       stdout: "Type = zip\n----------\nPath = test.txt\nSize = 100\nAttributes = A\n\n",
       stderr: "",
     }),
-    validateListing: () => ({ entryCount: 1, format: "zip" }),
     discoverRoots: () => [{ path: tmpDir, canBrowse: true, canSelect: true }],
     inspectSource: (filePath) => {
       const resolved = fs.realpathSync(filePath);

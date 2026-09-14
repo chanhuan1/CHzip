@@ -400,10 +400,13 @@
             if (fileType === "image") {
                 try {
                     const binaryString = atob(result.content);
-                    const bytes = new Uint8Array(binaryString.length);
-                    for (let i = 0; i < binaryString.length; i++) {
-                        bytes[i] = binaryString.charCodeAt(i);
-                    }
+                    // 用原生 Uint8Array.from 代替逐字符 JS 循环：
+                    // 10 MiB 图片约有一千万次循环，全部压在主线程上。
+                    // atob 的输出每个字符都在 0~255，因此按码点映射与 charCodeAt 等价。
+                    const bytes = Uint8Array.from(
+                        binaryString,
+                        (ch) => ch.charCodeAt(0),
+                    );
                     const blob = new Blob([bytes], { type: getMimeType(entry.name) });
                     const container = document.createElement("div");
                     container.className = "preview-image-container";
@@ -809,51 +812,28 @@
     });
     els.openCommentBtn.addEventListener("click", () => commentManager.openCommentDialog());
 
-    window.addEventListener("beforeunload", () => {
-        if (state.pollTimer) {
-            clearInterval(state.pollTimer);
-            state.pollTimer = null;
-        }
-        if (state.taskCenterTimer) {
-            clearInterval(state.taskCenterTimer);
-            state.taskCenterTimer = null;
-        }
-        if (state.taskWatchTimer) {
-            clearTimeout(state.taskWatchTimer);
-            state.taskWatchTimer = null;
-        }
-        if (state.historyTimer) {
-            clearInterval(state.historyTimer);
-            state.historyTimer = null;
+    // 统一停掉所有轮询器。轮询器是对象（不是定时器句柄），必须调用 stop()，
+    // 否则会残留定时器与 visibilitychange 监听。
+    function stopAllPollers() {
+        for (const key of [
+            "pollTimer",
+            "taskCenterTimer",
+            "taskWatchTimer",
+            "historyTimer",
+        ]) {
+            if (state[key]) {
+                state[key].stop();
+                state[key] = null;
+            }
         }
         if (state.historyClearTimer) {
             clearTimeout(state.historyClearTimer);
             state.historyClearTimer = null;
         }
-    });
+    }
 
-    window.addEventListener("pagehide", () => {
-        if (state.pollTimer) {
-            clearInterval(state.pollTimer);
-            state.pollTimer = null;
-        }
-        if (state.taskCenterTimer) {
-            clearInterval(state.taskCenterTimer);
-            state.taskCenterTimer = null;
-        }
-        if (state.taskWatchTimer) {
-            clearTimeout(state.taskWatchTimer);
-            state.taskWatchTimer = null;
-        }
-        if (state.historyTimer) {
-            clearInterval(state.historyTimer);
-            state.historyTimer = null;
-        }
-        if (state.historyClearTimer) {
-            clearTimeout(state.historyClearTimer);
-            state.historyClearTimer = null;
-        }
-    });
+    window.addEventListener("beforeunload", stopAllPollers);
+    window.addEventListener("pagehide", stopAllPollers);
 
     loadApp()
         .then(updateActionAvailability)

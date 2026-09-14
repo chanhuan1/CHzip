@@ -72,10 +72,32 @@
         return "unknown";
     }
 
+    // 渲染行数上限 / 高亮行数上限。
+    //
+    // 预览内容上限是 10 MiB，按行算可能有几十万行。原实现会为每一行都
+    // 生成行号 <span> 并逐行做正则高亮，几十万行 = 几十万个 DOM 节点，
+    // 主线程直接假死。这里给渲染设一个上限：超出部分不渲染并明确提示；
+    // 高亮只对前若干行做（高亮是最贵的部分）。
+    // 注意：只影响"显示"，复制按钮仍然复制完整内容（previewContent 未截断）。
+    const MAX_PREVIEW_LINES = 20000;
+    const MAX_HIGHLIGHT_LINES = 3000;
+
+    const HTML_ESCAPES = {
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        "\u00A0": "&nbsp;",
+    };
+
+    // 纯字符串转义。
+    //
+    // 原实现每次都 new 一个 <div>，把内容塞进 textContent 再读 innerHTML 取转义
+    // 结果 —— 按行高亮时就是"每一行创建一个 DOM 元素"，大文件下代价极高。
+    // 这里刻意只转义 & < > 与不换行空格（与原实现输出一致，包含 U+00A0 的处理）：
+    // 引号不需要转义（内容只作为文本插入，不进属性），而且一旦把引号变成实体，
+    // 下面针对字符串字面量的正则就再也匹配不到了。
     function escapeHtml(text) {
-        const div = document.createElement("div");
-        div.textContent = text;
-        return div.innerHTML;
+        return String(text).replace(/[&<>\u00A0]/g, (ch) => HTML_ESCAPES[ch]);
     }
 
     function highlightSyntax(line) {
@@ -101,13 +123,36 @@
         }).join("");
     }
 
-    function formatTextPreview(content) {
-        const lines = content.split(/\r?\n/);
-        return lines.map((line, index) => {
+    function formatTextPreview(content, options) {
+        const settings = options || {};
+        const maxLines = settings.maxLines == null
+            ? MAX_PREVIEW_LINES
+            : settings.maxLines;
+        const maxHighlightLines = settings.maxHighlightLines == null
+            ? MAX_HIGHLIGHT_LINES
+            : settings.maxHighlightLines;
+
+        const text = String(content == null ? "" : content);
+        if (!text) {
+            return "";
+        }
+        const lines = text.split(/\r?\n/);
+        const visible = maxLines > 0 ? lines.slice(0, maxLines) : lines;
+        const rendered = visible.map((line, index) => {
             const lineNumber = `<span class="line-number">${String(index + 1).padStart(4, " ")}</span>`;
-            const highlighted = highlightSyntax(line);
-            return `${lineNumber}${highlighted}`;
-        }).join("\n");
+            const body = index < maxHighlightLines
+                ? highlightSyntax(line)
+                : escapeHtml(line);
+            return `${lineNumber}${body}`;
+        });
+        if (visible.length < lines.length) {
+            rendered.push(
+                `<span class="line-number">    </span>`
+                + `<em>（内容过长，仅显示前 ${visible.length} 行，`
+                + `共 ${lines.length} 行；复制按钮仍可复制全文）</em>`,
+            );
+        }
+        return rendered.join("\n");
     }
 
     function formatImagePreview(blob, fileName) {
@@ -143,6 +188,8 @@
     }
 
     root.CHzipPreview = {
+        MAX_HIGHLIGHT_LINES,
+        MAX_PREVIEW_LINES,
         PREVIEW_MAX_SIZE,
         escapeHtml,
         formatSize,
@@ -150,6 +197,7 @@
         formatImagePreview,
         getFileExtension,
         getFileType,
+        highlightSyntax,
         isImageFile,
         isPreviewable,
         isTextFile,

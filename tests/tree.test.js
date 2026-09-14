@@ -6,10 +6,12 @@ const { test } = require("node:test");
 const {
   buildTree,
   collectDescendantFiles,
+  computeSelectionCounts,
   createSearchScheduler,
   filterTree,
   searchFiles,
   selectionState,
+  stateFromCounts,
 } = require("../app/www/js/tree");
 
 test("buildTree creates correct directory structure", () => {
@@ -162,3 +164,102 @@ test("createSearchScheduler cancels pending callbacks", () => {
     }, 100);
   });
 });
+
+// ------------------------------------------- 预聚合选中计数（等价性）
+
+test("computeSelectionCounts aggregates per subtree", () => {
+  const entries = [
+    { path: "a/1.txt", type: "file", size: 1 },
+    { path: "a/2.txt", type: "file", size: 1 },
+    { path: "a/sub/3.txt", type: "file", size: 1 },
+    { path: "b/4.txt", type: "file", size: 1 },
+  ];
+  const tree = buildTree(entries);
+  const selected = new Set(["a/1.txt", "a/sub/3.txt"]);
+  const counts = computeSelectionCounts(tree, selected);
+
+  const a = tree.find((node) => node.path === "a");
+  assert.deepEqual(counts.get(a), { fileCount: 3, selectedCount: 2 });
+  assert.equal(selectionState(a, selected, counts), "mixed");
+
+  const sub = a.children.find((node) => node.path === "a/sub");
+  assert.deepEqual(counts.get(sub), { fileCount: 1, selectedCount: 1 });
+  assert.equal(selectionState(sub, selected, counts), "checked");
+
+  const b = tree.find((node) => node.path === "b");
+  assert.deepEqual(counts.get(b), { fileCount: 1, selectedCount: 0 });
+  assert.equal(selectionState(b, selected, counts), "unchecked");
+
+  const rootFile = b.children.find((node) => node.path === "b/4.txt");
+  assert.deepEqual(counts.get(rootFile), { fileCount: 1, selectedCount: 0 });
+});
+
+test("stateFromCounts mirrors the original tri-state rules", () => {
+  assert.equal(stateFromCounts(null), "unchecked");
+  assert.equal(stateFromCounts({ fileCount: 0, selectedCount: 0 }), "unchecked");
+  assert.equal(stateFromCounts({ fileCount: 3, selectedCount: 0 }), "unchecked");
+  assert.equal(stateFromCounts({ fileCount: 3, selectedCount: 3 }), "checked");
+  assert.equal(stateFromCounts({ fileCount: 3, selectedCount: 1 }), "mixed");
+});
+
+function createRandom(seed) {
+  let value = seed;
+  return () => {
+    value = (value * 1103515245 + 12345) % 2147483648;
+    return value / 2147483648;
+  };
+}
+
+test("computeSelectionCounts agrees with the legacy recursion on random trees", () => {
+  const random = createRandom(20260914);
+
+  for (let round = 0; round < 25; round += 1) {
+    const entries = [];
+    const directoryCount = 1 + Math.floor(random() * 4);
+    for (let d = 0; d < directoryCount; d += 1) {
+      const dir = `dir${d}`;
+      const fileCount = 1 + Math.floor(random() * 5);
+      for (let f = 0; f < fileCount; f += 1) {
+        entries.push({ path: `${dir}/f${f}.txt`, type: "file", size: f });
+      }
+      if (random() > 0.5) {
+        entries.push({ path: `${dir}/sub/deep/g.txt`, type: "file", size: 1 });
+      }
+    }
+
+    const tree = buildTree(entries);
+    const allFiles = entries.map((entry) => entry.path);
+    const selected = new Set(allFiles.filter(() => random() > 0.4));
+    const counts = computeSelectionCounts(tree, selected);
+
+    const visit = (node) => {
+      const legacy = selectionState(node, selected);
+      const fast = selectionState(node, selected, counts);
+      assert.equal(
+        fast,
+        legacy,
+        `节点 ${node.path} 的选中状态应与旧实现一致`,
+      );
+      for (const child of node.children || []) {
+        visit(child);
+      }
+    };
+    for (const node of tree) {
+      visit(node);
+    }
+  }
+});
+
+test("selectionState without counts keeps the legacy behaviour", () => {
+  const entries = [
+    { path: "a/1.txt", type: "file", size: 1 },
+    { path: "a/2.txt", type: "file", size: 1 },
+  ];
+  const tree = buildTree(entries);
+  const a = tree[0];
+
+  assert.equal(selectionState(a, new Set()), "unchecked");
+  assert.equal(selectionState(a, new Set(["a/1.txt"])), "mixed");
+  assert.equal(selectionState(a, new Set(["a/1.txt", "a/2.txt"])), "checked");
+});
+

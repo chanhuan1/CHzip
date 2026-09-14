@@ -26,8 +26,14 @@ function inspectArchive(selectedPath, options = {}) {
     throw new Error("压缩包路径必须是绝对路径");
   }
   const fsModule = options.fsModule || fs;
+  // 所有分卷都在同一个目录下（下面的 volumePaths 均由同一个 directory 拼出），
+  // 因此祖先目录的 stat/access 校验整趟只需做一次，把结果缓存在这次调用内复用。
+  const verifiedComponents = new Map();
   const inspectSource = options.inspectSource
-    || ((filePath) => inspectSourceFile(filePath, { fsModule }));
+    || ((filePath) => inspectSourceFile(filePath, {
+      fsModule,
+      verifiedComponents,
+    }));
   const selectedSource = inspectSource(selectedPath);
   const selectedRealPath = selectedSource.path;
   const selection = classifyArchive(selectedRealPath);

@@ -271,23 +271,48 @@
             await renderSavedPasswords();
         }
 
+        // 这个函数挂在文件树的可用性钩子上，每次渲染都会走到。
+        // 真正的开销（JSON.parse + 逐条 AES-GCM 解密）已经由 password-store 的
+        // 读缓存消掉了；这里再补一层"文本没变就不写 DOM"的短路，
+        // 避免每次渲染都产生一次无意义的 DOM 写入。
+        let lastStatusText = null;
+
+        function setPasswordManagerStatus(text) {
+            if (text === lastStatusText) {
+                return;
+            }
+            lastStatusText = text;
+            const el = state.elements.passwordManagerStatus;
+            if (el) {
+                el.textContent = text;
+            }
+        }
+
         function updatePasswordManagerStatus() {
             const els = state.elements;
-            let status = "等待文件";
+            if (!els.passwordManagerStatus) {
+                return;
+            }
             if (state.info) {
                 if (state.passwordRequired && !state.passwordVerified) {
-                    status = "待验证";
-                } else if (state.passwordRequired && state.passwordVerified) {
-                    status = "密码已验证";
-                } else {
-                    passwordStore.list().then((entries) => {
-                        const count = entries.length;
-                        els.passwordManagerStatus.textContent = count ? `已保存 ${count} 个密码` : "未保存密码";
-                    });
+                    setPasswordManagerStatus("待验证");
                     return;
                 }
+                if (state.passwordRequired && state.passwordVerified) {
+                    setPasswordManagerStatus("密码已验证");
+                    return;
+                }
+                passwordStore.list().then((entries) => {
+                    const count = entries.length;
+                    setPasswordManagerStatus(
+                        count ? `已保存 ${count} 个密码` : "未保存密码",
+                    );
+                }).catch(() => {
+                    // 读取失败时保持上一次显示，不影响其它 UI。
+                });
+                return;
             }
-            els.passwordManagerStatus.textContent = status;
+            setPasswordManagerStatus("等待文件");
         }
 
         return {

@@ -6,10 +6,12 @@ const os = require("node:os");
 const path = require("node:path");
 const {
   classifySevenZipError,
-  parseProgress,
+  createProgressTracker,
   spawnSevenZip,
 } = require("./engine");
+const { LIMITS } = require("./constants");
 const { JobStore } = require("./jobs");
+const { createTechnicalListValidator } = require("./preview");
 const {
   buildExtractArgs,
   buildListArgs,
@@ -34,21 +36,62 @@ const {
   truncateUtf8Name,
 } = require("./fs-utils");
 
-function appendJobLog(store, jobId, chunk, phase) {
-  const text = chunk.toString("utf8");
-  store.update(jobId, (job) => {
-    const log = `${job.log || ""}${text}`.slice(-65536);
-    const progress = parseProgress(log);
-    return {
+// 进度回写节流参数：距上次落盘 >= 200ms，或百分比跳变 >= 1 才落盘。
+const PROGRESS_THROTTLE_MS = 200;
+const PROGRESS_PERCENT_STEP = 1;
+
+// 进度回写节流器。
+//
+// 7-Zip 在高频吐进度（-bsp1），原实现每收到一个 chunk 就做一次
+// 「加锁 → 读整个 job JSON → JSON.parse → JSON.stringify(job, null, 2) → rename」，
+// 单次约 6~7 个同步 syscall。同步 IO 会占住事件循环，stdout 管道来不及 drain，
+// 反过来把 7-Zip 的写入阻塞住，直接拖慢解压吞吐。
+//
+// 这里把落盘频率压到「每 200ms 或百分比变化 1」一次，并在 phase 切换、
+// 进程结束、终态之前强制 flush，保证不丢最终进度。
+//
+// 红线：processGroupPid 的写入**不经过**这里（registerProcessGroup /
+// clearProcessGroup 直接 store.update），取消能力不受节流影响。
+function createProgressWriter({
+  store,
+  jobId,
+  phase,
+  throttleMs = PROGRESS_THROTTLE_MS,
+  percentStep = PROGRESS_PERCENT_STEP,
+}) {
+  let lastWriteMs = 0;
+  let lastPercent = null;
+  let pending = null;
+
+  const flush = () => {
+    if (!pending) {
+      return;
+    }
+    const snapshot = pending;
+    pending = null;
+    lastWriteMs = Date.now();
+    lastPercent = snapshot.percent;
+    store.update(jobId, (job) => ({
       ...job,
       phase,
-      log,
       progress: phase === "testing"
-        ? Math.min(progress.percent, 5)
-        : progress.percent,
-      currentFile: progress.currentFile || job.currentFile,
-    };
-  });
+        ? Math.min(snapshot.percent, 5)
+        : snapshot.percent,
+      currentFile: snapshot.currentFile || job.currentFile,
+    }));
+  };
+
+  return {
+    update(snapshot) {
+      pending = snapshot;
+      const percentMoved = lastPercent === null
+        || Math.abs(snapshot.percent - lastPercent) >= percentStep;
+      if (percentMoved || Date.now() - lastWriteMs >= throttleMs) {
+        flush();
+      }
+    },
+    flush,
+  };
 }
 
 function registerProcessGroup(
@@ -77,7 +120,9 @@ function registerProcessGroup(
 
 function defaultRunPhase(phase, context) {
   return new Promise((resolve, reject) => {
-    const child = spawnSevenZip(context.tool, context.args, {
+    // spawnProcess 可注入，便于单测在不启动真实 7-Zip 的情况下驱动状态机。
+    const spawnProcess = context.spawnProcess || spawnSevenZip;
+    const child = spawnProcess(context.tool, context.args, {
       cwd: path.dirname(context.job.archivePath),
       detached: true,
     });
@@ -94,9 +139,23 @@ function defaultRunPhase(phase, context) {
     }));
 
     let log = "";
+    // 解码器 + 增量进度解析都在 tracker 里：chunk 边界切断多字节字符时
+    // 不会出现乱码（原实现用 chunk.toString("utf8")，会偶发替换字符），
+    // 并且不再对整段日志重复 split/正则。
+    const tracker = createProgressTracker();
+    const progressWriter = createProgressWriter({
+      store: context.store,
+      jobId: context.job.id,
+      phase,
+      throttleMs: context.progressThrottleMs,
+      percentStep: context.progressPercentStep,
+    });
     const append = (chunk) => {
-      log = `${log}${chunk.toString("utf8")}`.slice(-65536);
-      appendJobLog(context.store, context.job.id, chunk, phase);
+      const snapshot = tracker.write(chunk);
+      if (snapshot.text) {
+        log = `${log}${snapshot.text}`.slice(-LIMITS.MAX_LOG_TAIL_BYTES);
+      }
+      progressWriter.update(snapshot);
     };
     child.stdout.on("data", append);
     child.stderr.on("data", append);
@@ -107,10 +166,18 @@ function defaultRunPhase(phase, context) {
       }));
     };
     child.once("error", (error) => {
+      progressWriter.flush();
       clearProcessGroup();
       reject(error);
     });
     child.once("close", (exitCode, signal) => {
+      // 冲刷解码器残留的半个多字节字符，并把最后一帧进度落盘。
+      const tail = tracker.flush();
+      if (tail.text) {
+        log = `${log}${tail.text}`.slice(-LIMITS.MAX_LOG_TAIL_BYTES);
+      }
+      progressWriter.update(tail);
+      progressWriter.flush();
       clearProcessGroup();
       if (exitCode === 0) {
         resolve({ exitCode, signal, log });
@@ -133,16 +200,21 @@ function defaultRunPhase(phase, context) {
   });
 }
 
+// 校验压缩包列表：直接在 worker 进程内 spawn 7z，把 stdout 流式喂给
+// createTechnicalListValidator。
+//
+// 原实现要多起一个 node 子进程（listing-validator.js），由它再 spawn 7z，
+// 把结果 JSON 化后经 stdout 回传，worker 再 JSON.parse —— 每个任务多一次
+// node 启动 + 一次 64KB 级别的序列化往返。
+//
+// 安全语义完整保留：createTechnicalListValidator 逐条调用 normalizeEntryPath，
+// 拦截 `..` / 绝对路径 / 盘符 / NUL，并保留 maxLineBytes / maxRecordLines /
+// maxRecordBytes 上限。校验失败时立即 SIGTERM（3s 后 SIGKILL）7z。
 function defaultValidateListing(tool, args, context) {
   return new Promise((resolve, reject) => {
     const spawnProcess = context.spawnProcess || spawn;
-    const helperPath = path.join(__dirname, "listing-validator.js");
-    const child = spawnProcess(process.execPath, [
-      helperPath,
-      tool.path,
-      context.cwd || "",
-      ...args,
-    ], {
+    const child = spawnProcess(tool.path, args, {
+      cwd: context.cwd || undefined,
       detached: true,
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
@@ -158,13 +230,37 @@ function defaultValidateListing(tool, args, context) {
       phase: "validating",
     }));
 
-    let stdout = "";
+    const validator = createTechnicalListValidator();
     let stderr = "";
+    let validationError = null;
+    let killTimer = null;
+
     child.stdout.on("data", (chunk) => {
-      stdout = `${stdout}${chunk.toString("utf8")}`.slice(-65536);
+      if (validationError) {
+        return;
+      }
+      try {
+        validator.write(chunk);
+      } catch (error) {
+        validationError = error;
+        try {
+          child.kill("SIGTERM");
+        } catch (killError) {
+          // 子进程可能已经退出，忽略。
+        }
+        killTimer = setTimeout(() => {
+          try {
+            child.kill("SIGKILL");
+          } catch (killError) {
+            // 子进程已经退出。
+          }
+        }, 3000);
+        killTimer.unref?.();
+      }
     });
     child.stderr.on("data", (chunk) => {
-      stderr = `${stderr}${chunk.toString("utf8")}`.slice(-65536);
+      stderr = `${stderr}${chunk.toString("utf8")}`
+        .slice(-LIMITS.MAX_LOG_TAIL_BYTES);
     });
     const clearProcessGroup = () => {
       context.store.update(context.job.id, (job) => ({
@@ -173,11 +269,21 @@ function defaultValidateListing(tool, args, context) {
       }));
     };
     child.once("error", (error) => {
+      if (killTimer) {
+        clearTimeout(killTimer);
+      }
       clearProcessGroup();
       reject(error);
     });
     child.once("close", (exitCode, signal) => {
+      if (killTimer) {
+        clearTimeout(killTimer);
+      }
       clearProcessGroup();
+      if (validationError) {
+        reject(validationError);
+        return;
+      }
       if (exitCode !== 0) {
         const current = context.store.read(context.job.id);
         const classified = classifySevenZipError(stderr, exitCode, {
@@ -195,7 +301,7 @@ function defaultValidateListing(tool, args, context) {
         return;
       }
       try {
-        resolve(JSON.parse(stdout || "{}"));
+        resolve(validator.end());
       } catch (error) {
         reject(error);
       }
@@ -481,7 +587,7 @@ async function runWorker(jobId, options = {}) {
       password: extractionPassword,
       codePage: extractionCodePage,
     });
-    await runPhase("extracting", {
+    const extractResult = await runPhase("extracting", {
       args: extractArgs,
       job,
       store,
@@ -500,6 +606,9 @@ async function runWorker(jobId, options = {}) {
         processGroupPid: null,
         progress: 100,
         currentFile: "",
+        // job.log 只在终态写一次。热路径上不再反复序列化最多 64KB 的日志，
+        // 同时仍保留一份日志尾部供事后诊断（前端不消费该字段）。
+        log: String(extractResult?.log || "").slice(-LIMITS.MAX_LOG_TAIL_BYTES),
         finishedAt: new Date().toISOString(),
         error: null,
       };
@@ -546,6 +655,8 @@ async function runWorker(jobId, options = {}) {
       processGroupPid: null,
       currentFile: "",
       progress: finalOk ? 100 : current.progress,
+      // 终态才写日志尾部，与成功路径一致。
+      log: String(error.log || "").slice(-LIMITS.MAX_LOG_TAIL_BYTES),
       finishedAt: new Date().toISOString(),
       note: rescuedNote || current.note || "",
       error: cancelled || finalOk
@@ -598,7 +709,7 @@ async function runWorker(jobId, options = {}) {
 }
 
 module.exports = {
-  appendJobLog,
+  createProgressWriter,
   defaultRunPhase,
   defaultValidateListing,
   registerProcessGroup,

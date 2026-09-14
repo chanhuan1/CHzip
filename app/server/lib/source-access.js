@@ -94,6 +94,11 @@ function inspectSourceFile(filePath, options = {}) {
   const fsModule = options.fsModule || fs;
   const pathModule = options.pathModule || path;
   const application = identity(options);
+  // 可选的祖先目录校验缓存：同一目录下的多个文件（典型场景是分卷压缩包，
+  // 20 个分卷深 6 级目录）祖先链完全相同，逐个重跑 stat+access 是纯浪费。
+  // 作用域由调用方决定（archive-service 用「一次 inspectArchive 调用」），
+  // 只缓存**校验成功**的目录，因此不会放过任何一级 ACL 检查。
+  const verifiedComponents = options.verifiedComponents || null;
   if (!filePath || typeof filePath !== "string" || !pathModule.isAbsolute(filePath)) {
     const error = new Error("源文件路径必须是绝对路径");
     error.code = "SOURCE_PATH_INVALID";
@@ -110,13 +115,22 @@ function inspectSourceFile(filePath, options = {}) {
       continue;
     }
     checkedComponents.add(component);
+    const cached = verifiedComponents && verifiedComponents.get(component);
+    if (cached) {
+      components.push(cached);
+      continue;
+    }
     let stat;
     try {
       stat = fsModule.statSync(component);
       if (stat.isDirectory()) {
         fsModule.accessSync(component, fs.constants.X_OK);
       }
-      components.push(statReport(component, stat, "directory", true));
+      const report = statReport(component, stat, "directory", true);
+      components.push(report);
+      if (verifiedComponents) {
+        verifiedComponents.set(component, report);
+      }
     } catch (error) {
       if (stat) {
         components.push(statReport(component, stat, "directory", false));

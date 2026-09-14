@@ -131,7 +131,22 @@
             return cryptoKeyPromise;
         }
 
+        // 读缓存。
+        //
+        // read() 每次都要 JSON.parse 并逐条做 AES-GCM 解密，而 list()/get()/
+        // save()/touch()/remove() 都会调它；updateActionAvailability 又挂在文件树
+        // 的渲染钩子上，于是"勾选一个文件"就会把整个密码库解密一遍。
+        // 只在写成功（write）后失效，因此缓存内容与存储内容严格同步。
+        let cache = null;
+
+        function cloneEntries(entries) {
+            return entries.map((entry) => ({ ...entry }));
+        }
+
         async function read() {
+            if (cache) {
+                return cloneEntries(cache);
+            }
             try {
                 const raw = storage.getItem(STORAGE_KEY);
                 if (!raw) {
@@ -143,7 +158,8 @@
                 }
                 const key = await getKey();
                 if (!key) {
-                    return parsed.filter(validEntry);
+                    cache = parsed.filter(validEntry);
+                    return cloneEntries(cache);
                 }
                 const entries = [];
                 for (const item of parsed) {
@@ -163,8 +179,10 @@
                         lastUsedAt: item.lastUsedAt || "",
                     });
                 }
-                return entries;
+                cache = entries;
+                return cloneEntries(cache);
             } catch (error) {
+                // 解析/解密失败不写缓存，保持原行为：下次调用重试。
                 return [];
             }
         }
@@ -173,6 +191,7 @@
             try {
                 if (!entries.length) {
                     storage.removeItem(STORAGE_KEY);
+                    cache = null;
                     return true;
                 }
                 const key = await getKey();
@@ -197,6 +216,8 @@
                     });
                 }
                 storage.setItem(STORAGE_KEY, JSON.stringify(records));
+                // 写成功才失效缓存：失败时存储内容没变，缓存仍然有效。
+                cache = null;
                 return true;
             } catch (error) {
                 return false;

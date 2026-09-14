@@ -4,8 +4,31 @@ const assert = require("node:assert/strict");
 const { test } = require("node:test");
 const {
   classifySevenZipError,
+  createProgressTracker,
+  findSevenZip,
   parseProgress,
+  resetSevenZipCache,
 } = require("../app/server/lib/engine");
+
+// 覆盖既有用例 + chunk 边界敏感的场景。逐字节喂入时任何边界都会被切到，
+// 包括切断 \r、切断 \r\n、切断多字节 UTF-8 字符。
+const PROGRESS_VECTORS = [
+  "",
+  "  42% file.txt\n",
+  "  150% file.txt\n",
+  "  0% a.txt\r  37% b.txt\r  99% c.txt\r",
+  "  0%  1%  3%  5%  6%  8%  10%  11%  13%  15%  16%  18%  20%",
+  "  0% a.txt\r  37% b.txt\r  99% c.txt\r  12%  18%",
+  "  42% 折扣50%.mp4\n",
+  "  0%  5%  12% - file.txt\n",
+  "  1% 5 + folder/子目录/文件.txt\r 50% 5 + other.bin\r100% 5 + done.bin\r",
+  "  12",
+  "  12%",
+  "  1% a\r\n  2% b\r\n",
+  "\r\r\n\n",
+  "no percent at all\n",
+  "  7% 文件.txt  8% 另一个.txt\r  9% 第三个.txt\r",
+];
 
 test("classifySevenZipError detects password required", () => {
   const result = classifySevenZipError("Enter password", 255, {
@@ -110,4 +133,115 @@ test("classifySevenZipError detects overlong filename", () => {
   );
   assert.equal(result.code, "FILE_NAME_TOO_LONG");
 });
+
+function withEnv(name, value, callback) {
+  const original = process.env[name];
+  if (value === undefined) {
+    delete process.env[name];
+  } else {
+    process.env[name] = value;
+  }
+  try {
+    return callback();
+  } finally {
+    if (original === undefined) {
+      delete process.env[name];
+    } else {
+      process.env[name] = original;
+    }
+  }
+}
+
+test("findSevenZip caches the probe result inside the process", () => {
+  resetSevenZipCache();
+  try {
+    const first = withEnv("CHZIP_SEVENZIP_PATH", "/bin/sh", () => findSevenZip());
+    assert.equal(first.path, "/bin/sh");
+
+    // 环境变量已经撤掉，但缓存已建立 —— 仍应返回首次结果，证明没有再探测。
+    const second = findSevenZip();
+    assert.equal(second.path, "/bin/sh");
+    assert.equal(second, first, "第二次调用应复用同一缓存对象");
+
+    // 清掉缓存后重新探测，环境已变，结果也应随之改变。
+    resetSevenZipCache();
+    const third = findSevenZip();
+    assert.notEqual(third?.path, "/bin/sh");
+  } finally {
+    resetSevenZipCache();
+  }
+});
+
+test("findSevenZip with explicit options bypasses the cache", () => {
+  resetSevenZipCache();
+  try {
+    const explicit = findSevenZip({ envPath: "/bin/sh" });
+    assert.equal(explicit.path, "/bin/sh");
+
+    // 带覆盖参数的调用不写缓存，因此随后的默认调用必须真实探测。
+    const defaults = withEnv("CHZIP_SEVENZIP_PATH", undefined, () => findSevenZip());
+    assert.notEqual(defaults?.path, "/bin/sh");
+  } finally {
+    resetSevenZipCache();
+  }
+});
+
+test("createProgressTracker matches parseProgress byte-for-byte at every chunk boundary", () => {
+  for (const vector of PROGRESS_VECTORS) {
+    const expected = parseProgress(vector);
+    const tracker = createProgressTracker();
+    const bytes = Buffer.from(vector, "utf8");
+    for (const byte of bytes) {
+      tracker.write(Buffer.from([byte]));
+    }
+    tracker.flush();
+    assert.deepEqual(
+      tracker.state(),
+      expected,
+      `逐字节喂入结果应与整段解析一致：${JSON.stringify(vector)}`,
+    );
+  }
+});
+
+test("createProgressTracker matches parseProgress for random chunk splits", () => {
+  for (const vector of PROGRESS_VECTORS) {
+    const expected = parseProgress(vector);
+    const bytes = Buffer.from(vector, "utf8");
+    // 用几组不同的固定块长切分，覆盖「一行跨多个 chunk」与「一个 chunk 多行」
+    for (const size of [1, 2, 3, 5, 7, 13]) {
+      const tracker = createProgressTracker();
+      for (let offset = 0; offset < bytes.length; offset += size) {
+        tracker.write(bytes.subarray(offset, offset + size));
+      }
+      tracker.flush();
+      assert.deepEqual(
+        tracker.state(),
+        expected,
+        `块长 ${size} 时应与整段解析一致：${JSON.stringify(vector)}`,
+      );
+    }
+  }
+});
+
+test("createProgressTracker returns the decoded text for each write", () => {
+  const tracker = createProgressTracker();
+  const bytes = Buffer.from("  42% 中文名.txt\r", "utf8");
+  let text = "";
+  for (const byte of bytes) {
+    text += tracker.write(Buffer.from([byte])).text;
+  }
+  text += tracker.flush().text;
+  assert.equal(text, "  42% 中文名.txt\r", "拼接各次 write 的 text 应还原原文，不得出现替换字符");
+  assert.deepEqual(tracker.state(), { percent: 42, currentFile: "中文名.txt" });
+});
+
+test("createProgressTracker flush is idempotent", () => {
+  const tracker = createProgressTracker();
+  tracker.write(Buffer.from("  55% a.txt\r", "utf8"));
+  const first = tracker.flush();
+  const second = tracker.flush();
+  assert.deepEqual(first, second);
+  assert.equal(second.text, "");
+});
+
 

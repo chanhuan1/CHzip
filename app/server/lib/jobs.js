@@ -10,16 +10,12 @@ const {
   PERMISSIONS,
   TIMEOUTS,
 } = require("./constants");
+const { acquireFileLock } = require("./fs-utils");
 
 const TERMINAL_STATUSES = new Set(JOB.TERMINAL_STATUSES);
 
 function nowIso() {
   return new Date().toISOString();
-}
-
-function sleepSync(milliseconds) {
-  const signal = new Int32Array(new SharedArrayBuffer(4));
-  Atomics.wait(signal, 0, 0, Math.min(milliseconds, TIMEOUTS.LOCK_RETRY_MS));
 }
 
 class JobStore {
@@ -47,34 +43,40 @@ class JobStore {
 
   read(jobId) {
     const filePath = this.jobPath(jobId);
-    if (!fs.existsSync(filePath)) {
-      return null;
+    // 直接读，靠 ENOENT 判断不存在；省掉一次 existsSync 的 stat。
+    // 注意：只有 ENOENT 返回 null，JSON 损坏等其它错误必须照旧抛出。
+    try {
+      return JSON.parse(fs.readFileSync(filePath, "utf8"));
+    } catch (error) {
+      if (error.code === "ENOENT") {
+        return null;
+      }
+      throw error;
     }
-    return JSON.parse(fs.readFileSync(filePath, "utf8"));
   }
 
   withLock(jobId, callback) {
     const lockPath = `${this.jobPath(jobId)}.lock`;
-    let descriptor;
-    for (let attempt = 0; attempt < TIMEOUTS.LOCK_MAX_ATTEMPTS; attempt += 1) {
-      try {
-        descriptor = fs.openSync(lockPath, "wx", PERMISSIONS.MODE_FILE_SECRET);
-        break;
-      } catch (error) {
-        if (error.code !== "EEXIST") {
-          throw error;
-        }
-        sleepSync(TIMEOUTS.LOCK_RETRY_MS);
+    // 复用 fs-utils 的锁实现：它会在 EEXIST 时检查锁文件 mtime，
+    // 超过 staleMs 视为陈旧锁回收。原先这里只 sleep 不回收，
+    // 一旦 worker 被 SIGKILL，残留的 .lock 会让该任务永久卡死。
+    let lock;
+    try {
+      lock = acquireFileLock(lockPath, {
+        maxAttempts: TIMEOUTS.LOCK_MAX_ATTEMPTS,
+        retryMs: TIMEOUTS.LOCK_RETRY_MS,
+        staleMs: TIMEOUTS.STALE_LOCK_MS,
+      });
+    } catch (error) {
+      if (error.code === "LOCK_BUSY") {
+        throw new Error("任务状态文件正忙");
       }
-    }
-    if (descriptor == null) {
-      throw new Error("任务状态文件正忙");
+      throw error;
     }
     try {
       return callback();
     } finally {
-      fs.closeSync(descriptor);
-      fs.rmSync(lockPath, { force: true });
+      lock.release();
     }
   }
 
@@ -133,6 +135,44 @@ class JobStore {
       }
       return this.write(updated);
     });
+  }
+
+  // 节流的过期清理：cleanupExpired() 要扫三遍目录 + 逐个读 job，
+  // 而 status 是 1s 一次轮询。用 runtimeRoot 下的 cleanup.stamp 记录上次
+  // 真正扫描的时间（CGI 每请求一个新进程，内存态无法跨请求，必须落盘），
+  // 只有距上次扫描超过 minIntervalMs 才真正执行。
+  // 返回 null 表示本次被节流跳过。
+  cleanupExpiredIfDue(options = {}) {
+    const minIntervalMs = options.minIntervalMs ?? TIMEOUTS.CLEANUP_MIN_INTERVAL_MS;
+    const nowMs = options.nowMs ?? Date.now();
+    const stampPath = path.join(this.runtimeRoot, "cleanup.stamp");
+    let lastRunMs = null;
+    try {
+      lastRunMs = fs.statSync(stampPath).mtimeMs;
+    } catch (error) {
+      if (error.code !== "ENOENT") {
+        throw error;
+      }
+    }
+    // minIntervalMs <= 0 表示「禁用节流」：必须显式放行，否则文件系统
+    // 时间戳精度可能导致 stamp mtime 略快于 Date.now()，产生负值而误触发。
+    if (
+      minIntervalMs > 0
+      && lastRunMs !== null
+      && nowMs - lastRunMs < minIntervalMs
+    ) {
+      return null;
+    }
+    const removed = this.cleanupExpired(options);
+    try {
+      fs.writeFileSync(stampPath, "", {
+        encoding: "utf8",
+        mode: PERMISSIONS.MODE_FILE_SECRET,
+      });
+    } catch (error) {
+      // 时间戳写失败不影响清理结果本身，下个请求会重试。
+    }
+    return removed;
   }
 
   cleanupExpired(options = {}) {
@@ -270,10 +310,15 @@ class JobStore {
     return count;
   }
 
-  list(options = {}) {
+  // 一次遍历同时完成「已结束任务溢出修剪」与「列表返回」。
+  // 语义等同于原先 removeFinishedOverflow(keep) + list() 的组合：
+  // 先按 finishedAt||createdAt 升序修剪掉最旧的溢出记录，再返回未过期的任务。
+  // 区别只在于目录只扫一遍、每个 job 只读一次。
+  listAndTrimHistory(keep = 20, options = {}) {
     const maxAgeMs = options.maxAgeMs || JOB.EXPIRY_MS;
     const now = options.now || new Date();
-    const jobs = [];
+    const active = [];
+    const finished = [];
     for (const name of fs.readdirSync(this.jobsDir)) {
       if (!/^[a-f0-9]{32}\.json$/.test(name)) {
         continue;
@@ -282,39 +327,31 @@ class JobStore {
       if (!job) {
         continue;
       }
-      const timestamp = job.finishedAt || job.startedAt || job.createdAt;
-      if (!timestamp || now.getTime() - new Date(timestamp).getTime() > maxAgeMs) {
-        continue;
+      if (TERMINAL_STATUSES.has(job.status)) {
+        finished.push(job);
+      } else {
+        active.push(job);
       }
-      jobs.push(job);
     }
-    return jobs.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
-  }
 
-  removeFinishedOverflow(keep = 20) {
-    const finished = [];
-    for (const name of fs.readdirSync(this.jobsDir)) {
-      if (!/^[a-f0-9]{32}\.json$/.test(name)) {
-        continue;
-      }
-      const job = this.read(name.slice(0, -5));
-      if (!job || !TERMINAL_STATUSES.has(job.status)) {
-        continue;
-      }
-      finished.push({
-        id: job.id,
-        ts: job.finishedAt || job.createdAt || "",
-      });
-    }
-    finished.sort((a, b) => String(a.ts).localeCompare(String(b.ts)));
+    finished.sort((a, b) => String(a.finishedAt || a.createdAt || "")
+      .localeCompare(String(b.finishedAt || b.createdAt || "")));
+    const overflow = Math.max(0, finished.length - keep);
     const removed = [];
-    for (let index = 0; index < finished.length - keep; index += 1) {
-      const entry = finished[index];
-      fs.rmSync(this.dataDir(entry.id), { recursive: true, force: true });
-      fs.rmSync(this.jobPath(entry.id), { force: true });
-      removed.push(entry.id);
+    for (let index = 0; index < overflow; index += 1) {
+      const job = finished[index];
+      fs.rmSync(this.dataDir(job.id), { recursive: true, force: true });
+      fs.rmSync(this.jobPath(job.id), { force: true });
+      removed.push(job.id);
     }
-    return removed;
+
+    const jobs = [...active, ...finished.slice(overflow)].filter((job) => {
+      const timestamp = job.finishedAt || job.startedAt || job.createdAt;
+      return Boolean(timestamp)
+        && now.getTime() - new Date(timestamp).getTime() <= maxAgeMs;
+    });
+    jobs.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+    return { jobs, removed };
   }
 
   // 手动清空历史：只删已结束（success/failed/cancelled）的任务记录，

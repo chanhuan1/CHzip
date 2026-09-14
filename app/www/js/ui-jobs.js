@@ -1,6 +1,125 @@
 (function (root) {
     "use strict";
 
+    // 页面隐藏时的轮询间隔。
+    //
+    // 这里刻意**不是**彻底停止轮询，而是降到 30s 一次：fnOS 的内嵌窗口
+    // 对 document.hidden 的上报无法在本地验证，若它误报为 true，彻底停止
+    // 会让界面永久不再更新（用户看不到任何进度）。降频既能把隐藏期间的
+    // 请求量压下 ~30 倍，又不存在"界面冻死"的失败模式。
+    const HIDDEN_POLL_INTERVAL_MS = 30 * 1000;
+
+    // 统一的轮询循环。
+    //
+    // - 用递归 setTimeout 而不是 setInterval：上一次请求没返回之前绝不发下一次，
+    //   从根本上消除"请求堆积 + 乱序覆盖"（每次请求都要起一个 node 进程，
+    //   单次耗时完全可能超过 1s）。
+    // - in-flight 守卫保证任何时刻最多一个在途请求。
+    // - 页面隐藏时降频，重新可见时立即补一次，避免回来看到过期进度。
+    // - stop() 之后不再有任何定时器，也不会再发请求。
+    function createPoller(tick, options) {
+        const settings = options || {};
+        const intervalFn = typeof settings.interval === "function"
+            ? settings.interval
+            : () => (settings.interval == null ? 1000 : settings.interval);
+        const hiddenIntervalFn = typeof settings.hiddenInterval === "function"
+            ? settings.hiddenInterval
+            : () => (settings.hiddenInterval == null
+                ? HIDDEN_POLL_INTERVAL_MS
+                : settings.hiddenInterval);
+
+        let timer = null;
+        let running = false;
+        let busy = false;
+        // 页面从隐藏恢复时置位：让"正在途中的请求"结束后立刻接上一轮，
+        // 而不是傻等一个完整间隔。
+        let wakeImmediately = false;
+
+        const clear = () => {
+            if (timer !== null) {
+                clearTimeout(timer);
+                timer = null;
+            }
+        };
+
+        const isHidden = () => typeof document !== "undefined"
+            && document.visibilityState === "hidden";
+
+        const schedule = (delay) => {
+            clear();
+            if (!running) {
+                return;
+            }
+            timer = setTimeout(run, delay);
+        };
+
+        const scheduleNext = () => {
+            schedule(isHidden() ? hiddenIntervalFn() : intervalFn());
+        };
+
+        async function run() {
+            timer = null;
+            if (!running || busy) {
+                return;
+            }
+            busy = true;
+            try {
+                await tick();
+            } catch (error) {
+                // 单次失败不应中断轮询循环。
+            } finally {
+                busy = false;
+            }
+            if (!running) {
+                return;
+            }
+            if (wakeImmediately) {
+                wakeImmediately = false;
+                schedule(0);
+                return;
+            }
+            scheduleNext();
+        }
+
+        const onVisibilityChange = () => {
+            if (!running || isHidden()) {
+                return;
+            }
+            if (busy) {
+                wakeImmediately = true;
+                return;
+            }
+            schedule(0);
+        };
+
+        return {
+            start() {
+                if (running) {
+                    return;
+                }
+                running = true;
+                wakeImmediately = false;
+                if (typeof document !== "undefined"
+                    && typeof document.addEventListener === "function") {
+                    document.addEventListener("visibilitychange", onVisibilityChange);
+                }
+                schedule(0);
+            },
+            stop() {
+                running = false;
+                wakeImmediately = false;
+                clear();
+                if (typeof document !== "undefined"
+                    && typeof document.removeEventListener === "function") {
+                    document.removeEventListener("visibilitychange", onVisibilityChange);
+                }
+            },
+            isRunning() {
+                return running;
+            },
+        };
+    }
+
     function statusLabel(status, phase) {
         if (status === "queued") {
             return "任务已排队";
@@ -95,8 +214,10 @@
     }
 
     function finishPolling(state) {
-        clearInterval(state.pollTimer);
-        state.pollTimer = null;
+        if (state.pollTimer) {
+            state.pollTimer.stop();
+            state.pollTimer = null;
+        }
         state.running = false;
         state.jobId = "";
     }
@@ -128,8 +249,13 @@
             ensureMiniPoll(state, api);
             await pollStatus(state, api);
             if (state.jobId) {
-                clearInterval(state.pollTimer);
-                state.pollTimer = window.setInterval(() => pollStatus(state, api), 1000);
+                if (state.pollTimer) {
+                    state.pollTimer.stop();
+                }
+                state.pollTimer = createPoller(() => pollStatus(state, api), {
+                    interval: 1000,
+                });
+                state.pollTimer.start();
             }
         } catch (error) {
             state.running = false;
@@ -236,6 +362,30 @@
         return true;
     }
 
+    // 任务中心的渲染签名：只包含真正影响 DOM 的字段。
+    // 弹窗打开但数据没变化时（空闲时是绝大多数轮询），直接跳过整段重建。
+    // 每次 closeTaskCenter 会清空，保证重新打开必定渲染一次。
+    let taskCenterSignature = null;
+
+    function taskCenterSignatureOf(active, history) {
+        const activePart = active.map((job) => [
+            job.id,
+            job.status,
+            job.phase,
+            job.progress,
+            job.currentFile || "",
+            job.error?.message || "",
+            job.outputDir || "",
+        ]);
+        const historyPart = history.map((job) => [
+            job.id,
+            job.status,
+            job.phase,
+            job.progress,
+        ]);
+        return JSON.stringify([activePart, historyPart]);
+    }
+
     function renderTaskStream(state, api, data) {
         const els = state.elements;
         const stream = els.taskStream;
@@ -246,39 +396,69 @@
         if (!active.length) {
             stream.hidden = true;
             stream.replaceChildren();
+            state.taskStreamRows = new Map();
             return;
         }
         // 按开始先后排序，最先开始在最上面
         active.sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
         const CN = ["一", "二", "三", "四", "五", "六", "七", "八", "九"];
-        stream.replaceChildren();
-        active.forEach((job, index) => {
-            const row = document.createElement("div");
-            row.className = "task-stream-row";
-            row.setAttribute("role", "button");
-            row.tabIndex = 0;
-            row.title = "点击查看详情 / 停止";
-            row.addEventListener("click", () => openTaskCenter(state, api));
-            row.addEventListener("keydown", (event) => {
-                if (event.key === "Enter") {
-                    openTaskCenter(state, api);
-                }
-            });
 
-            const text = document.createElement("span");
-            text.className = "task-stream-text";
+        // 按 job.id 复用已有行：轮询时只改文本，不重建 DOM、也不重挂监听器。
+        const rows = state.taskStreamRows instanceof Map
+            ? state.taskStreamRows
+            : new Map();
+        const seen = new Set();
+        active.forEach((job, index) => {
             const name = job.archiveName || "压缩包";
             const ordinal = index < CN.length ? CN[index] : String(index + 1);
-            text.textContent = active.length > 1 ? `任务${ordinal} · ${name}` : name;
-            text.title = job.archivePath || name;
+            const label = active.length > 1 ? `任务${ordinal} · ${name}` : name;
+            const percent = `${Math.round(Number(job.progress) || 0)}%`;
 
-            const pct = document.createElement("span");
-            pct.className = "task-stream-pct";
-            pct.textContent = `${Math.round(Number(job.progress) || 0)}%`;
+            let entry = rows.get(job.id);
+            if (!entry) {
+                const row = document.createElement("div");
+                row.className = "task-stream-row";
+                row.setAttribute("role", "button");
+                row.tabIndex = 0;
+                row.title = "点击查看详情 / 停止";
+                row.addEventListener("click", () => openTaskCenter(state, api));
+                row.addEventListener("keydown", (event) => {
+                    if (event.key === "Enter") {
+                        openTaskCenter(state, api);
+                    }
+                });
 
-            row.append(text, pct);
-            stream.append(row);
+                const text = document.createElement("span");
+                text.className = "task-stream-text";
+                const pct = document.createElement("span");
+                pct.className = "task-stream-pct";
+                row.append(text, pct);
+
+                entry = { row, text, pct };
+                rows.set(job.id, entry);
+            }
+
+            if (entry.text.textContent !== label) {
+                entry.text.textContent = label;
+            }
+            const title = job.archivePath || name;
+            if (entry.text.title !== title) {
+                entry.text.title = title;
+            }
+            if (entry.pct.textContent !== percent) {
+                entry.pct.textContent = percent;
+            }
+            seen.add(job.id);
+            // append 会把已存在的节点移动到末尾，因此这一步同时完成排序。
+            stream.append(entry.row);
         });
+        for (const [jobId, entry] of rows) {
+            if (!seen.has(jobId)) {
+                entry.row.remove();
+                rows.delete(jobId);
+            }
+        }
+        state.taskStreamRows = rows;
         stream.hidden = false;
     }
 
@@ -296,25 +476,37 @@
         pollTaskMini(state, api).catch(() => {});
     }
 
-    // 页面打开后常驻的自适应监听：空闲约 5s 扫一次，一旦出现后台任务切到 1.5s 快刷；
-    // 任务中心弹窗打开时由弹窗自身轮询驱动（此处跳过，避免重复请求）。
+    // 页面打开后常驻的自适应监听：有后台任务时 1.5s 快刷；
+    // 连续没有任务时按 5s → 15s → 30s 退避（原实现空闲时永远 5s 一次，
+    // 一个常开窗口一小时就是 720 次请求，每次都要起一个 node 进程）。
+    // 任务中心弹窗打开时由弹窗自身轮询驱动，此处让位避免重复请求。
+    const IDLE_BACKOFF_MS = [5000, 15000, 30000];
+    const ACTIVE_POLL_MS = 1500;
+
     function startTaskWatch(state, api) {
         if (state.taskWatchTimer) {
             return;
         }
-        const tick = async () => {
-            try {
-                if (!state.taskCenterOpen) {
-                    const count = await pollTaskMini(state, api);
-                    state.taskWatchTimer = setTimeout(tick, count > 0 ? 1500 : 5000);
-                    return;
-                }
-            } catch (error) {
-                // 忽略，继续下一轮
+        let idleSteps = 0;
+        const poller = createPoller(async () => {
+            if (state.taskCenterOpen) {
+                return;
             }
-            state.taskWatchTimer = setTimeout(tick, 3000);
-        };
-        state.taskWatchTimer = setTimeout(tick, 0);
+            const count = await pollTaskMini(state, api);
+            if (count > 0) {
+                idleSteps = 0;
+            } else {
+                idleSteps = Math.min(idleSteps + 1, IDLE_BACKOFF_MS.length - 1);
+            }
+        }, {
+            interval: () => (state.taskCenterOpen
+                ? 3000
+                : (idleSteps > 0
+                    ? IDLE_BACKOFF_MS[idleSteps]
+                    : ACTIVE_POLL_MS)),
+        });
+        state.taskWatchTimer = poller;
+        poller.start();
     }
 
     // 历史记录需要完整日期（可能跨天/跨周），因此按本地时区输出
@@ -459,6 +651,13 @@
             const active = data?.active || [];
             const history = data?.history || [];
             renderTaskStream(state, api, data);
+
+            const signature = taskCenterSignatureOf(active, history);
+            if (signature === taskCenterSignature) {
+                return;
+            }
+            taskCenterSignature = signature;
+
             list.replaceChildren();
             if (active.length) {
                 const h = document.createElement("div");
@@ -482,6 +681,7 @@
                 renderTaskEmpty(list, "当前没有解压任务。关闭本页面不会中断进行中的解压。");
             }
         } catch (error) {
+            taskCenterSignature = null;
             list.replaceChildren();
             renderTaskEmpty(list, `任务列表获取失败：${error.message}`);
         }
@@ -503,17 +703,23 @@
         }
         dialog.hidden = false;
         state.taskCenterOpen = true;
-        clearInterval(state.taskCenterTimer);
-        await pollTaskCenter(state, api);
-        state.taskCenterTimer = window.setInterval(
-            () => pollTaskCenter(state, api),
-            1000,
-        );
+        if (state.taskCenterTimer) {
+            state.taskCenterTimer.stop();
+        }
+        // 首次 tick 是立即执行的，等价于原来的"先拉一次再起定时器"，
+        // 但不会多打一次请求。
+        state.taskCenterTimer = createPoller(() => pollTaskCenter(state, api), {
+            interval: 1500,
+        });
+        state.taskCenterTimer.start();
     }
 
     function closeTaskCenter(state, api) {
-        clearInterval(state.taskCenterTimer);
-        state.taskCenterTimer = null;
+        if (state.taskCenterTimer) {
+            state.taskCenterTimer.stop();
+            state.taskCenterTimer = null;
+        }
+        taskCenterSignature = null;
         state.taskCenterOpen = false;
         const dialog = state.elements.taskCenterDialog;
         if (dialog) {
@@ -623,14 +829,20 @@
         }
         dialog.hidden = false;
         state.historyOpen = true;
-        clearInterval(state.historyTimer);
-        await pollHistory(state, api);
-        state.historyTimer = window.setInterval(() => pollHistory(state, api), 3000);
+        if (state.historyTimer) {
+            state.historyTimer.stop();
+        }
+        state.historyTimer = createPoller(() => pollHistory(state, api), {
+            interval: 3000,
+        });
+        state.historyTimer.start();
     }
 
     function closeHistory(state) {
-        clearInterval(state.historyTimer);
-        state.historyTimer = null;
+        if (state.historyTimer) {
+            state.historyTimer.stop();
+            state.historyTimer = null;
+        }
         state.historyOpen = false;
         resetClearHistoryConfirm(state);
         const dialog = state.elements.historyDialog;
@@ -640,6 +852,9 @@
     }
 
     root.CHzipUiJobs = {
+        ACTIVE_POLL_MS,
+        HIDDEN_POLL_INTERVAL_MS,
+        IDLE_BACKOFF_MS,
         cancelExtract,
         cancelTaskCenter,
         checkActiveTasks,
@@ -647,6 +862,7 @@
         closeHistory,
         closeTaskCenter,
         computeEta,
+        createPoller,
         ensureMiniPoll,
         formatTaskDateTime,
         openHistory,

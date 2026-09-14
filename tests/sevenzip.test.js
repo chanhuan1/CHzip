@@ -5,7 +5,6 @@ const { test } = require("node:test");
 const {
   buildListArgs,
   buildExtractArgs,
-  buildTestArgs,
 } = require("../app/server/lib/sevenzip");
 
 test("buildListArgs includes password when provided", () => {
@@ -28,14 +27,4 @@ test("buildExtractArgs includes selection file", () => {
   );
   assert.ok(args.includes("-i@/tmp/sel.txt"));
   assert.ok(args.includes("-o/out"));
-});
-
-test("buildTestArgs builds correct command", () => {
-  const args = buildTestArgs(
-    { type: "zip", format: "zip" },
-    { archivePath: "/data/file.zip", password: "pw" },
-  );
-  assert.equal(args[0], "t");
-  assert.ok(args.includes("-ppw"));
-  assert.ok(args.includes("/data/file.zip"));
 });

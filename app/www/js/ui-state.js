@@ -42,7 +42,7 @@
             etaTracker: null,
             taskCenterTimer: null,
             taskCenterOpen: false,
-            taskMiniTimer: null,
+            taskStreamRows: null,
             taskWatchTimer: null,
             historyOpen: false,
             historyTimer: null,

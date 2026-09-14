@@ -29,26 +29,24 @@ chzip/
 │   ├── server/              # Backend (Node.js CGI)
 │   │   ├── api.js           # CGI entry point + router
 │   │   ├── sync-authorized-paths.js
-│   │   └── lib/             # 20 library modules
+│   │   └── lib/             # 18 library modules
 │   │       ├── archive.js        # Format/volume classification
 │   │       ├── archive-service.js # Archive inspection
 │   │       ├── authorization-paths.js
 │   │       ├── constants.js      # Timeouts, limits, permission modes
 │   │       ├── diagnostic-service.js # Diagnostic report builder
 │   │       ├── diagnostics.js    # Logging + redaction
-│   │       ├── engine.js         # 7-Zip spawn + error classification
+│   │       ├── engine.js         # 7-Zip spawn + error classification + progress parsing
 │   │       ├── fs-utils.js       # Shared lock/write utilities
 │   │       ├── jobs.js           # Job store, locking, cancellation
-│   │       ├── listing-validator.js
 │   │       ├── nested.js         # Nested tar handling
 │   │       ├── paths.js          # Directory authorization + traversal
-│   │       ├── preview.js        # 7z technical-list parser
+│   │       ├── preview.js        # 7z technical-list parser + streaming validator
 │   │       ├── selection.js      # Selected-path validation
 │   │       ├── sevenzip.js       # 7z CLI arg builder
 │   │       ├── services.js       # Service composition root
 │   │       ├── source.js         # File fingerprinting
 │   │       ├── source-access.js  # Source file inspection
-│   │       ├── watcher.js        # Directory watching + archive detection
 │   │       └── worker.js         # Background extraction worker
 │   ├── ui/                  # CGI shell scripts
 │   ├── www/                 # Frontend (vanilla JS, no framework)

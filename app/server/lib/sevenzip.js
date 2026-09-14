@@ -45,13 +45,6 @@ function buildListArgs(selection, options) {
   return args;
 }
 
-function buildTestArgs(selection, options) {
-  const args = ["t", "-mmt=on", "-sccUTF-8"];
-  appendArchiveOptions(args, selection, options);
-  args.push(options.archivePath);
-  return args;
-}
-
 function buildExtractArgs(selection, options) {
   const args = [
     "x",
@@ -120,6 +113,5 @@ module.exports = {
   buildListArgs,
   buildReadCommentArgs,
   buildStdoutExtractArgs,
-  buildTestArgs,
   normalizeCodePage,
 };
