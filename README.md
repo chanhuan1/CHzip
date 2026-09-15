@@ -119,8 +119,7 @@ CHzip/
   清理死代码并让 `constants.js` 成为常量的唯一来源。
 - 测试：172 → 249。版本号升至 3.2。
 
-> 说明：以上修复均在 macOS 上以注入替身的单测验证；解压链路的真机回归清单见
-> [docs/PERF-VERIFICATION.md](docs/PERF-VERIFICATION.md)。
+
 
 ### v3.1（2026-09-14）
 - **解压吞吐优化**：进度回写由「每个 7z chunk 都落盘」改为「≥200ms 或百分比跳变 ≥1 才落盘」，热路径 payload 从 ~64KB 降到 <1KB，减少同步 IO 对事件循环的阻塞。
