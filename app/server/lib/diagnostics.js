@@ -6,17 +6,42 @@ const { LIMITS, PERMISSIONS, TIMEOUTS } = require("./constants");
 
 const REDACTED = "[REDACTED]";
 
-const SENSITIVE_KEYS = Object.freeze([
+// 敏感键判定。
+//
+// 大多数敏感词足够长、无歧义，子串命中即可（顺带覆盖 userpassword 这类写法）。
+// 唯独 "auth" 不行：子串匹配会把 authorizedRoots 判成敏感
+// （"authorizedroots".includes("auth") 为真），而 diagnostic-service 的报告里
+// 恰好有 authorizedRoots 字段 —— 结果是诊断报告最关键的字段恒被抹成
+// [REDACTED]，而该报告的核心用途恰恰是排查目录授权问题。实测确认过。
+// 因此 "auth" 改为要求整体命中一个词元。
+const SENSITIVE_SUBSTRINGS = Object.freeze([
   "password",
   "secret",
   "token",
-  "auth",
   "credential",
   "private",
+  "authorization",
 ]);
 
+const SENSITIVE_TOKENS = Object.freeze(["auth"]);
+
+// camelCase 边界必须在 toLowerCase() 之前拆开，否则边界信息已经丢失。
+function keyTokens(key) {
+  return String(key)
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+}
+
 const SENSITIVE_PATTERNS = Object.freeze([
-  /(?:^|[\s=:([{]|\b)-p[\w!@#$%^&*+\-.]+/g,
+  // 7-Zip 的密码参数。前缀要求「行首 / 空白 / = : ( [ { / 引号」。
+  //
+  // 这里刻意不用 \b：词字符与 `-` 之间本身就构成词边界，于是
+  // `my-project`、`authorized-paths.json` 这类含 `-p` 的路径会被误伤成
+  // `my[REDACTED]`，诊断报告里的路径随之失真。去掉 \b 后实测
+  // 「7z x -pSecret123」仍被完整脱敏，而含 -p 的路径不再被破坏。
+  /(?:^|[\s=:([{"'])-p[\w!@#$%^&*+\-.]+/g,
   /(?:^|[\s=:])[A-Za-z0-9+/]{32,}={0,2}(?=[\s"']|$)/g,
 ]);
 
@@ -29,8 +54,14 @@ function redactString(value) {
 }
 
 function isSensitiveKey(key) {
-  const normalizedKey = String(key).toLowerCase();
-  return SENSITIVE_KEYS.some((sensitive) => normalizedKey.includes(sensitive));
+  if (!key) {
+    return false;
+  }
+  const normalized = String(key).toLowerCase();
+  if (SENSITIVE_SUBSTRINGS.some((word) => normalized.includes(word))) {
+    return true;
+  }
+  return keyTokens(key).some((token) => SENSITIVE_TOKENS.includes(token));
 }
 
 function redactDiagnosticValue(value, key = "") {

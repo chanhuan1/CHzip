@@ -3,10 +3,12 @@
 const fs = require("node:fs");
 const path = require("node:path");
 
-function fingerprintFiles(filePaths) {
+// fs 可注入：单测用它制造「文件被换 / 被删」等场景，不必依赖真实时序。
+function fingerprintFiles(filePaths, options = {}) {
+  const fsModule = options.fsModule || fs;
   return filePaths.map((filePath) => {
-    const resolvedPath = fs.realpathSync(filePath);
-    const stat = fs.statSync(resolvedPath);
+    const resolvedPath = fsModule.realpathSync(filePath);
+    const stat = fsModule.statSync(resolvedPath);
     return {
       path: resolvedPath,
       dev: stat.dev,
@@ -17,17 +19,19 @@ function fingerprintFiles(filePaths) {
   });
 }
 
-function openSourceDescriptors(fingerprints) {
+function openSourceDescriptors(fingerprints, options = {}) {
+  const fsModule = options.fsModule || fs;
   const descriptors = [];
   try {
     for (const fingerprint of fingerprints || []) {
-      const fd = fs.openSync(fingerprint.path, "r");
+      const fd = fsModule.openSync(fingerprint.path, "r");
       descriptors.push(fd);
     }
   } catch (error) {
+    // 半途失败必须把已打开的 fd 全部关掉，否则会泄漏描述符。
     for (const fd of descriptors) {
       try {
-        fs.closeSync(fd);
+        fsModule.closeSync(fd);
       } catch {
         // Ignore close errors during cleanup.
       }
@@ -37,24 +41,26 @@ function openSourceDescriptors(fingerprints) {
   return descriptors;
 }
 
-function closeSourceDescriptors(descriptors) {
+function closeSourceDescriptors(descriptors, options = {}) {
+  const fsModule = options.fsModule || fs;
   for (const fd of descriptors || []) {
     try {
-      fs.closeSync(fd);
+      fsModule.closeSync(fd);
     } catch {
       // Ignore close errors during cleanup.
     }
   }
 }
 
-function verifyFingerprints(fingerprints, descriptors) {
+function verifyFingerprints(fingerprints, descriptors, options = {}) {
+  const fsModule = options.fsModule || fs;
   for (let index = 0; index < (fingerprints || []).length; index += 1) {
     const expected = fingerprints[index];
     let actual;
     try {
       const stat = descriptors && descriptors[index] !== undefined
-        ? fs.fstatSync(descriptors[index])
-        : fs.statSync(expected.path);
+        ? fsModule.fstatSync(descriptors[index])
+        : fsModule.statSync(expected.path);
       const resolvedPath = expected.path;
       actual = {
         path: resolvedPath,
