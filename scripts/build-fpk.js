@@ -282,5 +282,6 @@ module.exports = {
   normalizeModes,
   packageFileName,
   parseArguments,
+  parseVersion,
   prepareStage,
 };

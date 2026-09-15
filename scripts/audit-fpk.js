@@ -8,30 +8,48 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 
+const {
+  BUILD_VARIANTS,
+  PLATFORM_CONFIG,
+  packageFileName,
+  parseVersion,
+} = require("./build-fpk");
+
 const rootDir = path.resolve(__dirname, "..");
 const distDir = path.join(rootDir, "dist");
 const checksumPath = path.join(distDir, "SHA256SUMS.txt");
 const tarCommand = process.platform === "win32" ? "tar.exe" : "tar";
 const FONT_SHA256 = "693b77d4f32ee9b8bfc995589b5fad5e99adf2832738661f5402f9978429a8e3";
 const LICENSE_SHA256 = "262481e844521b326f5ecd053e59b98c8b2da78c8ee1bdbb6e8174305e54935a";
-const packages = [
-  {
-    fileName: "CHzip_3.1_search-fixed_x86_64.fpk",
-    variant: "search-fixed",
-    platform: "x86",
-    sevenZipPath: "vendor/7zip/linux-x64/7zzs",
-    unexpectedSevenZipPath: "vendor/7zip/linux-arm64/7zzs",
-    machine: 62,
-  },
-  {
-    fileName: "CHzip_3.1_search-fixed_arm64.fpk",
-    variant: "search-fixed",
-    platform: "arm",
-    sevenZipPath: "vendor/7zip/linux-arm64/7zzs",
-    unexpectedSevenZipPath: "vendor/7zip/linux-x64/7zzs",
-    machine: 183,
-  },
-];
+
+// ELF e_machine：x86-64 = 62，AArch64 = 183。
+const ELF_MACHINE = Object.freeze({ x86: 62, arm: 183 });
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// 版本号、包名与 7zzs 路径全部由 build-fpk 的导出推导。
+// 发布清单里版本号本来就要手动同步 4 处，audit 曾经又硬编码 3 处
+// （两个 fileName + 一处 manifest 版本正则），改一次版本要动 7 个地方。
+const version = parseVersion(path.join(rootDir, "manifest"));
+const packages = [];
+for (const variant of BUILD_VARIANTS) {
+  for (const platform of Object.keys(PLATFORM_CONFIG)) {
+    const vendorDir = PLATFORM_CONFIG[platform].vendorDir;
+    const otherVendorDir = Object.keys(PLATFORM_CONFIG)
+      .filter((name) => name !== platform)
+      .map((name) => PLATFORM_CONFIG[name].vendorDir)[0];
+    packages.push({
+      fileName: packageFileName(version, variant, platform),
+      variant,
+      platform,
+      sevenZipPath: `vendor/7zip/${vendorDir}/7zzs`,
+      unexpectedSevenZipPath: `vendor/7zip/${otherVendorDir}/7zzs`,
+      machine: ELF_MACHINE[platform],
+    });
+  }
+}
 
 function runTar(args, input) {
   const result = spawnSync(tarCommand, args, {
@@ -97,7 +115,10 @@ function auditPackage(config) {
   );
 
   const manifest = outerEntry(packagePath, "manifest").toString("utf8");
-  assert.match(manifest, /^version\s*=\s*3\.1$/m);
+  assert.match(
+    manifest,
+    new RegExp(`^version\\s*=\\s*${escapeRegExp(version)}$`, "m"),
+  );
   assert.match(
     manifest,
     new RegExp(`^platform\\s*=\\s*${config.platform}$`, "m"),
