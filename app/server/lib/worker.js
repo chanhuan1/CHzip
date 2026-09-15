@@ -453,6 +453,67 @@ async function rescueTooLongNameFiles({
   return { rescued, failed };
 }
 
+// 任务收尾清理。
+//
+// 每一步都必须独立 try/catch：原先 nestedDir 的 rmSync 裸露在机密清理之前，
+// 一旦抛 EPERM/EBUSY（共享目录里并不罕见）就会中断整个 finally ——
+// selection.txt 残留、job JSON 的 selectionFile 字段也不会被清空。
+//
+// remove / overwrite 可注入，便于单测在不制造真实权限故障的前提下
+// 验证「某一步失败不会吃掉其它步」。
+function cleanupJobArtifacts(jobId, options = {}) {
+  const {
+    store,
+    nestedDir = "",
+    remove = fs.rmSync,
+    overwrite = overwriteFileSync,
+  } = options;
+
+  if (nestedDir) {
+    try {
+      remove(nestedDir, { recursive: true, force: true });
+    } catch (error) {
+      // 嵌套 tar 的临时目录清不掉不影响机密清理，交给过期清理兜底。
+    }
+  }
+
+  let current = null;
+  try {
+    current = store.read(jobId);
+  } catch (error) {
+    // job JSON 已损坏或被并发删除，没有可清理的文件路径记录。
+  }
+
+  if (current?.passwordFile) {
+    try {
+      overwrite(current.passwordFile);
+    } catch (error) {
+      // 覆写失败仍要继续尝试删除，不能在这里提前返回。
+    }
+  }
+
+  for (const filePath of [current?.passwordFile, current?.selectionFile]) {
+    if (!filePath) {
+      continue;
+    }
+    try {
+      remove(filePath, { force: true });
+    } catch (error) {
+      // 单个文件删除失败不影响其它文件。
+    }
+  }
+
+  try {
+    store.update(jobId, (latest) => ({
+      ...latest,
+      passwordFile: "",
+      selectionFile: "",
+    }));
+  } catch (error) {
+    // 任务已被并发清理，无需再清字段。
+  }
+}
+
 function cancellationError() {
   const error = new Error("任务已取消");
   error.code = "CANCELLED";
@@ -504,6 +565,8 @@ async function runWorker(jobId, options = {}) {
   const store = options.store || new JobStore(runtimeRoot);
   const runPhase = options.runPhase || defaultRunPhase;
   const validateListing = options.validateListing || defaultValidateListing;
+  // 删除函数可注入，供单测制造「某一步删除失败」的场景。
+  const remove = options.remove || fs.rmSync;
   const logger = options.logger || createDiagnosticLogger({
     rootDirs: [
       process.env.TRIM_PKGVAR
@@ -725,29 +788,14 @@ async function runWorker(jobId, options = {}) {
     });
   } finally {
     closeSourceDescriptors(sourceDescriptors);
-    fs.rmSync(nestedDir, { recursive: true, force: true });
-    const current = store.read(jobId);
-    if (current?.passwordFile) {
-      overwriteFileSync(current.passwordFile);
-    }
-    for (const filePath of [current?.passwordFile, current?.selectionFile]) {
-      if (filePath) {
-        fs.rmSync(filePath, { force: true });
-      }
-    }
-    if (current) {
-      store.update(jobId, (latest) => ({
-        ...latest,
-        passwordFile: "",
-        selectionFile: "",
-      }));
-    }
+    cleanupJobArtifacts(jobId, { store, nestedDir, remove });
   }
 
   return store.read(jobId);
 }
 
 module.exports = {
+  cleanupJobArtifacts,
   createProgressWriter,
   defaultRunPhase,
   defaultValidateListing,
