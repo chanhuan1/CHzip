@@ -54,7 +54,7 @@ function classifyArchive(filePath) {
   if (rarParts) {
     const partText = rarParts[2];
     const partNumber = Number(partText);
-    if (partNumber < 1) {
+    if (!isSupportedPartNumber(partNumber)) {
       return null;
     }
     return {
@@ -73,7 +73,7 @@ function classifyArchive(filePath) {
   const numericSplit = basename.match(/^(.*)\.(\d{3,})$/);
   if (numericSplit) {
     const partNumber = Number(numericSplit[2]);
-    if (partNumber < 1) {
+    if (!isSupportedPartNumber(partNumber)) {
       return null;
     }
     const inner = detectInnerSplitFormat(numericSplit[1]);
@@ -92,6 +92,10 @@ function classifyArchive(filePath) {
 
   const zipPart = basename.match(/^(.*)\.z(\d{2,})$/i);
   if (zipPart) {
+    const partNumber = Number(zipPart[2]);
+    if (!isSupportedPartNumber(partNumber)) {
+      return null;
+    }
     return {
       kind: "zip-z",
       format: "zip",
@@ -99,7 +103,7 @@ function classifyArchive(filePath) {
       basename,
       seriesStem: zipPart[1],
       outputStem: zipPart[1],
-      partNumber: Number(zipPart[2]),
+      partNumber,
       partWidth: zipPart[2].length,
       firstVolumeName: `${zipPart[1]}.zip`,
     };
@@ -107,6 +111,16 @@ function classifyArchive(filePath) {
 
   const oldRarPart = basename.match(/^(.*)\.r(\d{2,})$/i);
   if (oldRarPart) {
+    const rawPart = Number(oldRarPart[2]);
+    // .r00 是第 2 卷：原始号从 0 起算，因此不能直接用 isSupportedPartNumber
+    // （它要求 >= 1），单独判断原始号范围。
+    if (
+      !Number.isSafeInteger(rawPart)
+      || rawPart < 0
+      || rawPart + 2 > MAX_VOLUME_NUMBER
+    ) {
+      return null;
+    }
     return {
       kind: "rar-old",
       format: "rar",
@@ -114,7 +128,7 @@ function classifyArchive(filePath) {
       basename,
       seriesStem: oldRarPart[1],
       outputStem: oldRarPart[1],
-      partNumber: Number(oldRarPart[2]) + 2,
+      partNumber: rawPart + 2,
       partWidth: oldRarPart[2].length,
       firstVolumeName: `${oldRarPart[1]}.rar`,
     };
@@ -139,15 +153,45 @@ function classifyArchive(filePath) {
   return null;
 }
 
+// 分卷号与缺失枚举的上界。
+//
+// 分卷号直接来自目录名里的数字，而下面的正则没有位数上限：一个合法备份名
+// （如 backup.20260915）会命中 `\.(\d{3,})$` 被当成 2000 万号分卷，
+// missingRange 逐号枚举就会分配 2000 万个元素的数组，而结果还会被 join 进
+// warnings 随 info/preview 响应返回 —— 不需要恶意输入就能打挂请求。
+const MAX_VOLUME_NUMBER = 10000;
+const MAX_MISSING_ENUM = 100;
+
+function isSupportedPartNumber(value) {
+  return Number.isSafeInteger(value)
+    && value >= 1
+    && value <= MAX_VOLUME_NUMBER;
+}
+
+// 返回 { values, total, truncated }：
+//   values    —— 缺失的分卷号，最多 MAX_MISSING_ENUM 个（保持数字数组形状，
+//                前端与既有测试都按数字数组消费）
+//   total     —— 1..min(end, MAX_VOLUME_NUMBER) 区间内的缺失总数
+//   truncated —— 是否被截断（枚举数量或分卷号上界任一触发）
 function missingRange(present, start, end) {
   const values = new Set(present);
   const missing = [];
-  for (let value = start; value <= end; value += 1) {
-    if (!values.has(value)) {
+  const boundedEnd = Math.min(end, MAX_VOLUME_NUMBER);
+  let total = 0;
+  for (let value = start; value <= boundedEnd; value += 1) {
+    if (values.has(value)) {
+      continue;
+    }
+    total += 1;
+    if (missing.length < MAX_MISSING_ENUM) {
       missing.push(value);
     }
   }
-  return missing;
+  return {
+    values: missing,
+    total,
+    truncated: total > missing.length || end > boundedEnd,
+  };
 }
 
 const REGEX_CACHE = new Map();
@@ -164,7 +208,13 @@ function getCachedRegExp(pattern, flags) {
 
 function collectVolumeNames(selection, directoryNames) {
   if (!selection) {
-    return { names: [], missingParts: [], firstVolumeName: "" };
+    return {
+      names: [],
+      missingParts: [],
+      missingTotal: 0,
+      missingTruncated: false,
+      firstVolumeName: "",
+    };
   }
 
   if (selection.kind === "split") {
@@ -178,9 +228,12 @@ function collectVolumeNames(selection, directoryNames) {
       .filter(Boolean)
       .sort((a, b) => a.part - b.part || a.name.localeCompare(b.name));
     const maxPart = matches.length ? matches.at(-1).part : 0;
+    const missing = missingRange(matches.map((entry) => entry.part), 1, maxPart);
     return {
       names: matches.map((entry) => entry.name),
-      missingParts: missingRange(matches.map((entry) => entry.part), 1, maxPart),
+      missingParts: missing.values,
+      missingTotal: missing.total,
+      missingTruncated: missing.truncated,
       firstVolumeName: selection.firstVolumeName,
     };
   }
@@ -196,9 +249,12 @@ function collectVolumeNames(selection, directoryNames) {
       .filter(Boolean)
       .sort((a, b) => a.part - b.part || a.name.localeCompare(b.name));
     const maxPart = matches.length ? matches.at(-1).part : 0;
+    const missing = missingRange(matches.map((entry) => entry.part), 1, maxPart);
     return {
       names: matches.map((entry) => entry.name),
-      missingParts: missingRange(matches.map((entry) => entry.part), 1, maxPart),
+      missingParts: missing.values,
+      missingTotal: missing.total,
+      missingTruncated: missing.truncated,
       firstVolumeName: selection.firstVolumeName,
     };
   }
@@ -221,10 +277,13 @@ function collectVolumeNames(selection, directoryNames) {
     if (parts.length) {
       const maxPart = parts.at(-1).part;
       const mainName = `${stem}.zip`;
+      const missing = missingRange(parts.map((entry) => entry.part), 1, maxPart);
       return {
         names: [...parts.map((entry) => entry.name), mainName]
           .filter((name) => lowerCaseIndex.has(name.toLowerCase())),
-        missingParts: missingRange(parts.map((entry) => entry.part), 1, maxPart),
+        missingParts: missing.values,
+        missingTotal: missing.total,
+        missingTruncated: missing.truncated,
         firstVolumeName: mainName,
       };
     }
@@ -243,10 +302,13 @@ function collectVolumeNames(selection, directoryNames) {
     if (parts.length) {
       const maxPart = parts.at(-1).part;
       const mainName = `${stem}.rar`;
+      const missing = missingRange(parts.map((entry) => entry.part), 0, maxPart);
       return {
         names: [mainName, ...parts.map((entry) => entry.name)]
           .filter((name) => lowerCaseIndex.has(name.toLowerCase())),
-        missingParts: missingRange(parts.map((entry) => entry.part), 0, maxPart),
+        missingParts: missing.values,
+        missingTotal: missing.total,
+        missingTruncated: missing.truncated,
         firstVolumeName: mainName,
       };
     }
@@ -258,6 +320,8 @@ function collectVolumeNames(selection, directoryNames) {
   return {
     names: selectedName ? [selectedName] : [],
     missingParts: [],
+    missingTotal: 0,
+    missingTruncated: false,
     firstVolumeName: selection.firstVolumeName,
   };
 }
@@ -267,8 +331,11 @@ function escapeRegExp(value) {
 }
 
 module.exports = {
+  MAX_MISSING_ENUM,
+  MAX_VOLUME_NUMBER,
   SINGLE_FORMATS,
   classifyArchive,
   collectVolumeNames,
+  missingRange,
   stripKnownExtension,
 };

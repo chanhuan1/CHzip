@@ -61,7 +61,11 @@ function inspectArchive(selectedPath, options = {}) {
   const missingParts = volumeInfo.missingParts;
   const warnings = [];
   if (missingParts.length) {
-    warnings.push(`检测到分卷缺失：${missingParts.join(", ")}`);
+    // 缺失枚举有上界（见 archive.js 的 MAX_MISSING_ENUM / MAX_VOLUME_NUMBER）：
+    // 被截断时改报总数，避免把上百个分卷号整串拼进响应。
+    warnings.push(volumeInfo.missingTruncated
+      ? `检测到分卷缺失：至少 ${volumeInfo.missingTotal} 个（前 ${missingParts.length} 个：${missingParts.join(", ")}…）`
+      : `检测到分卷缺失：${missingParts.join(", ")}`);
   }
 
   return {
