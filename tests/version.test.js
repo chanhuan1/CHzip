@@ -57,21 +57,44 @@ test("C14 the brand icon keeps its own cache key", () => {
   assert.match(html, /icon_64\.png\?v=1\.0\.0/);
 });
 
-test("C14 dist artifacts match the names derived from build-fpk", (context) => {
+// 产物完整性校验。
+//
+// 注意这里刻意**不**要求「dist 里必须存在当前版本的产物」：那样会让「升版本」
+// 与「打包」之间 npm test 必然变红，而 CONTRIBUTING 的发布顺序正是
+// bump -> test -> build。刚 bump、还没重新打包时 dist 里留着上一版产物，
+// 是发布流程中途的正常状态。
+//
+// 「打包出来的产物版本是否与仓库 manifest 一致」由 scripts/audit-fpk.js
+// 负责 —— 它读的是 fpk 内部的 manifest，那才是正确的校验时机（构建之后）。
+// 这里只保证：一旦 dist 里出现当前版本的产物，两个架构必须齐全。
+test("C14 any package in dist follows the derived naming scheme", (context) => {
   if (!fs.existsSync(distDir)) {
     context.skip("dist/ 不存在（尚未打包）");
     return;
   }
+  const files = fs.readdirSync(distDir).filter((name) => name.endsWith(".fpk"));
+  if (!files.length) {
+    context.skip("dist/ 里没有 .fpk");
+    return;
+  }
+
+  const expected = [];
   for (const variant of BUILD_VARIANTS) {
     for (const platform of Object.keys(PLATFORM_CONFIG)) {
-      const name = packageFileName(version, variant, platform);
-      assert.equal(
-        fs.existsSync(path.join(distDir, name)),
-        true,
-        `dist/ 缺少 ${name}`,
-      );
+      expected.push(packageFileName(version, variant, platform));
     }
   }
+  const present = files.filter((name) => expected.includes(name));
+  if (!present.length) {
+    context.skip(`dist/ 里还没有 ${version} 的产物（已 bump、未打包）`);
+    return;
+  }
+
+  assert.deepEqual(
+    present.sort(),
+    [...expected].sort(),
+    `dist/ 里 ${version} 的产物必须两个架构都齐全`,
+  );
 });
 
 // audit-fpk 曾经硬编码 3 处版本（两个 fileName + 一处 manifest 版本正则），
