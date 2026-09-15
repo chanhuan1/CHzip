@@ -179,6 +179,8 @@ class JobStore {
     const now = options.now || new Date();
     const maxAgeMs = options.maxAgeMs || JOB.EXPIRY_MS;
     const batchSize = options.batchSize || LIMITS.MAX_CLEANUP_BATCH_SIZE;
+    // 注入点：单测用它模拟「statSync 时条目已被并发删除」这类竞态。
+    const fsModule = options.fsModule || fs;
     const checkProcess = options.processExists || ((pid) => {
       try {
         process.kill(pid, 0);
@@ -192,68 +194,100 @@ class JobStore {
     });
     const removed = [];
     let processed = 0;
-    for (const name of fs.readdirSync(this.jobsDir)) {
-      if (!/^[a-f0-9]{32}\.json$/.test(name)) {
+
+    // worker 收尾会同时删除 job JSON、<id>.d 目录与锁文件，过期清理与之并发
+    // 时任何一步都可能扑空（ENOENT）；目录权限异常则可能 EPERM/EACCES。
+    // 清理是「顺手做」的事，失败必须就地吞掉，不能冒到调用方的请求里。
+    const tryRemove = (target, removeOptions) => {
+      try {
+        fsModule.rmSync(target, removeOptions);
+        return true;
+      } catch (error) {
+        return false;
+      }
+    };
+    const statMtimeMs = (target) => {
+      try {
+        return fsModule.statSync(target).mtimeMs;
+      } catch (error) {
+        return null;
+      }
+    };
+
+    // 一次目录遍历同时完成「过期任务删除」与「残留 lock/tmp/.d 清理」。
+    // 原先扫两遍，且第一遍对每个条目无条件 statSync —— worker 收尾可能在
+    // readdir 与 stat 之间把条目删掉，ENOENT 就直接冒到请求层。
+    for (const entry of fsModule.readdirSync(this.jobsDir, { withFileTypes: true })) {
+      const name = entry.name;
+      const entryPath = path.join(this.jobsDir, name);
+
+      if (entry.isFile() && /^[a-f0-9]{32}\.json$/.test(name) && processed < batchSize) {
+        processed += 1;
+        const id = name.slice(0, -5);
+        let job = null;
+        try {
+          job = this.read(id);
+        } catch (error) {
+          // job JSON 已损坏：跳过，留给人工排查。
+        }
+        if (!job) {
+          continue;
+        }
+        const timestamp = job.finishedAt || job.startedAt || job.createdAt;
+        if (
+          !timestamp
+          || now.getTime() - new Date(timestamp).getTime() <= maxAgeMs
+        ) {
+          continue;
+        }
+        if (
+          !TERMINAL_STATUSES.has(job.status)
+          && (
+            (job.workerPid && checkProcess(job.workerPid))
+            || (job.processGroupPid && checkProcess(-job.processGroupPid))
+          )
+        ) {
+          continue;
+        }
+        if (!TERMINAL_STATUSES.has(job.status) && job.outputOwned && job.outputDir) {
+          tryRemove(job.outputDir, { recursive: true, force: true });
+        }
+        tryRemove(this.jobPath(id), { force: true });
+        tryRemove(this.dataDir(id), { recursive: true, force: true });
+        removed.push(id);
         continue;
       }
-      if (processed >= batchSize) {
-        break;
-      }
-      processed += 1;
-      const id = name.slice(0, -5);
-      const job = this.read(id);
-      if (!job) {
-        continue;
-      }
-      const timestamp = job.finishedAt || job.startedAt || job.createdAt;
-      if (
-        !timestamp
-        || now.getTime() - new Date(timestamp).getTime() <= maxAgeMs
-      ) {
-        continue;
-      }
-      if (
-        !TERMINAL_STATUSES.has(job.status)
+
+      // 残留清理：先按名字正则过滤再 stat，避免对无关条目做无谓的 syscall。
+      const isOrphanDataDir = entry.isDirectory()
+        && /^[a-f0-9]{32}\.d$/.test(name);
+      const isStaleArtifact = entry.isFile()
         && (
-          (job.workerPid && checkProcess(job.workerPid))
-          || (job.processGroupPid && checkProcess(-job.processGroupPid))
+          /^[a-f0-9]{32}\.json\.lock$/.test(name)
+          || /^[a-f0-9]{32}\.json\.\d+\.[a-f0-9]+\.tmp$/.test(name)
+        );
+      if (!isOrphanDataDir && !isStaleArtifact) {
+        continue;
+      }
+      const mtimeMs = statMtimeMs(entryPath);
+      if (mtimeMs === null || now.getTime() - mtimeMs <= maxAgeMs) {
+        continue;
+      }
+      if (
+        isOrphanDataDir
+        && fsModule.existsSync(
+          path.join(this.jobsDir, `${name.slice(0, -2)}.json`),
         )
       ) {
         continue;
       }
-      if (!TERMINAL_STATUSES.has(job.status) && job.outputOwned && job.outputDir) {
-        fs.rmSync(job.outputDir, { recursive: true, force: true });
-      }
-      fs.rmSync(this.jobPath(id), { force: true });
-      fs.rmSync(this.dataDir(id), { recursive: true, force: true });
-      removed.push(id);
+      tryRemove(
+        entryPath,
+        isOrphanDataDir ? { recursive: true, force: true } : { force: true },
+      );
     }
-    for (const entry of fs.readdirSync(this.jobsDir, { withFileTypes: true })) {
-      const entryPath = path.join(this.jobsDir, entry.name);
-      const stat = fs.statSync(entryPath);
-      if (now.getTime() - stat.mtimeMs <= maxAgeMs) {
-        continue;
-      }
-      if (
-        entry.isDirectory()
-        && /^[a-f0-9]{32}\.d$/.test(entry.name)
-        && !fs.existsSync(path.join(
-          this.jobsDir,
-          `${entry.name.slice(0, -2)}.json`,
-        ))
-      ) {
-        fs.rmSync(entryPath, { recursive: true, force: true });
-      } else if (
-        entry.isFile()
-        && (
-          /^[a-f0-9]{32}\.json\.lock$/.test(entry.name)
-          || /^[a-f0-9]{32}\.json\.\d+\.[a-f0-9]+\.tmp$/.test(entry.name)
-        )
-      ) {
-        fs.rmSync(entryPath, { force: true });
-      }
-    }
-    for (const entry of fs.readdirSync(this.runtimeRoot, { withFileTypes: true })) {
+
+    for (const entry of fsModule.readdirSync(this.runtimeRoot, { withFileTypes: true })) {
       if (
         !entry.isDirectory()
         || !/^(?:nested|validate)-/.test(entry.name)
@@ -261,10 +295,11 @@ class JobStore {
         continue;
       }
       const directoryPath = path.join(this.runtimeRoot, entry.name);
-      const stat = fs.statSync(directoryPath);
-      if (now.getTime() - stat.mtimeMs > maxAgeMs) {
-        fs.rmSync(directoryPath, { recursive: true, force: true });
+      const mtimeMs = statMtimeMs(directoryPath);
+      if (mtimeMs === null || now.getTime() - mtimeMs <= maxAgeMs) {
+        continue;
       }
+      tryRemove(directoryPath, { recursive: true, force: true });
     }
     return removed;
   }

@@ -105,6 +105,21 @@ function normalizeApiName(query, body) {
 // 会被高频轮询或反复调用的接口不触发（清理本身要全量扫 jobs 目录）。
 const CLEANUP_APIS = new Set(["extract", "jobs", "clear-history"]);
 
+// 过期清理只是「顺手做」的事：它要全量扫 jobs 目录，而 worker 收尾会并发
+// 删除 job JSON / <id>.d / 锁文件，任何异常都不该让用户的 extract / jobs /
+// clear-history 请求整体失败。清理失败只记一条脱敏日志。
+function runDueCleanup(store, logger) {
+  try {
+    return store.cleanupExpiredIfDue();
+  } catch (error) {
+    safeDiagnosticWrite(logger, {
+      event: "cleanup_error",
+      message: error.message,
+    });
+    return null;
+  }
+}
+
 // 判断本次请求是否真的有请求体。GET/HEAD 没有 body，若仍去等 stdin，
 // 宿主不关闭 stdin 时就会白等到 30s 超时。
 function hasRequestBody(env = process.env) {
@@ -251,7 +266,7 @@ async function main() {
     const body = parseJsonBody(rawBody);
     api = normalizeApiName(query, body);
     if (CLEANUP_APIS.has(api)) {
-      services.store.cleanupExpiredIfDue();
+      runDueCleanup(services.store, services.logger);
     }
 
     if (
@@ -362,5 +377,6 @@ module.exports = {
   readRequestBody,
   routeRequest,
   runCli,
+  runDueCleanup,
   sendJson,
 };
