@@ -30,47 +30,6 @@
 
     const searchScheduler = treeApi.createSearchScheduler({ delay: 180 });
 
-    let parseWorker = null;
-    let parseWorkerRequestId = 0;
-
-    function parseWithWorker(text, maxEntries, maxBytes) {
-        return new Promise((resolve, reject) => {
-            if (!window.Worker) {
-                reject(new Error("浏览器不支持 Web Worker"));
-                return;
-            }
-            if (!parseWorker) {
-                try {
-                    parseWorker = new Worker("./index.cgi/js/parse-worker.js");
-                } catch (error) {
-                    reject(error);
-                    return;
-                }
-            }
-            const requestId = ++parseWorkerRequestId;
-            const onMessage = (event) => {
-                if (event.data.requestId !== requestId) {
-                    return;
-                }
-                parseWorker.removeEventListener("message", onMessage);
-                parseWorker.removeEventListener("error", onError);
-                if (event.data.error) {
-                    reject(new Error(event.data.error));
-                } else {
-                    resolve(event.data.result);
-                }
-            };
-            const onError = (error) => {
-                parseWorker.removeEventListener("message", onMessage);
-                parseWorker.removeEventListener("error", onError);
-                reject(error);
-            };
-            parseWorker.addEventListener("message", onMessage);
-            parseWorker.addEventListener("error", onError);
-            parseWorker.postMessage({ requestId, text, maxEntries, maxBytes });
-        });
-    }
-
     function getQueryPath() {
         return new URLSearchParams(window.location.search).get("path") || "";
     }

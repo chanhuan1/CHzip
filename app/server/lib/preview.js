@@ -2,9 +2,12 @@
 
 const path = require("node:path");
 const { StringDecoder } = require("node:string_decoder");
+const { LIMITS } = require("./constants");
 
-const DEFAULT_MAX_ENTRIES = 100000;
-const DEFAULT_MAX_BYTES = 64 * 1024 * 1024;
+// 上限来自 constants.js，不要在这里再写一份字面量 —— 原先两边各写一遍
+// 100000 / 64MiB，改一处不会同步另一处。
+const DEFAULT_MAX_ENTRIES = LIMITS.MAX_PREVIEW_ENTRIES;
+const DEFAULT_MAX_BYTES = LIMITS.MAX_PREVIEW_OUTPUT_BYTES;
 
 class PreviewLimitError extends Error {
   constructor(message) {

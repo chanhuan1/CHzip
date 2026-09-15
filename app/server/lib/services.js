@@ -226,11 +226,6 @@ function createServices(options = {}) {
       error.code = "MISSING_VOLUME";
       throw error;
     }
-    const args = buildListArgs(archive.selection, {
-      archivePath: archive.filePath,
-      password: input.password || "",
-      codePage: input.codePage || "auto",
-    });
     return withPreparedArchive(archive, input, (listingArchive) => {
       let result = runSync(listingArchive.tool, buildListArgs(
         listingArchive.selection,

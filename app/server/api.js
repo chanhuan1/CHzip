@@ -4,7 +4,7 @@
 
 const crypto = require("node:crypto");
 const querystring = require("node:querystring");
-const { LIMITS, TIMEOUTS } = require("./lib/constants");
+const { CRYPTO, LIMITS, TIMEOUTS } = require("./lib/constants");
 const { createServices } = require("./lib/services");
 const {
   safeDiagnosticWrite,
@@ -226,9 +226,6 @@ async function routeRequest(api, request, services) {
   };
 }
 
-const REQUEST_TIMEOUT_MS = 5 * 60 * 1000;
-const MAX_CONCURRENT_EXTRACTS = 3;
-
 function withTimeout(promise, timeoutMs, timeoutMessage) {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
@@ -251,7 +248,7 @@ function withTimeout(promise, timeoutMs, timeoutMessage) {
 
 async function main() {
   const services = createServices();
-  const requestId = crypto.randomBytes(8).toString("hex");
+  const requestId = crypto.randomBytes(CRYPTO.REQUEST_ID_BYTES).toString("hex");
   const startedAt = Date.now();
   let api = "";
   try {
@@ -271,7 +268,7 @@ async function main() {
 
     if (
       api === "extract"
-      && services.store.countActive() >= MAX_CONCURRENT_EXTRACTS
+      && services.store.countActive() >= LIMITS.MAX_CONCURRENT_EXTRACTS
     ) {
       const error = new Error("当前解压任务过多，请稍后再试");
       error.code = "TOO_MANY_REQUESTS";
@@ -284,7 +281,7 @@ async function main() {
         body,
         requestId,
       }, services),
-      REQUEST_TIMEOUT_MS,
+      TIMEOUTS.API_REQUEST_MS,
       "请求处理超时",
     );
 

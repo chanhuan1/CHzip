@@ -2,6 +2,7 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
+const { LIMITS, PERMISSIONS } = require("./constants");
 const {
   collectAuthorizedPathCandidates,
   parsePathList,
@@ -157,7 +158,7 @@ function sanitizeOutputStem(outputStem) {
   return cleaned || "archive";
 }
 
-const MAX_OUTPUT_DIR_ATTEMPTS = 10000;
+const MAX_OUTPUT_DIR_ATTEMPTS = LIMITS.MAX_OUTPUT_DIR_ATTEMPTS;
 const MAX_OUTPUT_DIR_TIMEOUT_MS = 5000;
 
 function createUniqueOutputDir(destinationRoot, outputStem, options = {}) {
@@ -174,7 +175,7 @@ function createUniqueOutputDir(destinationRoot, outputStem, options = {}) {
     const name = index === 1 ? safeStem : `${safeStem} (${index})`;
     const candidate = path.join(destinationRoot, name);
     try {
-      fs.mkdirSync(candidate, { mode: 0o750 });
+      fs.mkdirSync(candidate, { mode: PERMISSIONS.MODE_DIR_OUTPUT });
       return candidate;
     } catch (error) {
       if (error.code !== "EEXIST") {
@@ -300,7 +301,7 @@ function validateDirectoryName(name) {
     !value
     || value === "."
     || value === ".."
-    || value.length > 128
+    || value.length > LIMITS.MAX_DIRECTORY_NAME_LENGTH
     || /[\/\\\x00-\x1f]/.test(value)
   ) {
     throw directoryError("INVALID_DIRECTORY_NAME", "文件夹名称无效");
@@ -329,7 +330,7 @@ function createAuthorizedDirectory(parentPath, name, roots) {
   const safeName = validateDirectoryName(name);
   const destination = path.join(parent, safeName);
   try {
-    fs.mkdirSync(destination, { mode: 0o750 });
+    fs.mkdirSync(destination, { mode: PERMISSIONS.MODE_DIR_OUTPUT });
   } catch (cause) {
     if (cause.code === "EEXIST") {
       throw directoryError("DIRECTORY_EXISTS", "同名文件夹已经存在");

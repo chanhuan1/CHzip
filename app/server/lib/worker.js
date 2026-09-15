@@ -9,7 +9,7 @@ const {
   createProgressTracker,
   spawnSevenZip,
 } = require("./engine");
-const { LIMITS } = require("./constants");
+const { LIMITS, PERMISSIONS, TIMEOUTS } = require("./constants");
 const { JobStore } = require("./jobs");
 const { createTechnicalListValidator } = require("./preview");
 const {
@@ -254,7 +254,7 @@ function defaultValidateListing(tool, args, context) {
           } catch (killError) {
             // 子进程已经退出。
           }
-        }, 3000);
+        }, TIMEOUTS.CANCELLATION_KILL_MS);
         killTimer.unref?.();
       }
     });
@@ -341,7 +341,7 @@ function internalPathFromTarget(target, outputDir) {
 function uniqueRescuePath(outputDir, internal) {
   const parsed = path.parse(internal);
   const dir = path.join(outputDir, parsed.dir);
-  fs.mkdirSync(dir, { recursive: true, mode: 0o750 });
+  fs.mkdirSync(dir, { recursive: true, mode: PERMISSIONS.MODE_DIR_OUTPUT });
   let base = truncateUtf8Name(parsed.base, 230);
   let candidate = path.join(dir, base);
   let index = 2;
@@ -369,7 +369,7 @@ function streamSingleToFile(tool, args, dest) {
     }
     let errorText = "";
     let settled = false;
-    const out = fs.createWriteStream(dest, { mode: 0o644 });
+    const out = fs.createWriteStream(dest, { mode: PERMISSIONS.MODE_FILE_DEFAULT });
     child.stderr.on("data", (chunk) => {
       errorText = `${errorText}${chunk.toString("utf8")}`.slice(-8192);
     });

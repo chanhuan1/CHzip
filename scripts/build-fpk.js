@@ -46,30 +46,6 @@ function rewriteManifestPlatform(manifestPath, platform) {
   fs.writeFileSync(manifestPath, updated, "utf8");
 }
 
-function configureVariant(stageDir, variant) {
-  if (!BUILD_VARIANTS.includes(variant)) {
-    throw new Error(`Unsupported variant: ${variant}`);
-  }
-  if (variant !== "no-search") {
-    return;
-  }
-
-  const htmlPath = path.join(stageDir, "app", "www", "index.html");
-  const original = fs.readFileSync(htmlPath, "utf8");
-  const searchFieldPattern =
-    /\n\s*<label class="search-field">[\s\S]*?<\/label>/;
-  if (!searchFieldPattern.test(original)) {
-    throw new Error("Search field marker is missing from index.html");
-  }
-  const updated = original
-    .replace(
-      '<div class="tree-toolbar">',
-      '<div class="tree-toolbar is-search-disabled">',
-    )
-    .replace(searchFieldPattern, "");
-  fs.writeFileSync(htmlPath, updated, "utf8");
-}
-
 function makeExecutables(stageDir, vendorDir) {
   for (const relativePath of [
     "app/ui/api.cgi",
@@ -128,7 +104,6 @@ function prepareStage({
   }
 
   rewriteManifestPlatform(path.join(stageDir, "manifest"), platform);
-  configureVariant(stageDir, variant);
   const vendorRoot = path.join(stageDir, "app", "vendor", "7zip");
   for (const directory of ["linux-x64", "linux-arm64"]) {
     if (directory !== config.vendorDir) {
@@ -278,7 +253,6 @@ module.exports = {
   BUILD_VARIANTS,
   PLATFORM_CONFIG,
   buildPlatform,
-  configureVariant,
   normalizeModes,
   packageFileName,
   parseArguments,
