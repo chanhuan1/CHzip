@@ -1,0 +1,36 @@
+name: CI
+
+# 语法门禁 + 单元测试。172 -> 249 个用例此前全靠人肉在本机跑。
+# 刻意不跑 npm run test:release（audit-fpk）：它依赖 dist/*.fpk 产物与
+# fnpack，属于发布流程，不适合每次 push 都跑。
+on: [push, pull_request]
+
+# 只读即可：本工作流不发布、不部署、不写回仓库。
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # 零 npm 依赖（只用 node 内置模块），所以不需要 npm ci / 缓存。
+      - name: Syntax check
+        run: |
+          node --check app/server/api.js
+          for file in \
+            app/server/lib/*.js \
+            app/server/sync-authorized-paths.js \
+            scripts/*.js \
+            app/www/js/*.js
+          do
+            node --check "$file"
+          done
+
+      - name: Unit tests
+        run: npm test
