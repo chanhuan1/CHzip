@@ -116,7 +116,7 @@ CHzip/
 - **工程**：补齐 `source` / `selection` / `diagnostics` 三个安全模块的单测（此前零直连测试）；
   新增版本号一致性门禁（漏改任一处 `npm test` 会失败）；新增 GitHub Actions CI；
   清理死代码并让 `constants.js` 成为常量的唯一来源。
-- 测试：172 → 249。版本号升至 3.2。
+- 测试：172 → 258。版本号升至 3.2。
 
 
 
@@ -185,7 +185,7 @@ CHzip/
 ## 🛠️ 开发 / 构建 / 测试
 
 ```bash
-npm test                 # node --test，249 个用例
+npm test                 # node --test，258 个用例
 node --check app/server/api.js   # 语法检查
 node scripts/build-fpk.js        # 构建 dist/*.fpk（双架构，需 fnpack）
 node scripts/audit-fpk.js        # 发布审计（校验和/版本/架构/搜索特性）
