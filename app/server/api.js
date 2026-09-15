@@ -305,8 +305,9 @@ async function main() {
 }
 
 async function runCli() {
+  const isWorker = process.argv[2] === "--worker";
   try {
-    if (process.argv[2] === "--worker") {
+    if (isWorker) {
       const jobId = process.argv[3];
       // 惰性加载：解压 worker 及其依赖（engine/jobs/sevenzip/nested/source）
       // 只在 --worker 分支需要。常规 CGI 请求（尤其是 1s 一次的 status 轮询）
@@ -319,6 +320,16 @@ async function runCli() {
     }
     await main();
   } catch (error) {
+    if (isWorker) {
+      // worker 是 detached + stdio:"ignore" 启动的：写 stdout 没人看，唯一能
+      // 让父进程感知失败的通道就是退出码（services.spawnWorker 的 exit 处理器
+      // 只看 exitCode !== 0）。这里若不设非 0 退出码，任务会永远停在 queued。
+      process.stderr.write(
+        `CHzip worker 失败（${error.code || "INTERNAL"}）：${error.message}\n`,
+      );
+      process.exitCode = 1;
+      return;
+    }
     const statusCode = {
       NOT_FOUND: 404,
       INVALID_JSON: 400,

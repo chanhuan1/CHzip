@@ -470,6 +470,33 @@ function requireActiveJob(store, jobId) {
   return job;
 }
 
+// 启动前段失败时的终态落盘。
+//
+// worker 是 `spawn(..., { detached: true, stdio: "ignore" })` 起的：异常信息
+// 传不回父进程，父进程只靠退出码判断成败。如果这里不写终态，任务会永远停在
+// queued —— 前端每秒轮询 status 永远等不到结果，界面上表现为「任务已排队」卡死。
+function markStartupFailure(store, jobId, error) {
+  try {
+    store.update(jobId, (current) => ({
+      ...current,
+      status: "failed",
+      phase: "failed",
+      processGroupPid: null,
+      workerPid: null,
+      currentFile: "",
+      passwordFile: "",
+      selectionFile: "",
+      finishedAt: new Date().toISOString(),
+      error: {
+        code: error?.code || "WORKER_START",
+        message: error?.message || "Worker 启动失败",
+      },
+    }));
+  } catch (updateError) {
+    // 任务可能已被并发清理（过期清理 / 用户清空历史），此时没有可写的终态。
+  }
+}
+
 async function runWorker(jobId, options = {}) {
   const runtimeRoot = options.runtimeRoot
     || options.store?.runtimeRoot
@@ -485,18 +512,30 @@ async function runWorker(jobId, options = {}) {
       path.join(runtimeRoot, "logs"),
     ].filter(Boolean),
   });
-  let job = store.read(jobId);
-  if (!job) {
-    throw new Error("任务不存在或已过期");
+
+  // 启动前段（读任务 / 取密码 / 开源文件 fd）必须单独包一层 try：
+  // 这里的异常发生在下面的状态机之外，不落终态就会让任务永久卡在 queued。
+  let job;
+  let password = "";
+  let sourceDescriptors = [];
+  let nestedDir = "";
+  try {
+    job = store.read(jobId);
+    if (!job) {
+      throw new Error("任务不存在或已过期");
+    }
+    password = readAndRemoveSecret(job.passwordFile);
+    nestedDir = path.join(store.dataDir(jobId), "nested");
+    sourceDescriptors = openSourceDescriptors(job.sourceFingerprint);
+  } catch (startupError) {
+    markStartupFailure(store, jobId, startupError);
+    throw startupError;
   }
 
-  const password = readAndRemoveSecret(job.passwordFile);
   const tool = {
     path: job.sevenZipPath,
     source: job.sevenZipSource,
   };
-  const nestedDir = path.join(store.dataDir(jobId), "nested");
-  const sourceDescriptors = openSourceDescriptors(job.sourceFingerprint);
 
   safeDiagnosticWrite(logger, {
     event: "worker",
@@ -712,6 +751,7 @@ module.exports = {
   createProgressWriter,
   defaultRunPhase,
   defaultValidateListing,
+  markStartupFailure,
   registerProcessGroup,
   runWorker,
 };
