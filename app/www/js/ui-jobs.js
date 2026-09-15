@@ -151,13 +151,24 @@
         return "正在处理";
     }
 
+    // 兜底：文件名位置绝不渲染「一串百分比」。
+    //
+    // 后端解析 7-Zip 输出时，若某行把多次进度更新挤在一起，仍有可能把百分比串
+    // 当成文件名传下来（v2.9 与 v3.2 两次真机反馈都是这个症状）。这里再拦一道，
+    // 保证界面上不会出现进度百分比堆叠。要求「至少两个百分比」才算百分比串，
+    // 因此真的存在名为 "50%" 的文件时仍然照常显示。
+    const PERCENT_RUN_ONLY = /^(?:\s*\d{1,3}\s*%){2,}\s*$/;
+
     function setJobProgress(percent, status, currentFile, state, job = null, eta = null) {
         const els = state.elements;
         const safePercent = Math.max(0, Math.min(100, Number(percent) || 0));
         els.progressFill.style.width = `${safePercent}%`;
         els.progressText.textContent = `${Math.round(safePercent)}%`;
         els.jobState.textContent = status;
-        els.currentFile.textContent = currentFile || "正在等待任务状态...";
+        const fileText = PERCENT_RUN_ONLY.test(String(currentFile || ""))
+            ? ""
+            : currentFile;
+        els.currentFile.textContent = fileText || "正在等待任务状态...";
         if (els.progressEta) {
             els.progressEta.hidden = !eta;
             els.progressEta.textContent = eta ? `剩余约 ${eta}` : "";

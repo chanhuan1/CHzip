@@ -10,12 +10,26 @@ const {
   IDLE_BACKOFF_MS,
   createPoller,
   formatTaskDateTime,
+  setJobProgress,
 } = globalThis.CHzipUiJobs;
 
 function sleep(ms) {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
+}
+
+// setJobProgress 只用到这几个 DOM 属性，够用就行。
+function createProgressStub() {
+  const classList = () => ({ toggle() {} });
+  return {
+    progressFill: { style: {}, classList: classList() },
+    progressText: { textContent: "" },
+    jobState: { textContent: "" },
+    currentFile: { textContent: "" },
+    progressEta: { hidden: true, textContent: "" },
+    progressTrack: { classList: classList() },
+  };
 }
 
 // 用可控的假 document 驱动可见性逻辑，并在结束后恢复，避免污染其它用例。
@@ -207,3 +221,42 @@ test("createPoller default hidden interval is far slower than the active one", (
   );
 });
 
+
+// ---------------------------------------------------------------- 进度显示兜底
+
+// 真机反馈（v3.2）：进度条下方堆着一串百分比。
+// 后端解析已修，但这里再拦一道 —— 文件名位置绝不渲染百分比堆叠。
+test("setJobProgress never renders a percent run as the current file", () => {
+  const state = { elements: createProgressStub() };
+
+  setJobProgress(0, "正在解压", "1%  3%  5%  6%  8%  10%  11%  13%  15%", state);
+
+  assert.equal(state.elements.progressText.textContent, "0%");
+  assert.equal(state.elements.currentFile.textContent, "正在等待任务状态...");
+});
+
+test("setJobProgress keeps a normal file name", () => {
+  const state = { elements: createProgressStub() };
+
+  setJobProgress(42, "正在解压", "视频/第一集.mkv", state);
+
+  assert.equal(state.elements.progressText.textContent, "42%");
+  assert.equal(state.elements.currentFile.textContent, "视频/第一集.mkv");
+});
+
+// 只有单个百分比的不拦：真的存在名为 "50%" 的文件。
+test("setJobProgress keeps a file name that is a single percent", () => {
+  const state = { elements: createProgressStub() };
+
+  setJobProgress(10, "正在解压", "50%", state);
+
+  assert.equal(state.elements.currentFile.textContent, "50%");
+});
+
+test("setJobProgress falls back when there is no file name at all", () => {
+  const state = { elements: createProgressStub() };
+
+  setJobProgress(0, "任务已排队", "", state);
+
+  assert.equal(state.elements.currentFile.textContent, "正在等待任务状态...");
+});

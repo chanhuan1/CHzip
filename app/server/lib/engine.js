@@ -136,6 +136,35 @@ function classifySevenZipError(log, exitCode, context = {}) {
 // 「最后一个」百分比/文件名。
 const PROGRESS_CARRY_LIMIT = 64 * 1024;
 
+// 进度百分比 token：**前后都必须是「行首 / 空白」**。
+//
+// 两边边界都要判：
+//   · 后面不是空白（`折扣50%.mp4`）→ 那是文件名里的 %，不是进度；
+//   · 前面不是空白（`折扣50%`）→ 同理。
+// 少了前边界，一个以 % 结尾的文件名就会被当成进度，percent 跳到错的数字。
+const PROGRESS_PERCENT_TOKEN = /(?<=^|\s)(\d{1,3})\s*%(?=\s|$)/g;
+
+function percentTokensOf(line) {
+  return [...line.matchAll(PROGRESS_PERCENT_TOKEN)];
+}
+
+// 从「扣掉所有进度百分比之后」的残余文本里取文件名。
+//
+// 不能只看「第一个百分比之后」或「最后一个百分比之前」：7-Zip 在管道（非 TTY）
+// 下会把 -bb1 的文件名行与 -bsp1 的进度行挤在同一行且没有 \r 分隔，于是同一行
+// 里既可能「名字在百分比之前」（`- a.txt  0%  1%  …`），也可能「名字夹在百分比
+// 中间」（`  0% - a.txt  1%  3%  …`）。抠掉百分比后剩下的才是候选；
+// 挤在一起的多段更新之间是连续空白，取最后一段。
+function extractProgressName(line) {
+  const stripped = line.replace(PROGRESS_PERCENT_TOKEN, "").trim();
+  if (!stripped) {
+    return "";
+  }
+  const segment = stripped.split(/\s{2,}/).filter(Boolean).at(-1) || "";
+  const separator = segment.lastIndexOf(" - ");
+  return (separator >= 0 ? segment.slice(separator + 3) : segment).trim();
+}
+
 // 7-Zip 的进度用回车符 \r 原地覆盖（不换行），因此要按行分段并取
 // “最后一个”快照，才能拿到最新百分比；否则会一直停在最早的低值（0%）。
 //
@@ -159,22 +188,13 @@ function createProgressTracker() {
 
   const applyLineTo = (state, raw) => {
     const line = String(raw).trim();
-    // 行首连续百分比串：覆盖"挤一行多百分比"场景；文件名前的 % 不误吃。
-    const run = /^\s*(?:\d{1,3}\s*%\s*)*/.exec(line)[0];
-    const headMatches = [...run.matchAll(/(\d{1,3})\s*%/g)];
-    const match = headMatches.length
-      ? headMatches[headMatches.length - 1]
-      : line.match(/(\d{1,3})\s*%/);
-    if (!match) {
+    const tokens = percentTokensOf(line);
+    if (!tokens.length) {
       return;
     }
-    state.percent = Math.min(100, Number(match[1]));
-    const tail = line.slice(match.index + match[0].length).trim();
-    if (!tail) {
-      return;
-    }
-    const separator = tail.lastIndexOf(" - ");
-    const name = (separator >= 0 ? tail.slice(separator + 3) : tail).trim();
+    // 取最后一个：挤在一行里的多次更新，最后那个才是最新进度。
+    state.percent = Math.min(100, Number(tokens[tokens.length - 1][1]));
+    const name = extractProgressName(line);
     if (name) {
       state.currentFile = name;
     }

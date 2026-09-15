@@ -28,6 +28,12 @@ const PROGRESS_VECTORS = [
   "\r\r\n\n",
   "no percent at all\n",
   "  7% 文件.txt  8% 另一个.txt\r  9% 第三个.txt\r",
+  // 7-Zip 在管道下会把 -bb1 的文件名行与 -bsp1 的进度行挤在同一行（没有 \r），
+  // 于是百分比**不在行首**。v3.2 真机反馈（进度条下方堆着一串百分比）就是这个形状。
+  "- a.txt  0%  1%  3%  5%  6%  8%  10%  11%  13%  15%",
+  "+ a.txt  0%  1%  3%  5%  6%  8%  10%  11%  13%  15%",
+  "  0% - a.txt  1%  3%  5%  6%  8%  10%  11%  13%  15%",
+  "  42% 折扣50%",
 ];
 
 test("classifySevenZipError detects password required", () => {
@@ -124,6 +130,49 @@ test("parseProgress handles a packed line followed by a name", () => {
   const result = parseProgress("  0%  5%  12% - file.txt\n");
   assert.equal(result.percent, 12);
   assert.equal(result.currentFile, "- file.txt");
+});
+
+// 真机反馈（v3.2）：进度条下方堆着一串百分比。
+// 根因是百分比正则只在**行首**匹配，而 7-Zip 把文件名行与进度行挤在一起后，
+// 百分比前面多了个名字，于是解析器退化到「取行内第一个 %」，
+// 把第一个 `0%` 之后的全部内容当成了文件名。
+test("parseProgress reads the percent when a name shares the progress line", () => {
+  const result = parseProgress(
+    "- a.txt  0%  1%  3%  5%  6%  8%  10%  11%  13%  15%",
+  );
+  assert.equal(result.percent, 15);
+  assert.equal(result.currentFile, "- a.txt");
+});
+
+test("parseProgress never reports a percent run as the current file", () => {
+  const logs = [
+    "- a.txt  0%  1%  3%  5%  6%  8%  10%  11%  13%  15%",
+    "+ a.txt  0%  1%  3%  5%  6%  8%  10%  11%  13%  15%",
+    "  0% - a.txt  1%  3%  5%  6%  8%  10%  11%  13%  15%",
+    "  0%  1%  3%  5%  6%  8%  10%  11%  13%  15%  16%  18%  20%",
+  ];
+  for (const log of logs) {
+    const { currentFile } = parseProgress(log);
+    assert.doesNotMatch(
+      currentFile,
+      /\d\s*%/,
+      `${log} 不应把百分比串当成文件名`,
+    );
+  }
+});
+
+test("parseProgress keeps a name that sits between packed percentages", () => {
+  const result = parseProgress("  0% - a.txt  1%  3%  5%  6%  8%");
+  assert.equal(result.percent, 8);
+  assert.equal(result.currentFile, "- a.txt");
+});
+
+// 百分比 token 的前边界也必须判：`折扣50%` 的 50% 紧跟在汉字后面，不是进度。
+// 少了这个边界，一个以 % 结尾的文件名就会把 percent 顶到错的数字。
+test("parseProgress requires a boundary before the percent token", () => {
+  const result = parseProgress("  42% 折扣50%");
+  assert.equal(result.percent, 42);
+  assert.equal(result.currentFile, "折扣50%");
 });
 
 test("classifySevenZipError detects overlong filename", () => {
