@@ -16,8 +16,13 @@ const rootDir = path.resolve(__dirname, "..");
 const manifestPath = path.join(rootDir, "manifest");
 const packageJsonPath = path.join(rootDir, "package.json");
 const indexPath = path.join(rootDir, "app", "www", "index.html");
+const readmePath = path.join(rootDir, "README.md");
 const auditPath = path.join(rootDir, "scripts", "audit-fpk.js");
 const distDir = path.join(rootDir, "dist");
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
 // 版本号没有单一来源，需要手动同步 4 处：manifest / package.json /
 // index.html 的 ?v= / audit-fpk 的断言。这个测试把「同步」变成门禁 ——
@@ -55,6 +60,24 @@ test("C14 every asset cache-busting key matches the manifest version", () => {
 test("C14 the brand icon keeps its own cache key", () => {
   const html = fs.readFileSync(indexPath, "utf8");
   assert.match(html, /icon_64\.png\?v=1\.0\.0/);
+});
+
+// README 的徽章与安装命令曾经两次落后于实际版本（v3.0 徽章配 3.1 版本、
+// v3.1 徽章配 3.2 版本）。它们是用户第一眼看到的东西，纳入门禁。
+test("C14 the README badge and install command match the manifest version", () => {
+  const readme = fs.readFileSync(readmePath, "utf8");
+  const v = escapeRegExp(version);
+
+  assert.match(
+    readme,
+    new RegExp(`badge/版本-v${v}-`),
+    "README 徽章的版本号应与 manifest 一致",
+  );
+  assert.match(
+    readme,
+    new RegExp(`CHzip_${v}_search-fixed_<架构>\\.fpk`),
+    "README 安装命令里的包名版本应与 manifest 一致",
+  );
 });
 
 // 产物完整性校验。
