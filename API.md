@@ -45,20 +45,37 @@ All responses use `Content-Type: application/json; charset=utf-8`.
 |------|------|-------------|
 | `NOT_FOUND` | 404 | Unknown API endpoint |
 | `INVALID_JSON` | 400 | Request body is not valid JSON |
-| `BODY_TOO_LARGE` | 400 | Request body exceeds 16 MiB |
+| `BODY_TOO_LARGE` | 413 | Request body exceeds 16 MiB |
+| `TOO_MANY_REQUESTS` | 429 | Too many concurrent extractions (limit 3) |
+| `TIMEOUT` | 200 | Reading the request body or handling it timed out |
 | `SOURCE_NOT_FOUND` | 500 | Archive file does not exist |
 | `SOURCE_FILE_DENIED` | 500 | App cannot read the archive |
 | `SOURCE_PARENT_DENIED` | 500 | App cannot browse the archive's directory |
+| `SOURCE_CHANGED` | 500 | Source archive or a volume changed after the job started |
 | `MISSING_VOLUME` | 500 | Split archive has missing parts |
 | `PASSWORD_REQUIRED` | 500 | Archive needs a password |
 | `PASSWORD` | 500 | Wrong password provided |
 | `PERMISSION` | 500 | OS-level permission denied |
 | `UNSUPPORTED` | 500 | Archive format not supported |
 | `DAMAGED` | 500 | Archive is corrupt |
+| `FILE_NAME_TOO_LONG` | 500 | A member name exceeds the filesystem limit; the rest was kept |
+| `RESCUE_FAILED` | 500 | A too-long member name could not be rescued |
 | `PREVIEW_LIMIT` | 500 | Archive too large to preview |
+| `PREVIEW_TOO_LARGE` | 500 | Single file exceeds the 12 MiB preview cap |
+| `PREVIEW_FAILED` | 500 | Single file preview failed |
+| `PREVIEW_INTERRUPTED` | 500 | Preview was interrupted by the system |
+| `UNSAFE_PATH` | 500 | Archive outer layer contains a symlink |
 | `DIRECTORY_NOT_AUTHORIZED` | 500 | Output dir outside authorized roots |
+| `DIRECTORY_NOT_BROWSABLE` | 500 | App cannot browse the directory |
+| `DIRECTORY_NOT_WRITABLE` | 500 | App cannot write to the directory |
+| `DIRECTORY_EXISTS` | 500 | A directory with that name already exists |
+| `INVALID_DIRECTORY_NAME` | 500 | Invalid new directory name |
 | `WORKER_START` | 500 | Extraction worker failed to start |
 | `WORKER_EXIT` | 500 | Extraction worker exited abnormally |
+
+> `TIMEOUT` intentionally answers HTTP 200: CGI apps in fnOS deliver errors in
+> the response body, and only `NOT_FOUND` / `INVALID_JSON` / `BODY_TOO_LARGE` /
+> `TOO_MANY_REQUESTS` also set a non-200 status line.
 
 ## Endpoints
 
@@ -111,23 +128,53 @@ Lists the contents of an archive as a file tree.
 }
 ```
 
-### `verify`
+### `comment`
 
-Tests archive integrity without extracting.
+Reads or writes the archive comment. `GET` reads; `POST` with a `comment`
+field writes.
+
+**Parameters** (query string, read):
+- `path` (string, required): Absolute path to the archive
+
+**Parameters** (JSON body, write):
+- `path` (string, required): Absolute path to the archive
+- `comment` (string, required): New comment text
+
+**Response** (read):
+```json
+{ "comment": "text stored in the archive" }
+```
+
+**Response** (write):
+```json
+{ "success": true }
+```
+
+The comment is handed to 7-Zip through a temporary file, never on the command
+line. Only formats whose comment 7-Zip can update (ZIP / 7Z) are meaningful.
+
+### `preview-file`
+
+Extracts a single file into memory so the UI can preview it without unpacking
+the whole archive. Works for encrypted archives too.
 
 **Parameters** (JSON body):
 - `path` (string, required): Absolute path to the archive
+- `targetPath` (string, required): Path of the file inside the archive
 - `password` (string, optional): Decryption password
 - `codePage` (string, optional): Filename encoding
 
 **Response**:
 ```json
 {
-  "valid": true,
-  "fileName": "file.zip",
-  "partCount": 1
+  "content": "payload as utf8 text or base64",
+  "fileName": "readme.txt",
+  "encoding": "utf8"
 }
 ```
+
+`encoding` is `base64` for images and `utf8` for everything else. Files above
+the 12 MiB cap are rejected with `PREVIEW_TOO_LARGE`.
 
 ### `directories`
 
@@ -276,12 +323,43 @@ Generates a diagnostic report for troubleshooting.
 ```json
 {
   "generatedAt": "ISO timestamp",
-  "version": "1.0.0",
-  "requestId": "hex-string",
-  "source": { "path": "...", "readable": true, "mode": "0644", "uid": 1000, "gid": 1000, "size": 1234 },
-  "authorizedRoots": [...],
-  "engine": { "path": "...", "source": "bundled" },
-  "runtimeRoot": "/tmp/chzip",
+  "version": "3.1",
+  "requestId": "16-char-hex",
+  "source": {
+    "path": "/vol1/share/a.7z",
+    "readable": true,
+    "mode": "0644",
+    "uid": 1000,
+    "gid": 1000,
+    "size": 1234,
+    "modified": "ISO timestamp",
+    "application": { "uid": 1000, "gid": 1000, "groups": [1000] },
+    "components": [
+      { "path": "/vol1", "type": "directory", "mode": "0755", "uid": 0, "gid": 0, "accessible": true },
+      { "path": "/vol1/share/a.7z", "type": "file", "mode": "0644", "uid": 1000, "gid": 1000, "accessible": true }
+    ]
+  },
+  "sourceError": null,
+  "authorizedRoots": [
+    { "path": "/vol1/share", "canBrowse": true, "canSelect": true }
+  ],
+  "engine": { "path": "/var/apps/CHzip/target/vendor/7zip/linux-x64/7zzs", "source": "bundled" },
+  "runtimeRoot": "/var/apps/CHzip/tmp",
   "logTail": "..."
 }
 ```
+
+Notes:
+- `components` walks every ancestor of the source file, which is what makes an
+  ACL problem visible when the share itself is authorized but the file is not.
+- `sourceError` is non-null when the archive could not be inspected; `source`
+  then carries whatever could still be collected.
+- `requestId` is only used as a log filter when it is exactly 16 hex
+  characters; anything else is reported as an empty string.
+- `version` is read from the manifest. Under the installed layout that path may
+  not resolve, in which case it falls back to `"1.0.0"` — do not treat this
+  field as authoritative for the running version.
+- The whole report passes through redaction before it is returned: keys that
+  look sensitive (`password` / `secret` / `token` / `credential` / `private` /
+  `authorization` / a bare `auth`) and `-p<secret>` arguments in log text are
+  replaced with `[REDACTED]`.

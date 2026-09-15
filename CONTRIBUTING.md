@@ -126,15 +126,17 @@ on your `PATH`.
 
 ## Release Checklist
 
-1. Bump the version in **four** places — there is no single source of truth,
+1. Bump the version in **three** places — there is no single source of truth,
    and the manifest version is what actually ships:
    - `manifest` — `version = X.Y`
    - `package.json` — `"version": "X.Y"` (not read by the build, easy to miss)
    - `app/www/index.html` — asset cache-busting `?v=X.Y` (1 CSS + 12 JS).
      Leave the brand icon at `?v=1.0.0` unless that file itself changed.
-   - `scripts/audit-fpk.js` — the two `fileName` assertions and the manifest
-     version regex
-2. Run `npm test`
+
+   `scripts/audit-fpk.js` no longer needs editing: it derives the version,
+   the package file names and the 7-Zip paths from `scripts/build-fpk.js`.
+2. Run `npm test` — `tests/version.test.js` fails when the three places above
+   disagree, so a missed bump is caught before packaging.
 3. Build: `node scripts/build-fpk.js --platform all --variant all`.
    Make sure `build/staging/` is empty first — the script's recursive cleanup
    deletes ~70 files at once and trips the bulk-delete safety hook (threshold
