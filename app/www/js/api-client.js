@@ -96,7 +96,9 @@
             }
         }
 
-        function postApi(api, body) {
+        // options 是可选的：透传给 requestJson，用来传 signal（取消在途请求）
+        // 或更短的 timeoutMs。不传时行为与原先完全一致。
+        function postApi(api, body, options) {
             return requestJson(apiUrl(api), {
                 method: "POST",
                 headers: {
@@ -106,6 +108,7 @@
                     api,
                     ...body,
                 }),
+                ...options,
             });
         }
 

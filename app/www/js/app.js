@@ -123,6 +123,7 @@
                     .map((entry) => entry.path),
             );
             state.previewReady = true;
+            state.previewSolid = Boolean(preview.solid);
             state.passwordRequired = Boolean(preview.passwordRequired);
             state.passwordVerified = preview.passwordVerified !== false;
             els.fileCount.textContent = String(preview.summary?.fileCount || 0);
@@ -337,10 +338,29 @@
 
         els.previewDialog.hidden = false;
         els.previewFileName.textContent = entry.name;
-        els.previewBody.innerHTML = '<div class="preview-loading">正在加载预览...</div>';
         els.previewInfo.textContent = uiPreview.formatSize(entry.size);
         els.previewCopyBtn.hidden = !uiPreview.isTextFile(entry.name);
         previewContent = "";
+
+        // 固实（solid）压缩包取出任一文件都要先解压整包，耗时与压缩包体积
+        // 成正比、与目标文件大小无关。提前把原因说清楚，别让用户面对一次
+        // 莫名其妙的长时间等待。
+        const loading = document.createElement("div");
+        loading.className = "preview-loading";
+        loading.textContent = state.previewSolid
+            ? "正在加载预览…此压缩包为固实（solid）压缩，需先解压到目标文件所在位置，可能耗时较久。"
+            : "正在加载预览...";
+        els.previewBody.replaceChildren(loading);
+
+        // 取消上一个仍在途的预览请求：否则连点几次会同时跑起多个 7z，
+        // 把「占满一个核」升级成「占满多个核」。
+        // 注意 abort 只停前端的 fetch，服务端那个 7z 由 preview-file 的
+        // 超时兜底（见 services.previewFile 的 PREVIEW_TIMEOUT）。
+        if (state.previewAbortController) {
+            state.previewAbortController.abort();
+        }
+        const abortController = new AbortController();
+        state.previewAbortController = abortController;
 
         const requestSeq = ++state.previewFileRequestId;
         try {
@@ -349,6 +369,11 @@
                 targetPath,
                 password: els.passwordInput.value,
                 codePage: els.codePageSelect.value,
+            }, {
+                signal: abortController.signal,
+                // 比后端 PREVIEW_FILE_MS（45s）留一点余量，让后端先给出
+                // 「固实压缩需解压整包」这类明确错误，而不是前端自己超时。
+                timeoutMs: 60 * 1000,
             });
             if (requestSeq !== state.previewFileRequestId) {
                 return;
@@ -389,11 +414,20 @@
             errorBox.className = "preview-error";
             errorBox.textContent = error.message || "预览失败";
             els.previewBody.replaceChildren(errorBox);
+        } finally {
+            if (state.previewAbortController === abortController) {
+                state.previewAbortController = null;
+            }
         }
     }
 
     function closePreviewDialog() {
         const els = state.elements;
+        // 关掉弹窗就没必要再等这个预览了；顺手取消，免得它回来时又去改 DOM。
+        if (state.previewAbortController) {
+            state.previewAbortController.abort();
+            state.previewAbortController = null;
+        }
         uiPreview.revokeBlobUrl(els.previewBody);
         els.previewDialog.hidden = true;
         previewContent = "";

@@ -8,6 +8,7 @@ const os = require("node:os");
 
 const { createServices } = require("../app/server/lib/services");
 const { JobStore } = require("../app/server/lib/jobs");
+const { runSevenZipSync } = require("../app/server/lib/engine");
 const { inspectSourceFile } = require("../app/server/lib/source-access");
 const { findNestedTar } = require("../app/server/lib/nested");
 const { CLEANUP_APIS, hasRequestBody } = require("../app/server/api");
@@ -349,6 +350,9 @@ test("A13 previewFile reports PREVIEW_TOO_LARGE instead of ENOBUFS", async () =>
 
   const services = createTestServices({
     findTool: () => ({ path: scriptPath, source: "test" }),
+    // previewFile 现在走 runSync（= runSevenZipSync）以继承超时与错误分类，
+    // 所以这里必须注入真实实现，否则会被 createTestServices 的替身拦下。
+    runSync: runSevenZipSync,
     maxPreviewFileBytes: 1024,
   });
 
@@ -367,6 +371,8 @@ test("A13 previewFile still succeeds for output under the limit", async () => {
 
   const services = createTestServices({
     findTool: () => ({ path: scriptPath, source: "test" }),
+    // 同上：previewFile 走 runSync，需要真实实现。
+    runSync: runSevenZipSync,
     maxPreviewFileBytes: 1024 * 1024,
   });
 

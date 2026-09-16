@@ -3,8 +3,8 @@
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { spawn, spawnSync } = require("node:child_process");
-const { LIMITS, PERMISSIONS } = require("./constants");
+const { spawn } = require("node:child_process");
+const { LIMITS, PERMISSIONS, TIMEOUTS } = require("./constants");
 const { inspectArchive } = require("./archive-service");
 const {
   findSevenZip,
@@ -31,6 +31,7 @@ const {
 } = require("./nested");
 const {
   detectTechnicalListFormat,
+  detectTechnicalListProperties,
   parseTechnicalList,
 } = require("./preview");
 const {
@@ -135,6 +136,8 @@ function createServices(options = {}) {
     || LIMITS.MAX_NESTED_PREVIEW_BYTES;
   const maxPreviewFileBytes = options.maxPreviewFileBytes
     || LIMITS.MAX_PREVIEW_FILE_BYTES;
+  const previewFileTimeoutMs = options.previewFileTimeoutMs
+    || TIMEOUTS.PREVIEW_FILE_MS;
   const spawnWorker = options.spawnWorker || ((jobId) => {
     const apiPath = path.resolve(__dirname, "..", "api.js");
     const child = spawn(process.execPath, [apiPath, "--worker", jobId], {
@@ -263,6 +266,9 @@ function createServices(options = {}) {
       }
       const parsed = parseTechnicalList(result.stdout);
       const passwordRequired = Boolean(parsed.summary.encrypted);
+      // 固实标记随列表一起返回：前端据此在预览单文件前给出预警。
+      // 固实包取出任一文件都要先解压整包，是"预览小文件却跑满一个核"的根因。
+      const properties = detectTechnicalListProperties(result.stdout);
       return {
         ...parsed,
         format: detectedFormat || effectiveSelection.format,
@@ -272,6 +278,7 @@ function createServices(options = {}) {
         passwordVerified: passwordRequired
           ? Boolean(input.password)
           : true,
+        solid: properties.solid,
       };
     });
   }
@@ -561,34 +568,58 @@ function createServices(options = {}) {
     const selectionFile = path.join(previewDir, "selection.txt");
     fs.writeFileSync(selectionFile, targetPath, { encoding: "utf8", mode: 0o600 });
     try {
-      // 注意：archive.tool 是 { path, source } 对象，spawnSync 的第一个参数
-      // 必须是可执行文件路径字符串（其余调用点走 runSevenZipSync，由它取
-      // tool.path）。这里原先直接传了对象，会让 spawnSync 抛
-      // ERR_INVALID_ARG_TYPE，导致 preview-file 接口一直不可用。
-      const result = spawnSync(archive.tool.path, buildStdoutExtractArgs(archive.selection, {
-        archivePath: archive.filePath,
-        password: input.password || "",
-        codePage: input.codePage || "auto",
-        selectionFile,
-      }), {
-        cwd: archive.directory,
-        maxBuffer: maxPreviewFileBytes,
-        encoding: null,
-      });
-      // maxBuffer 触顶时 spawnSync 会杀掉子进程并给出 ENOBUFS。
-      // 转成明确的业务错误码，前端才能提示"文件太大"而不是报未知错误。
-      if (result.error && result.error.code === "ENOBUFS") {
-        const limitMiB = Math.round(maxPreviewFileBytes / 1024 / 1024);
-        const error = new Error(`文件超过预览上限（${limitMiB} MiB），无法预览`);
-        error.code = "PREVIEW_TOO_LARGE";
-        throw error;
+      // 走 runSync（= runSevenZipSync）而不是裸 spawnSync：自动带上超时与
+      // 统一的错误分类。此前这里直接调 spawnSync，唯一原因是要 encoding:null
+      // 拿二进制（图片预览），代价是把超时一起漏掉了 —— 固实（solid）压缩包
+      // 取出单个文件必须解压整包，没有超时就会一直占满一个核。
+      // 现在 runSevenZipSync 支持 encoding 选项，两者可以兼得。
+      let result;
+      try {
+        result = runSync(archive.tool, buildStdoutExtractArgs(archive.selection, {
+          archivePath: archive.filePath,
+          password: input.password || "",
+          codePage: input.codePage || "auto",
+          selectionFile,
+        }), {
+          cwd: archive.directory,
+          maxBuffer: maxPreviewFileBytes,
+          encoding: null,
+          timeout: previewFileTimeoutMs,
+          // 超时后必须真的把 7z 杀掉，否则它会在后台继续烧 CPU。
+          killSignal: "SIGKILL",
+        });
+      } catch (previewError) {
+        // spawnSync 超时会给出 ETIMEDOUT（此时子进程已按 killSignal 被杀）。
+        if (previewError.code === "ETIMEDOUT") {
+          // 秒数格式化：45s 显示「45 秒」；不足 10s 保留一位小数，
+          // 免得短超时（如单测里的 300ms）在文案里显示成「0 秒」。
+          const timeoutSeconds = previewFileTimeoutMs / 1000;
+          const secondsText = timeoutSeconds >= 10
+            ? String(Math.round(timeoutSeconds))
+            : String(Math.round(timeoutSeconds * 10) / 10);
+          const error = new Error(
+            `预览该文件已超过 ${secondsText} 秒，已中止：此压缩包很可能是固实（solid）压缩，`
+            + "取出其中任一文件都需先解压整个包，耗时与压缩包体积成正比（与目标文件大小无关）。"
+            + "建议直接解压后再查看。",
+          );
+          error.code = "PREVIEW_TIMEOUT";
+          throw error;
+        }
+        // maxBuffer 触顶时 runSevenZipSync 转成 PREVIEW_LIMIT；
+        // 这里换成更具体的 PREVIEW_TOO_LARGE，前端才能提示"文件太大"。
+        if (previewError.code === "PREVIEW_LIMIT") {
+          const limitMiB = Math.round(maxPreviewFileBytes / 1024 / 1024);
+          const error = new Error(`文件超过预览上限（${limitMiB} MiB），无法预览`);
+          error.code = "PREVIEW_TOO_LARGE";
+          throw error;
+        }
+        throw previewError;
       }
-      if (result.status !== 0) {
-        const error = new Error(String(result.stderr || "预览文件失败"));
-        error.code = "PREVIEW_FAILED";
-        throw error;
-      }
-      const output = result.stdout || Buffer.alloc(0);
+      // runSevenZipSync 在 encoding:null 下回传 Buffer；这里加一层防御，
+      // 万一将来有人改成 utf8，也不会静默产出内容错误的预览。
+      const output = Buffer.isBuffer(result.stdout)
+        ? result.stdout
+        : Buffer.from(String(result.stdout || ""), "utf8");
       const isImage = /\.(png|jpe?g|gif|bmp|webp|ico|tiff?)$/i.test(targetPath);
       if (isImage) {
         return {

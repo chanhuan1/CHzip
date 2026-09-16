@@ -6,7 +6,7 @@
 
 面向 **fnOS（飞牛私有云）文件管理器右键场景**的专业压缩包处理工具 —— 解压 · 分卷 · 选择性解压 · 文件预览 · 密码管理，一键完成。
 
-[![版本](https://img.shields.io/badge/版本-v3.2-2786dc?style=flat-square)](https://github.com/chanhuan1/CHzip/releases)
+[![版本](https://img.shields.io/badge/版本-v3.3-2786dc?style=flat-square)](https://github.com/chanhuan1/CHzip/releases)
 [![平台](https://img.shields.io/badge/平台-fnOS%20(x86_64%20·%20arm64)-2786dc?style=flat-square)]()
 [![Stars](https://img.shields.io/github/stars/chanhuan1/CHzip?style=flat-square&label=Stars&color=2786dc)](https://github.com/chanhuan1/CHzip/stargazers)
 [![Forks](https://img.shields.io/github/forks/chanhuan1/CHzip?style=flat-square&label=Forks&color=2786dc)](https://github.com/chanhuan1/CHzip/forks)
@@ -52,7 +52,7 @@
 
 ## 🚀 快速开始
 
-1. 在飞牛应用中心手动安装 `CHzip_3.2_search-fixed_<架构>.fpk`（x86_64 / arm64）。
+1. 在飞牛应用中心手动安装 `CHzip_3.3_search-fixed_<架构>.fpk`（x86_64 / arm64）。
 2. 文件管理器右键压缩包（分卷选中首卷即可）→「使用 CHzip 打开」。
 3. 预览目录 → 选择目标路径 → 点「开始解压」。
 
@@ -96,6 +96,21 @@ CHzip/
 ```
 
 ## 🕒 更新日志
+
+### v3.3（2026-09-16）
+- **修复：预览固实压缩包里的文件会把 CPU 跑满**。固实（solid）压缩把包内所有文件当成
+  一条连续的流来压，取出其中任意一个文件都必须从流的开头解压到目标位置 —— 代价由
+  **压缩包体积**决定，与目标文件大小无关：1GB+ 的固实 RAR 分卷，预览一个几 KB 的 txt
+  也会让一个核 100% 跑满到解压完为止。而 `preview-file` 是唯一一处绕过统一封装、直接
+  调用 7-Zip 的代码，**把超时一起漏掉了**，于是这个代价完全没有上界。
+  现在补上 45 秒超时（超时会真的杀掉 7z 子进程，而不是丢下它继续跑）、改走统一封装以
+  继承超时与错误分类，并在预览固实包时提前说明原因。
+- **新增**：`preview` 返回 `solid` 标记（从已有的 `7z l -slt` 属性段零成本读出），
+  前端在预览固实包前提示「需先解压整个包，可能耗时较久」，不再让用户面对一次
+  没有解释的长时间等待。
+- **工程**：`runSevenZipSync` 新增 `encoding` 选项（默认 utf8，既有调用点行为不变），
+  二进制预览（图片）不再需要绕过统一封装；前端预览改为可取消，连点不会同时跑起多个 7z。
+- 测试：258 → 269。版本号升至 3.3。
 
 ### v3.2（2026-09-15）
 - **修复：进度条下方堆着一串百分比**。7-Zip 在管道（非 TTY）下会把文件名行与进度行挤在
@@ -185,7 +200,7 @@ CHzip/
 ## 🛠️ 开发 / 构建 / 测试
 
 ```bash
-npm test                 # node --test，258 个用例
+npm test                 # node --test，269 个用例
 node --check app/server/api.js   # 语法检查
 node scripts/build-fpk.js        # 构建 dist/*.fpk（双架构，需 fnpack）
 node scripts/audit-fpk.js        # 发布审计（校验和/版本/架构/搜索特性）

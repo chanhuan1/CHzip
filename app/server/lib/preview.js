@@ -68,6 +68,44 @@ function detectTechnicalListFormat(text) {
   return formats.at(-1) || null;
 }
 
+// 读取 `7z l -slt` 输出里 `----------` **之前**那段「压缩包属性」，取出格式、
+// 是否固实压缩、固实块数。
+//
+// 为什么关心固实：固实（solid）压缩把包内所有文件当成一条连续的流来压，
+// 想单独取出其中任何一个文件，都必须从流的开头一路解压到目标位置。于是
+// 「预览一个几 KB 的 txt」的真实代价是**整个压缩包的大小** —— 1GB+ 的固实包
+// 会让一个核跑满很久，而用户完全看不出原因。
+//
+// 好消息是这份信息**零额外开销**：属性段本来就在列表那一次 `7z l -slt` 的
+// 输出里（detectTechnicalListFormat 已经在读同一段找 Type），不用再跑一次 7z。
+//
+// 多层的包（如 .tar.gz）可能出现多个属性段，这里与 detectTechnicalListFormat
+// 保持一致：取**最后一个**。固实预警是提示性的，宁可保守也不误报。
+function detectTechnicalListProperties(text) {
+  const header = String(text).split(/\n----------(?:\r?\n|$)/, 1)[0];
+  let format = null;
+  let solid = false;
+  let blocks = 0;
+  for (const line of header.split(/\r?\n/)) {
+    const typeMatch = line.match(/^Type = (.+)$/);
+    if (typeMatch) {
+      format = normalizeTechnicalFormat(typeMatch[1]) || format;
+      continue;
+    }
+    // 7-Zip 用 "Solid = +" 表示固实；"Solid = -" 或字段缺失都算非固实。
+    const solidMatch = line.match(/^Solid = (.+)$/);
+    if (solidMatch) {
+      solid = solidMatch[1].trim() === "+";
+      continue;
+    }
+    const blocksMatch = line.match(/^Blocks = (\d+)$/);
+    if (blocksMatch) {
+      blocks = Number(blocksMatch[1]);
+    }
+  }
+  return { format, solid, blocks };
+}
+
 const STREAM_PARSE_THRESHOLD_BYTES = 1024 * 1024;
 
 function parseTechnicalList(text, options = {}) {
@@ -316,6 +354,7 @@ module.exports = {
   DEFAULT_MAX_BYTES,
   DEFAULT_MAX_ENTRIES,
   detectTechnicalListFormat,
+  detectTechnicalListProperties,
   PreviewLimitError,
   normalizeEntryPath,
   parseTechnicalList,

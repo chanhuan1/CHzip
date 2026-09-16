@@ -13,6 +13,17 @@ const TIMEOUTS = Object.freeze({
   // 过期任务清理的最小间隔：清理要全量扫 jobs 目录，不能挂在 1s 一次的
   // status 轮询上。用 runtimeRoot 下的 cleanup.stamp mtime 做跨请求节流。
   CLEANUP_MIN_INTERVAL_MS: 60 * 1000,
+  // 单文件免解压预览（preview-file）的 7z 超时。
+  //
+  // 为什么必须封顶：固实（solid）压缩包无法随机访问 —— 取出其中任意一个
+  // 文件都要从固实块开头一路解压到目标位置。代价由**压缩包体积**决定，
+  // 与目标文件大小无关：1GB+ 的固实 RAR 预览一个几 KB 的 txt，也会让一个核
+  // 100% 跑满到解压完为止（实测反馈，见 docs/PERF-VERIFICATION.md 的补充项）。
+  //
+  // 45s 的权衡：合理的慢预览（几百 MB 的 tar.gz，目标文件在流末尾）约
+  // 10~30s，45s 留足余量不会误杀；又远小于前端 330s 的默认超时，保证前端
+  // 拿到的是后端这句明确错误，而不是它自己的"请求超时"。
+  PREVIEW_FILE_MS: 45 * 1000,
 });
 
 const LIMITS = Object.freeze({

@@ -263,15 +263,31 @@ function parseProgress(log) {
   return tracker.state();
 }
 
+// 把 spawnSync 的输出统一成字符串。encoding:"utf8" 时本来就是 string；
+// encoding:null（二进制预览）时是 Buffer，必须先显式解码再参与拼接/分类。
+function toText(value) {
+  if (value == null) {
+    return "";
+  }
+  return Buffer.isBuffer(value) ? value.toString("utf8") : String(value);
+}
+
 function runSevenZipSync(tool, args, options = {}) {
+  // encoding 默认 utf8，保持所有既有调用点逐字节不变；
+  // 传 null 时 stdout/stderr 是 Buffer —— 预览图片需要原始字节，不能先过
+  // 一次 UTF-8 解码（那会把二进制内容替换成 U+FFFD）。
+  const encoding = options.encoding === undefined ? "utf8" : options.encoding;
   const result = spawnSync(tool.path, args, {
     cwd: options.cwd,
-    encoding: "utf8",
+    encoding,
     timeout: options.timeout || TIMEOUTS.SEVENZIP_SYNC_MS,
     maxBuffer: options.maxBuffer || LIMITS.MAX_PREVIEW_OUTPUT_BYTES,
     windowsHide: true,
   });
-  const log = `${result.stdout || ""}${result.stderr || ""}`;
+  // encoding 为 null 时 stdout/stderr 是 Buffer：直接塞进模板字符串会走
+  // Buffer.toString() 的默认 utf8，二进制会被替换字符污染。日志只用于错误
+  // 分类，所以这里显式解码。
+  const log = toText(result.stdout) + toText(result.stderr);
   if (result.error) {
     if (result.error.code === "ENOBUFS") {
       const error = new Error("压缩包预览输出超过大小限制");
@@ -293,7 +309,12 @@ function runSevenZipSync(tool, args, options = {}) {
     error.log = log;
     throw error;
   }
-  return { exitCode: result.status, log, stdout: result.stdout || "", stderr: result.stderr || "" };
+  return {
+    exitCode: result.status,
+    log,
+    stdout: result.stdout == null ? "" : result.stdout,
+    stderr: result.stderr == null ? "" : result.stderr,
+  };
 }
 
 function spawnSevenZip(tool, args, options = {}) {

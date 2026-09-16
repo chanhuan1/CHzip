@@ -25,6 +25,12 @@
             previewing: false,
             previewReady: false,
             previewLimited: false,
+            // 压缩包是否固实（solid）压缩。固实包取出任一文件都要先解压整包，
+            // 预览单文件会非常慢，需要提前给用户预警。
+            previewSolid: false,
+            // 当前在途的预览请求。新请求发起前先 abort 掉上一个，避免连点
+            // 导致多个 7z 同时跑（那会把单核占满升级成多核占满）。
+            previewAbortController: null,
             passwordRequired: false,
             passwordVerified: true,
             permissionError: null,
