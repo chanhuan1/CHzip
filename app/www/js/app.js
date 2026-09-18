@@ -828,6 +828,12 @@
     window.addEventListener("beforeunload", stopAllPollers);
     window.addEventListener("pagehide", stopAllPollers);
 
+    // pagehide 停掉的轮询器要在 bfcache 恢复时重启，否则 fnOS 内嵌窗口
+    // 隐藏再切回后任务栏永久停更（pagehide≠unload，页面会被 bfcache 保留）。
+    // 恢复逻辑在 ui-jobs.resumePollers：只处理 persisted=true，按当前
+    // 任务/弹窗状态重启对应轮询器。
+    window.addEventListener("pageshow", (event) => uiJobs.resumePollers(state, api, event));
+
     loadApp()
         .then(updateActionAvailability)
         .catch((error) => {

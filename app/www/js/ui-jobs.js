@@ -862,6 +862,30 @@
         }
     }
 
+    // bfcache 恢复后重启 pagehide 停掉的轮询器（见 app.js 的 stopAllPollers）。
+    // 只处理 persisted=true；普通首次加载不重复启动。四类状态按需恢复：
+    // 进行中的任务轮询、常驻监听、以及仍开着的任务中心/历史弹窗。
+    function resumePollers(state, api, event) {
+        if (!event || !event.persisted) {
+            return;
+        }
+        if (!state.pollTimer && state.jobId && state.running) {
+            state.pollTimer = createPoller(() => pollStatus(state, api), {
+                interval: 1000,
+            });
+            state.pollTimer.start();
+        }
+        if (!state.taskWatchTimer) {
+            startTaskWatch(state, api);
+        }
+        if (state.taskCenterOpen && !state.taskCenterTimer) {
+            openTaskCenter(state, api);
+        }
+        if (state.historyOpen && !state.historyTimer) {
+            openHistory(state, api);
+        }
+    }
+
     root.CHzipUiJobs = {
         ACTIVE_POLL_MS,
         HIDDEN_POLL_INTERVAL_MS,
@@ -883,6 +907,7 @@
         pollTaskCenter,
         pollTaskMini,
         resetClearHistoryConfirm,
+        resumePollers,
         setJobProgress,
         startExtract,
         startTaskWatch,
