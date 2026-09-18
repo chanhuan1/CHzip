@@ -18,6 +18,11 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+// countActive / listAndTrimHistory / removeAllFinished / cleanupExpired 各自
+// readdirSync 一遍 jobs 目录，看似可合并为一次共享扫描。但 jobsDir 条目上限
+// 约 30（历史 20 + 并发上限 + 少量过期残留），一次 readdir 是微秒级；同一
+// 请求内也没有同一函数的重复调用。合并带来的代码复杂度不值这个收益——
+// 保持各自独立、按需调用。
 class JobStore {
   constructor(runtimeRoot) {
     this.runtimeRoot = runtimeRoot;

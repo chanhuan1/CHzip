@@ -41,6 +41,9 @@ function canAccess(directoryPath, mode) {
   }
 }
 
+// 访问性检查必须用 access(2) 而不是从 stat.mode 推断：fnOS 的共享目录授权
+// 走 ACL，stat.mode 不反映 ACL 授权结果。每子目录 stat+2×access 看似冗余，
+// 但换成 mode 位推断会在 ACL 场景误判——正确性优先于这 2 次 syscall。
 function getDirectoryCapabilities(directoryPath) {
   const stat = fs.statSync(directoryPath);
   if (!stat.isDirectory()) {
