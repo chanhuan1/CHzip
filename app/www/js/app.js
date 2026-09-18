@@ -381,6 +381,9 @@
             previewContent = result.content;
             const fileType = uiPreview.getFileType(entry.name);
             els.previewIcon.classList.toggle("is-image", fileType === "image");
+            // 连续预览时先回收上一张图片的 blob URL，否则每次换图都泄漏一个。
+            // 对纯文本子树 revokeBlobUrl 是 no-op，两个分支都调最安全。
+            uiPreview.revokeBlobUrl(els.previewBody);
             if (fileType === "image") {
                 try {
                     const binaryString = atob(result.content);
