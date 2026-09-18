@@ -78,6 +78,9 @@ function inspectArchive(selectedPath, options = {}) {
     selection,
     partCount: volumePaths.length,
     parts: volumeSources.map(toClientFile),
+    // sources 是 inspectSourceFile 的原始返回（含 .stat），供 extract 直接
+    // 复用构造源文件指纹，避免对同一批分卷再跑一遍 realpath+stat。
+    sources: volumeSources,
     missingParts,
     warnings,
     tool: options.sevenZip || null,

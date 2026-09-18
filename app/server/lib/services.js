@@ -216,7 +216,7 @@ function createServices(options = {}) {
 
   function info(input) {
     const tool = requireTool(findTool);
-    return inspectArchive(input.path, { sevenZip: tool });
+    return inspectArchive(input.path, { sevenZip: tool, inspectSource });
   }
 
   // providedArchive：调用方（extract）已经解析过同一个压缩包时可以直接传入，
@@ -367,10 +367,21 @@ function createServices(options = {}) {
         sevenZipSource: archive.tool.source,
         codePage: input.codePage || "auto",
         partCount: archive.partCount,
-        sourceFingerprint: fingerprintFiles(
-          (archive.parts.length ? archive.parts : [{ path: archive.filePath }])
-            .map((part) => part.path),
-        ),
+        // info() 已对每卷跑过 realpath+stat（结果在 archive.sources 的
+        // .stat 上），直接复用构造指纹；只对没有 stat 的退化路径才
+        // 回退 fingerprintFiles（单文件且无 sources 时）。
+        sourceFingerprint: (archive.sources && archive.sources.length
+          ? archive.sources
+          : [{ path: archive.filePath, stat: null }]).map((source) => (
+          source.stat
+            ? {
+              path: source.path,
+              dev: source.stat.dev,
+              ino: source.stat.ino,
+              size: source.stat.size,
+              mtimeMs: source.stat.mtimeMs,
+            }
+            : fingerprintFiles([source.path])[0])),
       });
 
       let selectionFile = "";

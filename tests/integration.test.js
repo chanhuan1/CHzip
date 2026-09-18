@@ -463,3 +463,68 @@ test("services.clearHistory empties history and reports count", () => {
 test("services.clearHistory on empty history is a no-op", () => {
   assert.deepEqual(services.clearHistory(), { removed: 0 });
 });
+
+// ---------------------------------------------------------------- P2：extract 复用 inspect stat 构造指纹
+
+test("services.extract builds fingerprints from inspect stats without a second scan", () => {
+  const archivePath = path.join(tmpDir, "multi.zip");
+  fs.writeFileSync(archivePath, "fake-archive");
+  // zip-z 伪分卷：main.zip + z01/z02，三分卷场景最能暴露重复扫描。
+  fs.writeFileSync(path.join(tmpDir, "multi.z01"), "p1");
+  fs.writeFileSync(path.join(tmpDir, "multi.z02"), "p2");
+
+  const realpathCalls = [];
+  const statCalls = [];
+  const countingServices = createServices({
+    runtimeRoot: tmpDir,
+    findTool: () => ({ path: process.execPath, source: "test" }),
+    runSync: () => ({
+      exitCode: 0,
+      log: "",
+      stdout: "Type = zip\n----------\nPath = test.txt\nSize = 100\nAttributes = A\n\n",
+      stderr: "",
+    }),
+    discoverRoots: () => [{ path: tmpDir, canBrowse: true, canSelect: true }],
+    inspectSource: (filePath) => {
+      const resolved = fs.realpathSync(filePath);
+      realpathCalls.push(resolved);
+      const stat = fs.statSync(resolved);
+      statCalls.push(resolved);
+      return {
+        path: resolved,
+        readable: true,
+        mode: "0644",
+        uid: 1000,
+        gid: 1000,
+        size: stat.size,
+        modified: stat.mtime.toISOString(),
+        application: { uid: 1000, gid: 1000, groups: [] },
+        components: [],
+        stat,
+      };
+    },
+  });
+
+  const result = countingServices.extract({
+    path: archivePath,
+    destinationRoot: tmpDir,
+  });
+
+  // 三分卷（z01 + z02 + main.zip）各被 inspectSource 恰好一次——
+  // 修复前 fingerprintFiles 会对同一批路径再跑一遍 realpath+stat。
+  assert.equal(realpathCalls.length, 3,
+    `每卷 realpath 恰好一次，实际 ${realpathCalls.length} 次：${realpathCalls.join(", ")}`);
+  assert.equal(statCalls.length, 3,
+    `每卷 stat 恰好一次，实际 ${statCalls.length} 次`);
+
+  const job = countingServices.store.read(result.jobId);
+  assert.equal(job.sourceFingerprint.length, 3, "三分卷应有三个指纹");
+  for (const fingerprint of job.sourceFingerprint) {
+    assert.ok(Number.isFinite(fingerprint.dev));
+    assert.ok(Number.isFinite(fingerprint.ino));
+    assert.ok(Number.isFinite(fingerprint.size));
+    assert.ok(Number.isFinite(fingerprint.mtimeMs));
+    assert.ok(fingerprint.path.startsWith(tmpDir) || fingerprint.path.startsWith(fs.realpathSync(tmpDir)));
+  }
+  countingServices.store.removeAllFinished();
+});
