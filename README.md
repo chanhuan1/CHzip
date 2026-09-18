@@ -97,6 +97,15 @@ CHzip/
 
 ## 🕒 更新日志
 
+### v3.5（2026-09-18）
+- **修复：两个会在运行时崩溃的引用错误**（全盘死代码扫描发现）。
+  嵌套 tar 解压的清理失败路径调用了未导入的函数，会抛 `ReferenceError` 并吞掉正常结果；
+  压缩包打开失败、目录授权弹窗两条错误路径调用了未导出的诊断函数，会抛 `TypeError`。
+- **工程：死代码清理**。逐项验证零引用后删除后端与前端一批死函数、死导出、死字段与
+  失效 CSS（含 v2.4 起就接不进 CGI 的 `isAllowedOrigin`、废弃的 taskMini 样式等），
+  并新增「前端调用与导出对象对账」测试防下一次漏导出。
+- 测试：292 → 297。版本号升至 3.5。
+
 ### v3.4（2026-09-18）
 - **修复：切回窗口后任务栏永久停更**。`pagehide` 会停掉所有轮询器，但 `pagehide` ≠ 卸载 ——
   fnOS 内嵌窗口被 bfcache 保留时，切回后进度条不再更新。新增 `pageshow` 恢复逻辑
@@ -214,7 +223,7 @@ CHzip/
 ## 🛠️ 开发 / 构建 / 测试
 
 ```bash
-npm test                 # node --test，292 个用例
+npm test                 # node --test，297 个用例
 node --check app/server/api.js   # 语法检查
 node scripts/build-fpk.js        # 构建 dist/*.fpk（双架构，需 fnpack）
 node scripts/audit-fpk.js        # 发布审计（校验和/版本/架构/搜索特性）
