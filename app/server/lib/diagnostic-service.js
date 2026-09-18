@@ -17,20 +17,32 @@ const {
 
 let cachedVersion = null;
 
-const MANIFEST_PATH = path.resolve(__dirname, "..", "..", "..", "manifest");
+// fnpack 安装布局：/var/apps/CHzip/target/ 下直接是 server/、cmd/、manifest，
+// 本文件装在 target/server/lib/，因此 manifest 在 __dirname/../..（2 级）。
+// 开发树里本文件在 app/server/lib/，manifest 在仓库根（3 级）。两种布局
+// 都列出，按存在性取第一个；都 miss 才回退 "1.0.0"。
+const MANIFEST_CANDIDATES = [
+  path.resolve(__dirname, "..", "..", "manifest"),
+  path.resolve(__dirname, "..", "..", "..", "manifest"),
+];
 
-function getPackageVersion() {
+function getPackageVersion(fsModule = require("node:fs")) {
   if (cachedVersion) {
     return cachedVersion;
   }
-  try {
-    const fsModule = require("node:fs");
-    const manifest = fsModule.readFileSync(MANIFEST_PATH, "utf8");
-    const match = manifest.match(/^version\s*=\s*(\S+)/m);
-    cachedVersion = match ? match[1] : "1.0.0";
-  } catch (error) {
-    cachedVersion = "1.0.0";
+  for (const candidate of MANIFEST_CANDIDATES) {
+    try {
+      const manifest = fsModule.readFileSync(candidate, "utf8");
+      const match = manifest.match(/^version\s*=\s*(\S+)/m);
+      if (match) {
+        cachedVersion = match[1];
+        return cachedVersion;
+      }
+    } catch (error) {
+      // 该候选不存在或不可读，试下一个。
+    }
   }
+  cachedVersion = "1.0.0";
   return cachedVersion;
 }
 
