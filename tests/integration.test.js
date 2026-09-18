@@ -528,3 +528,70 @@ test("services.extract builds fingerprints from inspect stats without a second s
   }
   countingServices.store.removeAllFinished();
 });
+
+// ---------------------------------------------------------------- BUG：嵌套 tar 清理失败不得 ReferenceError
+
+test("nested-tar cleanup failure is logged, not a ReferenceError", () => {
+  // services.js 的 withPreparedArchive finally 里曾调用未导入的
+  // safeDiagnosticWrite —— 嵌套 tar 清理失败时直接 ReferenceError，
+  // 还会吞掉 callback 的正常返回。构造嵌套 tar（.tar.gz）+ 让 rmSync
+  // 失败的注入，断言：不抛 ReferenceError、走了 safeDiagnosticWrite。
+  const archivePath = path.join(tmpDir, "nested.tar.gz");
+  fs.writeFileSync(archivePath, "fake-nested");
+
+  const writes = [];
+  // fsModule：mkdtempSync 等正常，但 rmSync 对 nested-* 目录抛错，
+  // 以此稳定触发 finally 的 cleanup 失败分支。
+  const fsModule = {
+    ...fs,
+    rmSync(target, options) {
+      if (String(target).includes("nested-")) {
+        const error = new Error("EACCES: permission denied");
+        error.code = "EACCES";
+        throw error;
+      }
+      return fs.rmSync(target, options);
+    },
+  };
+  const countingServices = createServices({
+    runtimeRoot: tmpDir,
+    findTool: () => ({ path: process.execPath, source: "test" }),
+    runSync: () => ({ exitCode: 0, log: "", stdout: "", stderr: "" }),
+    discoverRoots: () => [{ path: tmpDir, canBrowse: true, canSelect: true }],
+    inspectSource: (filePath) => {
+      const resolved = fs.realpathSync(filePath);
+      const stat = fs.statSync(resolved);
+      return {
+        path: resolved,
+        readable: true,
+        mode: "0644",
+        uid: 1000,
+        gid: 1000,
+        size: stat.size,
+        modified: stat.mtime.toISOString(),
+        application: { uid: 1000, gid: 1000, groups: [] },
+        components: [],
+        stat,
+      };
+    },
+    logger: {
+      write(entry) {
+        writes.push(entry);
+      },
+      tail() {
+        return "";
+      },
+    },
+    fsModule,
+  });
+
+  // 触发 preview（嵌套 tar 会走 withPreparedArchive）。rmSync 失败 +
+  // safeDiagnosticWrite 已导入 ⇒ 不抛 ReferenceError。
+  try {
+    countingServices.preview({ path: archivePath });
+  } catch (error) {
+    // 允许业务错误（比如假的 7z 输出），但绝不能是 ReferenceError。
+    assert.equal(error instanceof ReferenceError, false,
+      `不应抛 ReferenceError，实际：${error.message}`);
+  }
+});

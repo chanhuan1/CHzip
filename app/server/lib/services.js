@@ -51,6 +51,7 @@ const {
 const {
   createDiagnosticLogger,
   redactDiagnosticValue,
+  safeDiagnosticWrite,
 } = require("./diagnostics");
 const {
   inspectSourceFile,

@@ -468,6 +468,7 @@
         openCreateDirectoryDialog,
         openDirectoryDialog,
         openPermissionDialog,
+        recordDiagnosticError,
         refreshDirectoryRoots,
         renderDirectoryTree,
         renderInfo,
