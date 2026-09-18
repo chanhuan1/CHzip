@@ -103,19 +103,9 @@
             }
         }
 
-        function getCurrentComment() {
-            return originalComment;
-        }
-
-        function hasComment() {
-            return Boolean(originalComment);
-        }
-
         return {
             closeCommentDialog,
             copyComment,
-            getCurrentComment,
-            hasComment,
             loadComment,
             openCommentDialog,
             saveComment,

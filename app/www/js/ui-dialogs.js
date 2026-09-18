@@ -34,12 +34,6 @@
         els.passwordPromptError.hidden = !message;
     }
 
-    function setPasswordRecordError(message, state) {
-        const els = state.elements;
-        els.passwordRecordError.textContent = message || "";
-        els.passwordRecordError.hidden = !message;
-    }
-
     function setCreateDirectoryError(message, state) {
         const els = state.elements;
         els.createDirectoryError.textContent = message || "";
@@ -80,16 +74,6 @@
         state.lastRequestId = error?.requestId || "";
         state.diagnosticsReport = null;
         state.elements.diagnosticsBtn.hidden = !state.filePath;
-    }
-
-    function clearDiagnosticError(state) {
-        state.lastRequestId = "";
-        state.diagnosticsReport = null;
-        state.elements.diagnosticsBtn.hidden = true;
-    }
-
-    function diagnosticsText(state) {
-        return JSON.stringify(state.diagnosticsReport || {}, null, 2);
     }
 
     function archiveTypeLabel(info) {
@@ -478,7 +462,6 @@
         setCreateDirectoryError,
         setNotice,
         setPasswordPromptError,
-        setPasswordRecordError,
         setToolStatus,
         updateOutputPreview,
     };

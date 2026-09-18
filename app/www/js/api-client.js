@@ -114,7 +114,6 @@
 
         return {
             apiUrl,
-            getApiBaseUrl,
             postApi,
             requestJson,
             POLL_TIMEOUT_MS,

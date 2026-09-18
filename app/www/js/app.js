@@ -34,10 +34,6 @@
         return new URLSearchParams(window.location.search).get("path") || "";
     }
 
-    function currentArchiveKey() {
-        return String(state.info?.fileName || "").toLocaleLowerCase();
-    }
-
     const passwordManagerApi = {
         openPasswordPrompt: passwordManager.openPasswordPrompt,
         closePasswordPrompt: passwordManager.closePasswordPrompt,

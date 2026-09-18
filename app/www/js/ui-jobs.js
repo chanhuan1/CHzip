@@ -739,25 +739,6 @@
         ensureMiniPoll(state, api);
     }
 
-    function toggleTaskCenter(state, api) {
-        if (state.taskCenterOpen) {
-            closeTaskCenter(state, api);
-        } else {
-            openTaskCenter(state, api);
-        }
-    }
-
-    async function checkActiveTasks(state, api) {
-        try {
-            const data = await api.requestJson(api.apiUrl("jobs"));
-            if ((data?.active?.length || 0) > 0) {
-                ensureMiniPoll(state, api);
-            }
-        } catch (error) {
-            // 任务列表不可用时静默
-        }
-    }
-
     async function pollHistory(state, api) {
         const list = state.elements.historyList;
         if (!list) {
@@ -894,7 +875,6 @@
         IDLE_BACKOFF_MS,
         cancelExtract,
         cancelTaskCenter,
-        checkActiveTasks,
         clearHistory,
         closeHistory,
         closeTaskCenter,
@@ -914,6 +894,5 @@
         startExtract,
         startTaskWatch,
         statusLabel,
-        toggleTaskCenter,
     };
 }(typeof window !== "undefined" ? window : globalThis));

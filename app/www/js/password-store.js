@@ -289,15 +289,6 @@
             return { ...entries[index] };
         }
 
-        async function matchArchive(archiveKey) {
-            const key = String(archiveKey || "");
-            if (!key) {
-                return null;
-            }
-            const entries = await list();
-            return entries.find((entry) => entry.archiveKey === key) || null;
-        }
-
         async function remove(id) {
             const entries = await read();
             const filtered = entries.filter((entry) => entry.id !== id);
@@ -307,19 +298,12 @@
             return write(filtered);
         }
 
-        async function clear() {
-            return write([]);
-        }
-
         return {
-            clear,
             get,
             list,
-            matchArchive,
             remove,
             save,
             touch,
-            isEncrypted: Boolean(saltHex && cryptoKeyPromise),
         };
     }
 
