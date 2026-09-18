@@ -384,3 +384,32 @@ test("A13 previewFile still succeeds for output under the limit", async () => {
   assert.equal(result.encoding, "utf8");
   assert.equal(result.fileName, "inner.txt");
 });
+
+// ---------------------------------------------------------------- P1：高频轮询成功路径不写诊断日志
+
+test("P1 QUIET_SUCCESS_APIS silences exactly status and jobs", () => {
+  const { QUIET_SUCCESS_APIS } = require("../app/server/api");
+  assert.ok(QUIET_SUCCESS_APIS.has("status"));
+  assert.ok(QUIET_SUCCESS_APIS.has("jobs"));
+  assert.equal(QUIET_SUCCESS_APIS.size, 2, "只允许静音 status/jobs 两个轮询接口");
+});
+
+test("P1 success log write is gated but the failure path is not", () => {
+  // 回归锁：api.js 的成功分支必须先判 QUIET_SUCCESS_APIS 再写日志；
+  // catch 失败分支的 safeDiagnosticWrite 不得有同样的门禁（失败永远要记）。
+  const source = fs.readFileSync(
+    path.join(__dirname, "..", "app", "server", "api.js"),
+    "utf8",
+  );
+  const successGate = source.indexOf("if (!QUIET_SUCCESS_APIS.has(api))");
+  const successWrite = source.indexOf('status: "success"');
+  assert.ok(successGate !== -1, "成功分支必须有 QUIET_SUCCESS_APIS 门禁");
+  assert.ok(successWrite !== -1, "成功日志写入必须存在");
+  assert.ok(successGate < successWrite, "门禁必须在成功写入之前");
+  const catchWrite = source.indexOf('status: "failed"');
+  assert.ok(catchWrite !== -1, "失败日志写入必须保留");
+  // 失败写入前不得出现 QUIET 门禁（门禁只属于成功分支）。
+  const between = source.slice(successWrite, catchWrite);
+  assert.equal(between.includes("QUIET_SUCCESS_APIS"), false,
+    "失败路径不得被静音门禁覆盖");
+});

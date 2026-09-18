@@ -105,6 +105,11 @@ function normalizeApiName(query, body) {
 // 会被高频轮询或反复调用的接口不触发（清理本身要全量扫 jobs 目录）。
 const CLEANUP_APIS = new Set(["extract", "jobs", "clear-history"]);
 
+// 高频轮询接口的成功路径不写诊断日志：status 每秒一次、jobs 弹窗 3s 一次，
+// 成功回包毫无信息量，但每次 appendFileSync + 轮转检查是请求里最贵的部分。
+// 失败路径（catch）仍全量记录——只有成功才静音。
+const QUIET_SUCCESS_APIS = new Set(["status", "jobs"]);
+
 // 过期清理只是「顺手做」的事：它要全量扫 jobs 目录，而 worker 收尾会并发
 // 删除 job JSON / <id>.d / 锁文件，任何异常都不该让用户的 extract / jobs /
 // clear-history 请求整体失败。清理失败只记一条脱敏日志。
@@ -285,13 +290,15 @@ async function main() {
       "请求处理超时",
     );
 
-    safeDiagnosticWrite(services.logger, {
-      event: "api_request",
-      requestId,
-      api,
-      status: "success",
-      durationMs: Date.now() - startedAt,
-    });
+    if (!QUIET_SUCCESS_APIS.has(api)) {
+      safeDiagnosticWrite(services.logger, {
+        event: "api_request",
+        requestId,
+        api,
+        status: "success",
+        durationMs: Date.now() - startedAt,
+      });
+    }
     sendJson(result);
   } catch (error) {
     safeDiagnosticWrite(services.logger, {
@@ -367,6 +374,7 @@ if (require.main === module) {
 
 module.exports = {
   CLEANUP_APIS,
+  QUIET_SUCCESS_APIS,
   hasRequestBody,
   main,
   normalizeApiName,
