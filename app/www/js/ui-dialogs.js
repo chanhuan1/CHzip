@@ -53,7 +53,6 @@
 
     function openPermissionDialog(error, state) {
         const els = state.elements;
-        state.permissionError = error || null;
         const deniedPath = error?.details?.path
             || error?.path
             || state.filePath;

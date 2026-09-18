@@ -50,7 +50,6 @@ const {
 } = require("./source");
 const {
   createDiagnosticLogger,
-  redactDiagnosticValue,
   safeDiagnosticWrite,
 } = require("./diagnostics");
 const {
@@ -61,7 +60,6 @@ const {
 } = require("./fs-utils");
 const {
   createDiagnosticService,
-  getPackageVersion,
 } = require("./diagnostic-service");
 
 function defaultRuntimeRoot() {
@@ -103,7 +101,6 @@ function toJobView(job) {
     archivePath: job.archivePath || "",
     archiveName: job.archivePath ? path.basename(job.archivePath) : "",
     outputDir: job.outputDir || "",
-    partCount: job.partCount || 1,
     requestId: job.requestId || "",
     startedAt: job.startedAt || "",
     finishedAt: job.finishedAt || "",

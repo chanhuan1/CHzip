@@ -33,7 +33,6 @@
             previewAbortController: null,
             passwordRequired: false,
             passwordVerified: true,
-            permissionError: null,
             diagnosticsReport: null,
             lastRequestId: "",
             activeSavedPasswordId: "",

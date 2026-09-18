@@ -12,31 +12,6 @@ const {
 
 const JSON_TYPE = "application/json; charset=utf-8";
 
-const ALLOWED_ORIGINS = new Set([
-  "http://localhost",
-  "https://localhost",
-]);
-
-function isAllowedOrigin(request) {
-  const origin = request.headers?.origin;
-  if (!origin) {
-    return true;
-  }
-  if (ALLOWED_ORIGINS.has(origin)) {
-    return true;
-  }
-  const referer = request.headers?.referer;
-  if (referer) {
-    try {
-      const refererUrl = new URL(referer);
-      return ALLOWED_ORIGINS.has(`${refererUrl.protocol}//${refererUrl.host}`);
-    } catch {
-      return false;
-    }
-  }
-  return false;
-}
-
 function sendJson(body, statusCode = 200) {
   // 单次 write：CGI 响应就是 stdout 上的「状态行（可选）+ 头 + 空行 + 体」，
   // 多次 console.log 每次各是一个 write(2)，合并后字节等价、syscall 更少。

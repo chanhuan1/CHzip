@@ -28,15 +28,6 @@ function acquireFileLock(lockPath, options = {}) {
   };
 }
 
-function withFileLock(lockPath, callback, options = {}) {
-  const lock = acquireFileLock(lockPath, options);
-  try {
-    return callback();
-  } finally {
-    lock.release();
-  }
-}
-
 function acquireLockDescriptor(lockPath, maxAttempts, retryMs, staleMs) {
   let descriptor;
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
@@ -71,26 +62,6 @@ function acquireLockDescriptor(lockPath, maxAttempts, retryMs, staleMs) {
 function releaseFileLock(lockPath, descriptor) {
   fs.closeSync(descriptor);
   fs.rmSync(lockPath, { force: true });
-}
-
-function atomicWriteFile(filePath, content, options = {}) {
-  const encoding = options.encoding || "utf8";
-  const mode = options.mode || 0o600;
-  const directory = require("node:path").dirname(filePath);
-  fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
-  const temporaryPath = `${filePath}.${process.pid}.${require("node:crypto").randomBytes(4).toString("hex")}.tmp`;
-  try {
-    fs.writeFileSync(temporaryPath, content, { encoding, mode });
-    fs.chmodSync(temporaryPath, mode);
-    fs.renameSync(temporaryPath, filePath);
-  } catch (error) {
-    try {
-      fs.rmSync(temporaryPath, { force: true });
-    } catch (cleanupError) {
-      // The atomic rename already removed the temporary path.
-    }
-    throw error;
-  }
 }
 
 function truncateUtf8Name(name, byteLimit = 230) {
@@ -148,9 +119,7 @@ module.exports = {
   DEFAULT_LOCK_RETRY_MS,
   DEFAULT_STALE_LOCK_MS,
   acquireFileLock,
-  atomicWriteFile,
   overwriteFileSync,
   sleepSync,
   truncateUtf8Name,
-  withFileLock,
 };

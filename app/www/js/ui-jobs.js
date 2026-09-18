@@ -362,7 +362,6 @@
         }
         recordDiagnosticError(error, state);
         const els = state.elements;
-        state.permissionError = error || null;
         const deniedPath = error?.details?.path || error?.path || state.filePath;
         const fileName = String(deniedPath || "").split("/").filter(Boolean).pop() || "当前文件";
         els.permissionDialogMessage.textContent = `当前文件未授予 CHzip 读取权限：“${fileName}”。请按以下步骤为上一级文件夹添加应用权限。`;

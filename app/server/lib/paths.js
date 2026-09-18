@@ -357,7 +357,6 @@ module.exports = {
   getDirectoryCapabilities,
   isPathInside,
   listAuthorizedDirectory,
-  parseAccessiblePaths: parsePathList,
   resolveAuthorizedDirectory,
   sanitizeOutputStem,
   validateDirectoryName,

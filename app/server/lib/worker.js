@@ -706,9 +706,6 @@ async function runWorker(jobId, options = {}) {
         processGroupPid: null,
         progress: 100,
         currentFile: "",
-        // job.log 只在终态写一次。热路径上不再反复序列化最多 64KB 的日志，
-        // 同时仍保留一份日志尾部供事后诊断（前端不消费该字段）。
-        log: String(extractResult?.log || "").slice(-LIMITS.MAX_LOG_TAIL_BYTES),
         finishedAt: new Date().toISOString(),
         error: null,
       };
@@ -755,10 +752,7 @@ async function runWorker(jobId, options = {}) {
       processGroupPid: null,
       currentFile: "",
       progress: finalOk ? 100 : current.progress,
-      // 终态才写日志尾部，与成功路径一致。
-      log: String(error.log || "").slice(-LIMITS.MAX_LOG_TAIL_BYTES),
       finishedAt: new Date().toISOString(),
-      note: rescuedNote || current.note || "",
       error: cancelled || finalOk
         ? null
         : {
