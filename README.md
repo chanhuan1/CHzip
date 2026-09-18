@@ -6,7 +6,7 @@
 
 面向 **fnOS（飞牛私有云）文件管理器右键场景**的专业压缩包处理工具 —— 解压 · 分卷 · 选择性解压 · 文件预览 · 密码管理，一键完成。
 
-[![版本](https://img.shields.io/badge/版本-v3.4-2786dc?style=flat-square)](https://github.com/chanhuan1/CHzip/releases)
+[![版本](https://img.shields.io/badge/版本-v3.5-2786dc?style=flat-square)](https://github.com/chanhuan1/CHzip/releases)
 [![平台](https://img.shields.io/badge/平台-fnOS%20(x86_64%20·%20arm64)-2786dc?style=flat-square)]()
 [![Stars](https://img.shields.io/github/stars/chanhuan1/CHzip?style=flat-square&label=Stars&color=2786dc)](https://github.com/chanhuan1/CHzip/stargazers)
 [![Forks](https://img.shields.io/github/forks/chanhuan1/CHzip?style=flat-square&label=Forks&color=2786dc)](https://github.com/chanhuan1/CHzip/forks)
@@ -52,7 +52,7 @@
 
 ## 🚀 快速开始
 
-1. 在飞牛应用中心手动安装 `CHzip_3.4_search-fixed_<架构>.fpk`（x86_64 / arm64）。
+1. 在飞牛应用中心手动安装 `CHzip_3.5_search-fixed_<架构>.fpk`（x86_64 / arm64）。
 2. 文件管理器右键压缩包（分卷选中首卷即可）→「使用 CHzip 打开」。
 3. 预览目录 → 选择目标路径 → 点「开始解压」。
 
