@@ -286,7 +286,7 @@
         try {
             const job = await api.requestJson(api.apiUrl("status", {
                 jobId: state.jobId,
-            }));
+            }), { timeoutMs: api.POLL_TIMEOUT_MS });
             const eta = computeEta(state, job);
             setJobProgress(
                 job.progress,
@@ -475,7 +475,9 @@
 
     async function pollTaskMini(state, api) {
         try {
-            const data = await api.requestJson(api.apiUrl("jobs"));
+            const data = await api.requestJson(api.apiUrl("jobs"), {
+                timeoutMs: api.POLL_TIMEOUT_MS,
+            });
             renderTaskStream(state, api, data);
             return data?.active?.length || 0;
         } catch (error) {
@@ -658,7 +660,9 @@
             return;
         }
         try {
-            const data = await api.requestJson(api.apiUrl("jobs"));
+            const data = await api.requestJson(api.apiUrl("jobs"), {
+                timeoutMs: api.POLL_TIMEOUT_MS,
+            });
             const active = data?.active || [];
             const history = data?.history || [];
             renderTaskStream(state, api, data);
@@ -765,7 +769,9 @@
         }
         const clearBtn = state.elements.clearHistoryBtn;
         try {
-            const data = await api.requestJson(api.apiUrl("jobs"));
+            const data = await api.requestJson(api.apiUrl("jobs"), {
+                timeoutMs: api.POLL_TIMEOUT_MS,
+            });
             const history = data?.history || [];
             // 无记录时禁用清空按钮；二次确认中或正在清空时不干扰按钮状态
             if (clearBtn && !state.historyClearPending && !state.historyClearing) {

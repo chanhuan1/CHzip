@@ -5,19 +5,23 @@ const { test } = require("node:test");
 
 require("../app/www/js/ui-jobs");
 
-const { resumePollers } = globalThis.CHzipUiJobs;
+const { resumePollers, pollTaskMini, pollTaskCenter, pollHistory, pollStatus }
+  = globalThis.CHzipUiJobs;
 
 // 与 ui-jobs.test.js 相同思路：用可控的假 document 满足 createPoller 的
 // visibilitychange 订阅，测试结束恢复。
-function withFakeDocument(callback) {
+async function withFakeDocument(callback) {
   const original = Object.getOwnPropertyDescriptor(globalThis, "document");
   globalThis.document = {
     visibilityState: "visible",
     addEventListener() {},
     removeEventListener() {},
+    createElement() {
+      return { className: "", textContent: "", append() {} };
+    },
   };
   try {
-    callback();
+    return await callback();
   } finally {
     if (original) {
       Object.defineProperty(globalThis, "document", original);
@@ -110,4 +114,91 @@ test("resumePollers skips dialogs that are closed", () => withFakeDocument(() =>
   assert.equal(state.taskCenterTimer, null);
   assert.equal(state.historyTimer, null);
   state.taskWatchTimer.stop();
+}));
+
+// ------------------------------------------------------------ 轮询超时（D5）
+// 卡死的 CGI 进程不该占住轮询循环 330s；四个轮询调用点都必须传
+// POLL_TIMEOUT_MS 让 fetch 快速失败、由 createPoller 的 interval 重试。
+
+const POLL_TIMEOUT_MS = 15000;
+
+function recordingApi() {
+  const calls = [];
+  return {
+    calls,
+    POLL_TIMEOUT_MS,
+    apiUrl(apiName) {
+      return `/cgi/?api=${apiName}`;
+    },
+    async requestJson(url, options) {
+      calls.push({ url, options });
+      return { active: [], history: [] };
+    },
+  };
+}
+
+function createPollElements() {
+  return {
+    taskCenterDialog: { hidden: true },
+    historyDialog: { hidden: true },
+    taskCenterList: { /* 渲染分支需要真 DOM，置空即提前 return */ },
+    historyList: null,
+  };
+}
+
+test("pollTaskMini passes POLL_TIMEOUT_MS to the jobs poll", async () => {
+  const api = recordingApi();
+  const state = createState({ elements: { taskStreamList: null } });
+  await pollTaskMini(state, api);
+  assert.equal(api.calls.length, 1);
+  assert.equal(api.calls[0].options.timeoutMs, POLL_TIMEOUT_MS);
+});
+
+test("pollStatus passes POLL_TIMEOUT_MS to the status poll", async () => {
+  const api = recordingApi();
+  const state = createState({
+    jobId: "a".repeat(32),
+    elements: {
+      progressFill: { style: {}, classList: { toggle() {} } },
+      progressText: { textContent: "" },
+      jobState: { textContent: "" },
+      currentFile: { textContent: "" },
+      progressEta: { hidden: true, textContent: "" },
+      progressTrack: { classList: { toggle() {} } },
+      taskStreamList: null,
+    },
+  });
+  await pollStatus(state, api);
+  assert.equal(api.calls.length, 1);
+  assert.equal(api.calls[0].options.timeoutMs, POLL_TIMEOUT_MS);
+});
+
+test("pollTaskCenter passes POLL_TIMEOUT_MS to the jobs poll", () => withFakeDocument(async () => {
+  const api = recordingApi();
+  // taskCenterList 为 falsy 时函数提前 return 不发请求；给个最小 DOM stub
+  // 让它走完 requestJson 与渲染分支。
+  const state = createState({
+    elements: {
+      taskCenterList: { replaceChildren() {}, append() {} },
+      taskCenterEmpty: null,
+      taskStreamList: null,
+    },
+  });
+  await pollTaskCenter(state, api);
+  assert.equal(api.calls.length, 1);
+  assert.equal(api.calls[0].options.timeoutMs, POLL_TIMEOUT_MS);
+}));
+
+test("pollHistory passes POLL_TIMEOUT_MS to the jobs poll", () => withFakeDocument(async () => {
+  const api = recordingApi();
+  const state = createState({
+    elements: {
+      historyList: { replaceChildren() {}, append() {} },
+      clearHistoryBtn: null,
+      historyEmpty: null,
+    },
+  });
+  await pollHistory(state, api);
+  assert.equal(api.calls.length, 1);
+  assert.equal(api.calls[0].options.timeoutMs, POLL_TIMEOUT_MS);
 }));
