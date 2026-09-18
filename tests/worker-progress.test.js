@@ -107,20 +107,6 @@ test("B1 createProgressWriter flushes every update when the throttle window is z
   assert.equal(store.writes[2].progress, 3);
 });
 
-test("B1 createProgressWriter caps progress during the testing phase", () => {
-  const store = createMemoryStore();
-  const writer = createProgressWriter({
-    store,
-    jobId: JOB_ID,
-    phase: "testing",
-    throttleMs: 0,
-  });
-
-  writer.update({ percent: 80, currentFile: "" });
-  assert.equal(store.writes[0].progress, 5, "testing 阶段进度封顶在 5%");
-  assert.equal(store.writes[0].phase, "testing");
-});
-
 test("B1 createProgressWriter keeps the previous file name when the snapshot has none", () => {
   const store = createMemoryStore({ currentFile: "keep.txt" });
   const writer = createProgressWriter({

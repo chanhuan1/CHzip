@@ -74,9 +74,7 @@ function createProgressWriter({
     store.update(jobId, (job) => ({
       ...job,
       phase,
-      progress: phase === "testing"
-        ? Math.min(snapshot.percent, 5)
-        : snapshot.percent,
+      progress: snapshot.percent,
       currentFile: snapshot.currentFile || job.currentFile,
     }));
   };

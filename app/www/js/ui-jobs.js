@@ -136,9 +136,6 @@
         if (status === "failed") {
             return "解压失败";
         }
-        if (phase === "testing") {
-            return "正在校验压缩包";
-        }
         if (phase === "validating") {
             return "正在检查文件列表";
         }
@@ -291,7 +288,7 @@
             setJobProgress(
                 job.progress,
                 statusLabel(job.status, job.phase),
-                job.currentFile || (job.phase === "testing" ? "正在检查分卷和数据完整性..." : ""),
+                job.currentFile || "",
                 state,
                 job,
                 eta,
