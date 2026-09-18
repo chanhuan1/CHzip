@@ -38,15 +38,18 @@ function isAllowedOrigin(request) {
 }
 
 function sendJson(body, statusCode = 200) {
-  if (statusCode !== 200) {
-    console.log(`Status: ${statusCode}`);
-  }
-  console.log(`Content-Type: ${JSON_TYPE}`);
-  console.log("Cache-Control: no-cache, no-store, must-revalidate");
-  console.log("Pragma: no-cache");
-  console.log("Expires: 0");
-  console.log("");
-  console.log(JSON.stringify(body));
+  // 单次 write：CGI 响应就是 stdout 上的「状态行（可选）+ 头 + 空行 + 体」，
+  // 多次 console.log 每次各是一个 write(2)，合并后字节等价、syscall 更少。
+  const lines = [
+    ...(statusCode !== 200 ? [`Status: ${statusCode}`] : []),
+    `Content-Type: ${JSON_TYPE}`,
+    "Cache-Control: no-cache, no-store, must-revalidate",
+    "Pragma: no-cache",
+    "Expires: 0",
+    "",
+    JSON.stringify(body),
+  ];
+  process.stdout.write(`${lines.join("\n")}\n`);
 }
 
 function readRequestBody(stream = process.stdin) {

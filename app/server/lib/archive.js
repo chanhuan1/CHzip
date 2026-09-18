@@ -260,9 +260,16 @@ function collectVolumeNames(selection, directoryNames) {
   }
 
   const stem = selection.seriesStem || selection.outputStem;
-  const lowerCaseIndex = new Set(
-    directoryNames.map((name) => name.toLowerCase()),
-  );
+  // lowerCaseIndex 只在 zip-z / rar-old 两个分支用到，lazy 构建——split /
+  // rar-parts / 单文件分支走完上面的 early return 根本到不了这里，无需为
+  // 它们白建一个 O(目录条目数) 的 Set。
+  let lowerCaseIndex = null;
+  const getLowerCaseIndex = () => {
+    if (!lowerCaseIndex) {
+      lowerCaseIndex = new Set(directoryNames.map((name) => name.toLowerCase()));
+    }
+    return lowerCaseIndex;
+  };
 
   if (selection.format === "zip" && /\.zip$/i.test(selection.firstVolumeName)) {
     const escaped = escapeRegExp(stem);
@@ -280,7 +287,7 @@ function collectVolumeNames(selection, directoryNames) {
       const missing = missingRange(parts.map((entry) => entry.part), 1, maxPart);
       return {
         names: [...parts.map((entry) => entry.name), mainName]
-          .filter((name) => lowerCaseIndex.has(name.toLowerCase())),
+          .filter((name) => getLowerCaseIndex().has(name.toLowerCase())),
         missingParts: missing.values,
         missingTotal: missing.total,
         missingTruncated: missing.truncated,
@@ -305,7 +312,7 @@ function collectVolumeNames(selection, directoryNames) {
       const missing = missingRange(parts.map((entry) => entry.part), 0, maxPart);
       return {
         names: [mainName, ...parts.map((entry) => entry.name)]
-          .filter((name) => lowerCaseIndex.has(name.toLowerCase())),
+          .filter((name) => getLowerCaseIndex().has(name.toLowerCase())),
         missingParts: missing.values,
         missingTotal: missing.total,
         missingTruncated: missing.truncated,
