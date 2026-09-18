@@ -17,9 +17,10 @@ function normalizeCodePage(value = "auto") {
   return { id, codePage: CODE_PAGES[id] };
 }
 
-function appendArchiveOptions(args, selection, options) {
-  // 7-Zip 26.x 对 RAR5 多分卷（Volume Locator）在强制 -tRar 时反而 Open ERROR，
-  // RAR/RAR5 一律交给引擎自动识别更稳；`.split` 是内部伪类型，也不下发。
+// 7-Zip 26.x 对 RAR5 多分卷（Volume Locator）在强制 -tRar 时反而 Open ERROR，
+// RAR/RAR5 一律交给引擎自动识别更稳；`.split` 是内部伪类型，也不下发。
+// comment 读/写与 list/extract 共用同一条红线。
+function appendForcedType(args, selection) {
   const forcedType = selection.type;
   const forceable = forcedType
     && forcedType !== "rar"
@@ -27,6 +28,10 @@ function appendArchiveOptions(args, selection, options) {
   if (forceable) {
     args.push(`-t${forcedType}`);
   }
+}
+
+function appendArchiveOptions(args, selection, options) {
+  appendForcedType(args, selection);
 
   const codePage = normalizeCodePage(options.codePage);
   if (selection.format === "zip" && codePage.codePage) {
@@ -87,9 +92,7 @@ function buildStdoutExtractArgs(selection, options) {
 
 function buildCommentArgs(selection, options) {
   const args = ["c", "-sccUTF-8"];
-  if (selection.type) {
-    args.push(`-t${selection.type}`);
-  }
+  appendForcedType(args, selection);
   if (options.commentFile) {
     args.push(`-z${options.commentFile}`);
   }
@@ -99,9 +102,7 @@ function buildCommentArgs(selection, options) {
 
 function buildReadCommentArgs(selection, options) {
   const args = ["l", "-slt", "-sccUTF-8"];
-  if (selection.type) {
-    args.push(`-t${selection.type}`);
-  }
+  appendForcedType(args, selection);
   args.push(options.archivePath);
   return args;
 }
