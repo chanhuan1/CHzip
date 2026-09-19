@@ -13,7 +13,7 @@
 
 | 命令 | 结果 |
 |---|---|
-| `npm test` | **297 通过 / 0 失败**（v3.5；v3.1 优化前 102，v3.1 发布时 172，v3.2 时 258） |
+| `npm test` | **301 通过 / 0 失败**（v3.6；v3.1 优化前 102，v3.1 发布时 172，v3.2 时 258） |
 | `node --check`（api.js + lib/ 全部 + www/js 全部 + scripts/ 全部） | 全部通过 |
 | `npm run test:release` | 两个架构包仍 release audit passed（产物未重新打包） |
 

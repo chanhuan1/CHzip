@@ -6,7 +6,7 @@
 
 面向 **fnOS（飞牛私有云）文件管理器右键场景**的专业压缩包处理工具 —— 解压 · 分卷 · 选择性解压 · 文件预览 · 密码管理，一键完成。
 
-[![版本](https://img.shields.io/badge/版本-v3.5-2786dc?style=flat-square)](https://github.com/chanhuan1/CHzip/releases)
+[![版本](https://img.shields.io/badge/版本-v3.6-2786dc?style=flat-square)](https://github.com/chanhuan1/CHzip/releases)
 [![平台](https://img.shields.io/badge/平台-fnOS%20(x86_64%20·%20arm64)-2786dc?style=flat-square)]()
 [![Stars](https://img.shields.io/github/stars/chanhuan1/CHzip?style=flat-square&label=Stars&color=2786dc)](https://github.com/chanhuan1/CHzip/stargazers)
 [![Forks](https://img.shields.io/github/forks/chanhuan1/CHzip?style=flat-square&label=Forks&color=2786dc)](https://github.com/chanhuan1/CHzip/forks)
@@ -52,7 +52,7 @@
 
 ## 🚀 快速开始
 
-1. 在飞牛应用中心手动安装 `CHzip_3.5_search-fixed_<架构>.fpk`（x86_64 / arm64）。
+1. 在飞牛应用中心手动安装 `CHzip_3.6_search-fixed_<架构>.fpk`（x86_64 / arm64）。
 2. 文件管理器右键压缩包（分卷选中首卷即可）→「使用 CHzip 打开」。
 3. 预览目录 → 选择目标路径 → 点「开始解压」。
 
@@ -96,6 +96,22 @@ CHzip/
 ```
 
 ## 🕒 更新日志
+
+### v3.6（2026-09-19）
+- **修复：密码库写失败被吞**（`password-store` 的 `save()` 对 Promise 判非未 `await`），
+  UI 显示已保存但刷新后丢失。
+- **修复：诊断日志密码脱敏不全**。`-p` 正则只匹配 ASCII，含**中文或空格**的密码
+  会部分或完整泄漏进诊断日志。已覆盖任意非空白密码并补回归测试，含 `-p` 的路径仍不误伤。
+- **修复：请求超时定时器未 `unref`**，个别场景下 CGI 进程会被定时器拖住不退。
+- **体验：状态轮询失败不再静默**。连续失败时进度条标红并提示「连接中断，重试中」，
+  恢复后自动消除（此前进度条永远停在最后一次成功值，无法区分「解压中」与「轮询已失效」）。
+- **体验：重新打开页面自动恢复进度**。打开一个有进行中任务的压缩包时，主面板进度
+  与顶部任务流保持一致（此前主面板显示「准备就绪 0%」，易重复点解压）。
+- **体验：弹窗可用 Esc 关闭**；目录选择弹窗打开时焦点落到主按钮。
+- **体验：任务行「停止」点击后禁用并显示「停止中…」**，防止弱网下重复取消。
+- **文档/构建**：API.md 错误码表补齐 11 个真实错误码、补 `solid` 字段；
+  audit-fpk 新增后端代码内容断言（防止升版本后忘重新打包）。
+- 测试：297 → 301。版本号升至 3.6。
 
 ### v3.5（2026-09-18）
 - **修复：两个会在运行时崩溃的引用错误**（全盘死代码扫描发现）。
@@ -223,7 +239,7 @@ CHzip/
 ## 🛠️ 开发 / 构建 / 测试
 
 ```bash
-npm test                 # node --test，297 个用例
+npm test                 # node --test，301 个用例
 node --check app/server/api.js   # 语法检查
 node scripts/build-fpk.js        # 构建 dist/*.fpk（双架构，需 fnpack）
 node scripts/audit-fpk.js        # 发布审计（校验和/版本/架构/搜索特性）
