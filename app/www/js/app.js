@@ -507,6 +507,47 @@
         });
     }
 
+    // 重新打开同一压缩包页面时，若它正有进行中的后台任务，把主面板进度
+    // 恢复过来——否则主面板显示「准备就绪 0%」而顶部任务流显示「进行中」，
+    // 两处矛盾，用户可能重复点「开始解压」。
+    async function resumeActiveJobIfAny() {
+        const els = state.elements;
+        if (!state.filePath || state.running) {
+            return;
+        }
+        try {
+            const data = await api.requestJson(api.apiUrl("jobs"), {
+                timeoutMs: api.POLL_TIMEOUT_MS,
+            });
+            const active = (data?.active || []).find(
+                (job) => job.archivePath === state.filePath,
+            );
+            if (!active) {
+                return;
+            }
+            state.jobId = active.id;
+            state.running = true;
+            state.etaTracker = null;
+            uiJobs.setJobProgress(
+                active.progress || 0,
+                "任务进行中",
+                active.currentFile || "正在恢复任务进度...",
+                state,
+                active,
+            );
+            if (state.pollTimer) {
+                state.pollTimer.stop();
+            }
+            state.pollTimer = uiJobs.createPoller(() => uiJobs.pollStatus(state, api), {
+                interval: 1000,
+            });
+            state.pollTimer.start();
+            await uiJobs.pollStatus(state, api);
+        } catch (error) {
+            // 恢复失败不影响页面正常打开：顶部任务流仍会显示该任务。
+        }
+    }
+
     async function loadApp() {
         const els = state.elements;
         await passwordManagerApi.renderSavedPasswords();
@@ -533,6 +574,7 @@
             await uiDialogs.loadDirectoryRoots(state, api);
             await loadPreview();
             await commentManager.loadComment();
+            await resumeActiveJobIfAny();
         } catch (error) {
             console.error("loadApp error:", error);
             setElementText(els.toolStatus, "不可用");
@@ -823,6 +865,40 @@
             state.historyClearTimer = null;
         }
     }
+
+    // Esc 关闭最上层可见弹窗。弹窗众多、关闭函数分散，这里用一个注册表
+    // 统一处理，避免给 11 个弹窗各写一遍。层级：preview(1000) > nested(60)
+    // > 普通(50)，同层按 DOM 顺序后者优先（后开的在上）。
+    const dialogClosers = [
+        ["previewDialog", () => closePreviewDialog()],
+        ["createDirectoryDialog", () => uiDialogs.closeCreateDirectoryDialog(state)],
+        ["passwordRecordDialog", () => passwordManagerApi.closePasswordRecordDialog()],
+        ["directoryDialog", () => uiDialogs.closeDirectoryDialog(state)],
+        ["passwordPromptDialog", () => passwordManagerApi.closePasswordPrompt()],
+        ["passwordManagerDialog", () => passwordManagerApi.closePasswordManager()],
+        ["permissionDialog", () => uiDialogs.closePermissionDialog(state)],
+        ["resultDialog", () => closeResultDialog()],
+        ["diagnosticsDialog", () => closeDiagnostics()],
+        ["taskCenterDialog", () => uiJobs.closeTaskCenter(state, api)],
+        ["historyDialog", () => uiJobs.closeHistory(state)],
+        ["commentDialog", () => commentManager.closeCommentDialog()],
+    ];
+    document.addEventListener("keydown", (event) => {
+        if (event.key !== "Escape") {
+            return;
+        }
+        // 从最上层往后找第一个可见的弹窗关掉。preview-backdrop 用 previewDialog
+        // 也在同一注册表里（它 z-index 最高，排最前）。
+        for (const [id, close] of dialogClosers) {
+            const element = document.getElementById(id);
+            if (element && !element.hidden) {
+                event.preventDefault();
+                event.stopPropagation();
+                close();
+                return;
+            }
+        }
+    });
 
     window.addEventListener("beforeunload", stopAllPollers);
     window.addEventListener("pagehide", stopAllPollers);

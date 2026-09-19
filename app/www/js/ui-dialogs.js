@@ -350,7 +350,11 @@
     }
 
     function openDirectoryDialog(state) {
-        state.elements.directoryDialog.hidden = false;
+        const els = state.elements;
+        els.directoryDialog.hidden = false;
+        // 初始焦点放到主操作按钮，键盘用户打开即可操作；
+        // 关闭按钮在弹窗内，焦点不会再落到背景控件上。
+        els.chooseDirectoryBtn?.focus?.();
     }
 
     function closeDirectoryDialog(state) {

@@ -267,7 +267,7 @@
                 entries.unshift(entry);
             }
             entries.sort((a, b) => b.lastUsedAt.localeCompare(a.lastUsedAt));
-            if (!write(entries)) {
+            if (!await write(entries)) {
                 return null;
             }
             return { ...entry };

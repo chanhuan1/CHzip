@@ -173,6 +173,66 @@ test("pollStatus passes POLL_TIMEOUT_MS to the status poll", async () => {
   assert.equal(api.calls[0].options.timeoutMs, POLL_TIMEOUT_MS);
 });
 
+// B1：连续轮询失败达到阈值后，进度条要挑明「连接中断」，而不是永远停在
+// 最后一次成功的假进度。
+function createFailAwareElements() {
+  const classes = new Set();
+  return {
+    classes,
+    progressFill: { style: {}, classList: { toggle() {} } },
+    progressText: { textContent: "" },
+    jobState: { textContent: "" },
+    currentFile: { textContent: "" },
+    progressEta: { hidden: true, textContent: "" },
+    progressTrack: {
+      classList: {
+        toggle() {},
+        add(c) { classes.add(c); },
+        remove(c) { classes.delete(c); },
+      },
+    },
+    taskStreamList: null,
+  };
+}
+
+function failingApi() {
+  return {
+    apiUrl: () => "/cgi/?api=status",
+    POLL_TIMEOUT_MS: 15,
+    async requestJson() {
+      throw new Error("请求超时");
+    },
+  };
+}
+
+test("pollStatus 连续失败 ≥5 次后显示连接中断，成功后恢复", async () => {
+  const els = createFailAwareElements();
+  const state = createState({ jobId: "a".repeat(32), elements: els });
+  const api = failingApi();
+
+  for (let index = 0; index < 5; index += 1) {
+    await pollStatus(state, api);
+  }
+  assert.equal(state.pollFailCount, 5);
+  assert.equal(els.jobState.textContent, "连接中断，重试中…");
+  assert.ok(els.classes.has("is-error"), "progressTrack 应标错误态");
+
+  // 恢复成功后清零并摘掉错误态。
+  let ok = false;
+  const recoverApi = {
+    apiUrl: () => "/cgi/?api=status",
+    POLL_TIMEOUT_MS: 15,
+    async requestJson() {
+      ok = true;
+      return { status: "running", phase: "extracting", progress: 40 };
+    },
+  };
+  await pollStatus(state, recoverApi);
+  assert.ok(ok);
+  assert.equal(state.pollFailCount, 0);
+  assert.ok(!els.classes.has("is-error"), "恢复后应摘掉错误态");
+});
+
 test("pollTaskCenter passes POLL_TIMEOUT_MS to the jobs poll", () => withFakeDocument(async () => {
   const api = recordingApi();
   // taskCenterList 为 falsy 时函数提前 return 不发请求；给个最小 DOM stub

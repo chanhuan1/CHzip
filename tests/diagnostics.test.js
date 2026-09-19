@@ -73,6 +73,32 @@ test("A5 redacts a 7z password argument", () => {
   assert.equal(out.logTail, "7z x[REDACTED] /vol1/share/a.7z");
 });
 
+// 原密码字符集 [\w!@#$%^&*+\-.] 不含中文，-p密码 完全抹不掉。
+test("A2 redacts a non-ASCII (Chinese) password", () => {
+  const out = redactDiagnosticValue({
+    logTail: "7z x -p密码abc /vol1/share/a.7z",
+  });
+  assert.equal(out.logTail, "7z x[REDACTED] /vol1/share/a.7z");
+});
+
+// 含空格的密码只能抹到空格前（与「密码 + 路径」的空白分隔无法区分），
+// 但 -p 前缀必须被抹掉，剩余部分不构成完整密码。
+test("A2 redacts the password prefix even when the password has a space", () => {
+  const out = redactDiagnosticValue({
+    logTail: "7z x -pmy pass /vol1/share/a.7z",
+  });
+  assert.equal(out.logTail, "7z x[REDACTED] pass /vol1/share/a.7z");
+  assert.ok(!out.logTail.includes("-pmy"));
+});
+
+// 密码后紧跟路径时，后边界 (?=[\s"']|$) 防止把路径吞进同一匹配。
+test("A2 does not swallow the trailing path after the password", () => {
+  const out = redactDiagnosticValue({
+    logTail: "-pSecret /vol1/share/a.7z -o/out",
+  });
+  assert.equal(out.logTail, "[REDACTED] /vol1/share/a.7z -o/out");
+});
+
 // -p 正则曾带 \b 分支，而词字符与 `-` 之间本身就构成词边界，
 // 于是含 `-p` 的路径被误伤成 my[REDACTED]，诊断报告里的路径随之失真。
 test("A5 keeps paths containing a dash-p segment", () => {

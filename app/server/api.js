@@ -216,6 +216,11 @@ function withTimeout(promise, timeoutMs, timeoutMessage) {
       error.code = "TIMEOUT";
       reject(error);
     }, timeoutMs);
+    // CGI 是一请求一进程：若被包裹的 promise 提前 settle（resolve/reject），
+    // 进程做完响应就该退出，而不是干等这个已被 clearTimeout 的定时器到期。
+    // unref 让定时器不拖住进程退出；浏览器环境（测试桩）没有 unref，?.
+    // 兜底。
+    timer.unref?.();
     promise.then(
       (result) => {
         clearTimeout(timer);

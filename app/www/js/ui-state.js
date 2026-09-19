@@ -22,6 +22,7 @@
             jobId: "",
             pollTimer: null,
             running: false,
+            pollFailCount: 0,
             previewing: false,
             previewReady: false,
             previewLimited: false,

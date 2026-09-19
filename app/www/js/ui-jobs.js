@@ -120,6 +120,10 @@
         };
     }
 
+    // 连续轮询失败达到这个次数，才把「连接中断」挑明到进度条——
+    // 偶发的单次抖动（弱网）不应打扰用户。
+    const POLL_FAIL_ALERT_THRESHOLD = 5;
+
     function statusLabel(status, phase) {
         if (status === "queued") {
             return "任务已排队";
@@ -284,6 +288,9 @@
             const job = await api.requestJson(api.apiUrl("status", {
                 jobId: state.jobId,
             }), { timeoutMs: api.POLL_TIMEOUT_MS });
+            // 成功：清零失败计数并摘掉连接中断的错误态。
+            state.pollFailCount = 0;
+            els.progressTrack.classList.remove?.("is-error");
             const eta = computeEta(state, job);
             setJobProgress(
                 job.progress,
@@ -316,7 +323,23 @@
                 setNotice("解压任务已停止。", "", state);
             }
         } catch (error) {
-            setNotice(`状态查询失败：${error.message}`, "error", state);
+            // 连续失败计数：偶发抖动不打扰，超过阈值才把「假进度」挑明——
+            // 否则后端持续起不来时，界面永远停在最后一次成功的 N%，
+            // 用户无法区分「解压中」与「轮询已失效」。
+            state.pollFailCount = (state.pollFailCount || 0) + 1;
+            if (state.pollFailCount >= POLL_FAIL_ALERT_THRESHOLD) {
+                els.jobState.textContent = "连接中断，重试中…";
+                els.currentFile.textContent = "与设备的连接已断开，正在自动重试。";
+                els.progressTrack.classList.add?.("is-error");
+            }
+            // notice 只在第一次失败与跨过阈值时更新，避免每秒重写同一条
+            // 错误反复打断（role=status 的 live region 会被读屏反复播报）。
+            if (
+                state.pollFailCount === 1
+                || state.pollFailCount === POLL_FAIL_ALERT_THRESHOLD
+            ) {
+                setNotice(`状态查询失败：${error.message}`, "error", state);
+            }
             recordDiagnosticError(error, state);
         }
     }
@@ -346,6 +369,9 @@
 
     function setNotice(message, kind, state) {
         const els = state.elements;
+        if (!els.notice) {
+            return;
+        }
         els.notice.className = `notice ${kind || ""}`.trim();
         els.notice.textContent = message;
     }
@@ -353,7 +379,9 @@
     function recordDiagnosticError(error, state) {
         state.lastRequestId = error?.requestId || "";
         state.diagnosticsReport = null;
-        state.elements.diagnosticsBtn.hidden = !state.filePath;
+        if (state.elements.diagnosticsBtn) {
+            state.elements.diagnosticsBtn.hidden = !state.filePath;
+        }
     }
 
     function handlePermissionError(error, state) {
@@ -642,6 +670,10 @@
             stop.className = "danger-button task-stop-btn";
             stop.textContent = "停止";
             stop.addEventListener("click", () => {
+                // 点击即禁用并变「停止中…」：防误触连发多个 cancel（弱网），
+                // 也由轮询确认终态后整行重建自然恢复。
+                stop.disabled = true;
+                stop.textContent = "停止中…";
                 cancelTaskCenter(state, api, job.id);
             });
             actions.append(stop);

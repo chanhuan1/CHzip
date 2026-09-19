@@ -158,6 +158,29 @@ function auditPackage(config) {
   assert.equal(sevenZip.subarray(0, 4).toString("hex"), "7f454c46");
   assert.equal(sevenZip.readUInt16LE(18), config.machine);
 
+  // 后端 JS 内容断言：audit 此前只查 manifest/7zzs/字体/css，不验证打包进去
+  // 的 server 代码是不是当前版本。一旦「bump 后忘了重新打包」或 staging 残留
+  // 旧代码，这些关键标记会对不上。每个标记都是对应版本里引入的符号，
+  // 随版本演进可增补。
+  const serverChecks = [
+    ["server/api.js", ["QUIET_SUCCESS_APIS", "CLEANUP_APIS", "routeRequest"]],
+    ["server/lib/paths.js", ["resolveAuthorizedDirectory", "isPathInside"]],
+    ["server/lib/worker.js", ["markStartupFailure", "registerProcessGroup", "cleanupJobArtifacts"]],
+    ["server/lib/services.js", ["createServices", "toJobView", "withPreparedArchive"]],
+    ["server/lib/engine.js", ["classifySevenZipError", "createProgressTracker"]],
+    ["server/lib/constants.js", ["PREVIEW_FILE_MS", "MAX_CONCURRENT_EXTRACTS"]],
+    ["server/lib/diagnostics.js", ["redactDiagnosticValue", "createDiagnosticLogger"]],
+  ];
+  for (const [entryPath, markers] of serverChecks) {
+    const content = innerEntry(appArchive, entryPath).toString("utf8");
+    for (const marker of markers) {
+      assert.ok(
+        content.includes(marker),
+        `${config.fileName} 的 ${entryPath} 缺少预期标记 ${marker}（可能是旧代码）`,
+      );
+    }
+  }
+
   console.log(`${config.fileName}: release audit passed`);
 }
 

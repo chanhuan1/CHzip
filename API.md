@@ -62,7 +62,7 @@ All responses use `Content-Type: application/json; charset=utf-8`.
 | `RESCUE_FAILED` | 500 | A too-long member name could not be rescued |
 | `PREVIEW_LIMIT` | 500 | Archive too large to preview |
 | `PREVIEW_TOO_LARGE` | 500 | Single file exceeds the 12 MiB preview cap |
-| `PREVIEW_FAILED` | 500 | Single file preview failed |
+| `PREVIEW_TIMEOUT` | 500 | Single file preview timed out (solid archives can be very slow) |
 | `PREVIEW_INTERRUPTED` | 500 | Preview was interrupted by the system |
 | `UNSAFE_PATH` | 500 | Archive outer layer contains a symlink |
 | `DIRECTORY_NOT_AUTHORIZED` | 500 | Output dir outside authorized roots |
@@ -72,6 +72,20 @@ All responses use `Content-Type: application/json; charset=utf-8`.
 | `INVALID_DIRECTORY_NAME` | 500 | Invalid new directory name |
 | `WORKER_START` | 500 | Extraction worker failed to start |
 | `WORKER_EXIT` | 500 | Extraction worker exited abnormally |
+| `START_FAILED` | 500 | Job setup failed after the job record was created |
+| `CANCELLED` | 500 | Job was cancelled by the user |
+| `ENGINE` | 500 | 7-Zip failed (catch-all when no more specific rule matched) |
+| `ENGINE_INTERRUPTED` | 500 | 7-Zip process was interrupted by the system (non-preview) |
+| `SOURCE_PATH_INVALID` | 500 | Source path is not an absolute path or is invalid |
+| `SOURCE_NOT_FILE` | 500 | Source path is not a regular file |
+| `SOURCE_REALPATH_FAILED` | 500 | Could not resolve the source path's real path |
+| `SOURCE_DIAGNOSTIC_FAILED` | 500 | Failed to build the diagnostic report |
+| `LOCK_BUSY` | 500 | Job state file lock could not be acquired in time |
+| `INTERNAL` | 500 | Catch-all for unexpected server errors |
+
+> This table reflects the `error.code = "..."` values actually assigned in the
+> code; it is not exhaustive for every internal branch. `ENGINE` is the
+> fallback used when no more specific classification matched.
 
 > `TIMEOUT` intentionally answers HTTP 200: CGI apps in fnOS deliver errors in
 > the response body, and only `NOT_FOUND` / `INVALID_JSON` / `BODY_TOO_LARGE` /
@@ -122,11 +136,15 @@ Lists the contents of an archive as a file tree.
   "summary": { "fileCount": 1, "directoryCount": 1, "totalSize": 1024, "encrypted": false },
   "format": "zip",
   "type": "zip",
+  "solid": false,
   "parts": [...],
   "passwordRequired": false,
   "passwordVerified": true
 }
 ```
+
+`solid` marks a solid archive (common for 7z / RAR): extracting any single member
+requires decompressing from the start, so single-file previews can be very slow.
 
 ### `comment`
 
