@@ -149,6 +149,7 @@
             themeToggle: $("themeToggle"),
             taskCenterDialog: $("taskCenterDialog"),
             taskCenterList: $("taskCenterList"),
+            testBtn: $("testBtn"),
             closeTaskCenterBtn: $("closeTaskCenterBtn"),
             closeTaskCenterConfirmBtn: $("closeTaskCenterConfirmBtn"),
             taskStream: $("taskStream"),

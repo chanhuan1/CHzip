@@ -81,7 +81,7 @@ function normalizeApiName(query, body) {
 
 // 只有用户主动动作的接口才值得顺带做过期清理；status/preview/info 这些
 // 会被高频轮询或反复调用的接口不触发（清理本身要全量扫 jobs 目录）。
-const CLEANUP_APIS = new Set(["extract", "jobs", "clear-history", "resume"]);
+const CLEANUP_APIS = new Set(["extract", "jobs", "clear-history", "resume", "test"]);
 
 // 高频轮询接口的成功路径不写诊断日志：status 每秒一次、jobs 弹窗 3s 一次，
 // 成功回包毫无信息量，但每次 appendFileSync + 轮转检查是请求里最贵的部分。
@@ -164,6 +164,15 @@ async function routeRequest(api, request, services) {
       password: request.body.password || "",
       codePage: request.body.codePage || "auto",
       selectedPaths: request.body.selectedPaths,
+      requestId,
+    });
+  } else if (api === "test") {
+    // F6 完整性体检：只读不写盘，因此不接受 destinationRoot/selectedPaths/
+    // conflictPolicy——这三个参数对 7z t 没有意义，收了只会误导。
+    data = await services.test({
+      path: request.body.path,
+      password: request.body.password || "",
+      codePage: request.body.codePage || "auto",
       requestId,
     });
   } else if (api === "status") {
@@ -274,6 +283,7 @@ async function main() {
       || api === "status"
       || api === "jobs"
       || api === "resume"
+      || api === "test"
     ) {
       services.spawnQueued();
     }

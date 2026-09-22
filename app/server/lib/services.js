@@ -252,7 +252,8 @@ function createServices(options = {}) {
   }
 
   // 计算指定 queued job 在「等待唤起」队列里前面还有多少个。
-  // 仅统计同类（kind 缺省视为 extract），且自身也必须仍在排队。
+  // F6：test 与 extract 共用同一并发池和同一队列（避免两套并发模型），
+  // 位次统计不再按 kind 过滤——排在任何 queued 任务之后都要计数。
   function computeQueueAhead(targetJob) {
     if (!targetJob || targetJob.status !== "queued" || targetJob.workerPid) {
       return null;
@@ -266,9 +267,6 @@ function createServices(options = {}) {
       if (!other || other.id === targetJob.id) {
         continue;
       }
-      if ((other.kind || "extract") !== (targetJob.kind || "extract")) {
-        continue;
-      }
       if (other.status !== "queued" || other.workerPid || other.cancelRequestedAt) {
         continue;
       }
@@ -280,7 +278,8 @@ function createServices(options = {}) {
   }
 
   // 顺带唤起：扫 jobs 找到仍在 queued（无 workerPid、无 cancelRequestedAt）的
-  // extract 类任务，按 createdAt 升序在还有名额时逐个 launchWorker。
+  // 任务（extract 与 test 共用同一并发池，不再按 kind 过滤），按 createdAt
+  // 升序在还有名额时逐个 launchWorker。
   // 这是 status / jobs / extract 高频路径上的顺手动作，必须轻量且永不抛出——
   // 单个任务的启动失败只影响它自己，不能拖垮用户的轮询请求。
   function spawnQueued() {
@@ -297,9 +296,6 @@ function createServices(options = {}) {
           continue;
         }
         if (!job) {
-          continue;
-        }
-        if ((job.kind || "extract") !== "extract") {
           continue;
         }
         if (job.status !== "queued" || job.workerPid || job.cancelRequestedAt) {
@@ -805,6 +801,105 @@ function createServices(options = {}) {
     }
   }
 
+  // F6 完整性体检：起一个 kind=test 的 job 跑 `7z t` 流式 CRC 校验。
+  // 与 extract 的关键差别：
+  // - 不写盘：outputDir="" 且 outputOwned=false，worker 的 cleanupOutput /
+  //   过期清理的 outputOwned 守卫都不会碰文件系统；
+  // - 整包校验：不带 selectedPaths（7z t 没有 -i@ 语义上的部分校验价值——
+  //   固实包无法只校验局部，非固实包部分校验会漏掉头部/其它文件的损坏）；
+  // - 嵌套 tar 不预解：体检目标是「压缩包本身是否完好」，外层 CRC 通过即可，
+  //   内层 tar 的合法性属于解压阶段的事。
+  // 并发模型：与 extract 共用 LIMITS.MAX_CONCURRENT_EXTRACTS 同一池，满员保持
+  // queued 由 spawnQueued 唤起（F7 机制原样复用）。
+  function test(input) {
+    const archive = info(input);
+    if (archive.missingParts.length) {
+      const error = new Error(archive.warnings[0]);
+      error.code = "MISSING_VOLUME";
+      throw error;
+    }
+
+    let job;
+    try {
+      job = store.create({
+        requestId: input.requestId || "",
+        kind: "test",
+        archivePath: archive.filePath,
+        // 不写盘是 test 的安全红线：outputDir 为空串 + outputOwned=false，
+        // worker 失败路径的 cleanupOutput 与 jobs.js 过期清理都据此跳过 rm。
+        outputDir: "",
+        outputOwned: false,
+        selection: archive.selection,
+        sevenZipPath: archive.tool.path,
+        sevenZipSource: archive.tool.source,
+        codePage: input.codePage || "auto",
+        partCount: archive.partCount,
+        sourceFingerprint: (archive.sources && archive.sources.length
+          ? archive.sources
+          : [{ path: archive.filePath, stat: null }]).map((source) => (
+          source.stat
+            ? {
+              path: source.path,
+              dev: source.stat.dev,
+              ino: source.stat.ino,
+              size: source.stat.size,
+              mtimeMs: source.stat.mtimeMs,
+            }
+            : fingerprintFiles([source.path])[0])),
+      });
+
+      let passwordFile = "";
+      if (input.password) {
+        passwordFile = path.join(store.dataDir(job.id), "password.txt");
+        fs.writeFileSync(passwordFile, input.password, {
+          encoding: "utf8",
+          mode: PERMISSIONS.MODE_FILE_SECRET,
+        });
+        job = store.update(job.id, (current) => ({
+          ...current,
+          passwordFile,
+        }));
+      }
+
+      // 与 extract 同一并发池：有名额立刻启动，满员留 queued 等 spawnQueued。
+      let queued = false;
+      if (store.countActive() < LIMITS.MAX_CONCURRENT_EXTRACTS) {
+        job = launchWorker(job.id);
+      } else {
+        queued = true;
+      }
+
+      const result = {
+        jobId: job.id,
+        partCount: job.partCount,
+      };
+      if (queued) {
+        result.queued = true;
+        result.queueAhead = computeQueueAhead(job);
+      }
+      return result;
+    } catch (error) {
+      if (job) {
+        const current = store.read(job.id);
+        if (current?.passwordFile) {
+          overwriteFileSync(current.passwordFile);
+          fs.rmSync(current.passwordFile, { force: true });
+        }
+        store.update(job.id, (current) => ({
+          ...current,
+          status: "failed",
+          passwordFile: "",
+          error: {
+            code: error.code || "START_FAILED",
+            message: error.message,
+          },
+          finishedAt: new Date().toISOString(),
+        }));
+      }
+      throw error;
+    }
+  }
+
   function status(input) {
     // 高频轮询入口：顺带唤起排队任务（名额释放后 1~3s 内启动）。
     spawnQueued();
@@ -988,6 +1083,7 @@ function createServices(options = {}) {
     spawnQueued,
     status,
     store,
+    test,
     logger,
   };
 }

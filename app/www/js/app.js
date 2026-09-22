@@ -604,6 +604,16 @@
             && !state.running,
         );
         els.extractBtn.disabled = !ready;
+        // F6：体检不写盘，因此不要求 selectedDirectory——只要预览可用、密码就绪、
+        // 引擎在线即可。其余禁用条件与解压一致（运行中/预览中锁定）。
+        els.testBtn.disabled = Boolean(
+            !state.info
+            || !state.info.tool
+            || !hasPreview
+            || !passwordReady
+            || state.running
+            || state.previewing
+        );
         els.cancelBtn.hidden = !state.running;
         els.refreshPreviewBtn.disabled = state.running || state.previewing || !state.info;
         els.codePageSelect.disabled = state.running || state.previewing;
@@ -761,6 +771,10 @@
     });
     els.extractBtn.addEventListener("click", () => {
         uiJobs.startExtract(state, api);
+        updateActionAvailability();
+    });
+    els.testBtn.addEventListener("click", () => {
+        uiJobs.startTest(state, api);
         updateActionAvailability();
     });
     els.cancelBtn.addEventListener("click", () => {

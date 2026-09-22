@@ -127,7 +127,14 @@
     // F7：第三参 job 可选。排队任务读 job.queueAhead 显示位次；缺省/null
     // 时退化为旧文案，向后兼容。queueAhead===0 单独显示「即将开始」，
     // 避免对用户说「前面还有 0 个」。
+    // F6：任务类型标签。statusLabel / renderTaskRow / pollStatus 共用同一份
+    // 文案表，避免「主面板说体检通过、任务中心说解压完成」这类分裂。
+    function jobKind(job) {
+        return job && job.kind === "test" ? "test" : "extract";
+    }
+
     function statusLabel(status, phase, job) {
+        const kind = jobKind(job);
         if (status === "queued") {
             const ahead = job ? job.queueAhead : null;
             if (ahead === 0) {
@@ -145,10 +152,13 @@
             return "已停止";
         }
         if (status === "success") {
-            return "解压完成";
+            return kind === "test" ? "体检通过" : "解压完成";
         }
         if (status === "failed") {
-            return "解压失败";
+            return kind === "test" ? "体检失败" : "解压失败";
+        }
+        if (phase === "testing") {
+            return "正在检查完整性";
         }
         if (phase === "validating") {
             return "正在检查文件列表";
@@ -313,31 +323,45 @@
             );
             if (job.status === "success") {
                 finishPolling(state);
-                // F2：拍平过就给用户更明确的提示。
-                const successLabel = job.flattened ? "已拍平到" : "已解压到";
-                setJobProgress(100, "解压完成", `${successLabel}：${job.outputDir}`, state, job);
-                setNotice(
-                    job.flattenNote || "解压任务已完成。",
-                    "success",
-                    state,
-                );
-                els.resultOutputDir.textContent = job.outputDir;
-                els.resultDialog.hidden = false;
+                if (job.kind === "test") {
+                    // F6：体检通过没有输出目录可展示，不弹结果框，只给结论。
+                    setJobProgress(100, "体检通过", "完整性校验通过，压缩包数据完好。", state, job);
+                    setNotice("体检通过：压缩包完整性校验没有发现损坏。", "success", state);
+                } else {
+                    // F2：拍平过就给用户更明确的提示。
+                    const successLabel = job.flattened ? "已拍平到" : "已解压到";
+                    setJobProgress(100, "解压完成", `${successLabel}：${job.outputDir}`, state, job);
+                    setNotice(
+                        job.flattenNote || "解压任务已完成。",
+                        "success",
+                        state,
+                    );
+                    els.resultOutputDir.textContent = job.outputDir;
+                    els.resultDialog.hidden = false;
+                }
             } else if (job.status === "failed") {
                 finishPolling(state);
-                const message = job.error?.message || "解压失败";
+                const failLabel = job.kind === "test" ? "体检失败" : "解压失败";
+                const message = job.error?.message || failLabel;
                 const requestSuffix = job.requestId
                     ? `（请求 ID：${job.requestId}）`
                     : "";
-                setJobProgress(job.progress, "解压失败", `${message}${requestSuffix}`, state, job);
+                setJobProgress(job.progress, failLabel, `${message}${requestSuffix}`, state, job);
                 setNotice(message, "error", state);
                 if (!handlePermissionError(job.error, state)) {
                     recordDiagnosticError(job.error, state);
                 }
             } else if (job.status === "cancelled") {
                 finishPolling(state);
-                setJobProgress(job.progress, "已停止", "未完成的任务目录已清理。", state, job);
-                setNotice("解压任务已停止。", "", state);
+                const stopDetail = job.kind === "test"
+                    ? "体检任务已停止。"
+                    : "未完成的任务目录已清理。";
+                setJobProgress(job.progress, "已停止", stopDetail, state, job);
+                setNotice(
+                    job.kind === "test" ? "体检任务已停止。" : "解压任务已停止。",
+                    "",
+                    state,
+                );
             }
         } catch (error) {
             // 连续失败计数：偶发抖动不打扰，超过阈值才把「假进度」挑明——
@@ -358,6 +382,47 @@
                 setNotice(`状态查询失败：${error.message}`, "error", state);
             }
             recordDiagnosticError(error, state);
+        }
+    }
+
+    // F6 先体检：与 startExtract 同模式，但 POST "test"、不带 destinationRoot /
+    // selectedPaths / conflictPolicy（7z t 用不到）。写盘相关 UI（outputPreview）
+    // 不动——体检结果只通过任务中心与主面板进度条呈现。
+    async function startTest(state, api) {
+        const els = state.elements;
+        if (els.testBtn.disabled) {
+            return;
+        }
+        state.running = true;
+        setJobProgress(0, "正在创建体检任务", "正在校验设置...", state);
+        setNotice("完整性体检任务正在启动，请保持页面打开。", "", state);
+        try {
+            const result = await api.postApi("test", {
+                path: state.filePath,
+                password: els.passwordInput.value,
+                codePage: els.codePageSelect.value,
+            });
+            state.jobId = result.jobId;
+            state.etaTracker = null;
+            setJobProgress(0, "任务已排队", "等待 7-Zip 启动...", state);
+            ensureMiniPoll(state, api);
+            await pollStatus(state, api);
+            if (state.jobId) {
+                if (state.pollTimer) {
+                    state.pollTimer.stop();
+                }
+                state.pollTimer = createPoller(() => pollStatus(state, api), {
+                    interval: 1000,
+                });
+                state.pollTimer.start();
+            }
+        } catch (error) {
+            state.running = false;
+            setJobProgress(0, "启动失败", error.message, state);
+            setNotice(error.message, "error", state);
+            if (!handlePermissionError(error, state)) {
+                recordDiagnosticError(error, state);
+            }
         }
     }
 
@@ -429,6 +494,7 @@
             job.error?.message || "",
             job.outputDir || "",
             job.queueAhead ?? null,
+            job.kind || "extract",
         ]);
         // F2：终态的 flattened/flattenNote/outputDir 也进签名，保证未来
         // 「同一终态下 flatten 字段变化」也能触发重渲（当前在 active→history
@@ -444,6 +510,7 @@
             job.flattened ? 1 : 0,
             job.flattenNote || "",
             job.partialSuccess ? 1 : 0,
+            job.kind || "extract",
         ]);
         return JSON.stringify([activePart, historyPart]);
     }
@@ -633,7 +700,9 @@
         head.className = "task-row-head";
         const name = document.createElement("strong");
         name.className = "task-row-name";
-        name.textContent = job.archiveName || "压缩包";
+        // F6：体检任务在名称前加类型标签，避免与同一压缩包的解压任务混淆。
+        name.textContent = (job.kind === "test" ? "[体检] " : "")
+            + (job.archiveName || "压缩包");
         name.title = job.archivePath || "";
         const status = document.createElement("span");
         status.className = "task-row-status";
@@ -670,21 +739,32 @@
                 started ? `开始于 ${started}` : "",
             ].filter(Boolean).join("，");
             if (job.status === "success") {
-                // F2：拍平过就换文案，让用户一眼看出少了一层壳。
-                const prefix = job.flattened ? "已拍平到：" : "已解压到：";
-                appendTaskMeta(
-                    main,
-                    finished,
-                    timeTitle,
-                    `${prefix}${job.outputDir || ""}`,
-                    job.outputDir || "",
-                );
+                if (job.kind === "test") {
+                    // F6：体检通过没有 outputDir（不写盘），隐藏输出目录行。
+                    appendTaskMeta(
+                        main,
+                        finished,
+                        timeTitle,
+                        "体检通过，压缩包数据完好",
+                        "",
+                    );
+                } else {
+                    // F2：拍平过就换文案，让用户一眼看出少了一层壳。
+                    const prefix = job.flattened ? "已拍平到：" : "已解压到：";
+                    appendTaskMeta(
+                        main,
+                        finished,
+                        timeTitle,
+                        `${prefix}${job.outputDir || ""}`,
+                        job.outputDir || "",
+                    );
+                }
             } else if (job.status === "failed") {
                 appendTaskMeta(
                     main,
                     finished,
                     timeTitle,
-                    job.error?.message || "解压失败",
+                    job.error?.message || (job.kind === "test" ? "体检失败" : "解压失败"),
                     "",
                 );
             } else {
@@ -1001,6 +1081,7 @@
         setJobProgress,
         startExtract,
         startTaskWatch,
+        startTest,
         statusLabel,
     };
 }(typeof window !== "undefined" ? window : globalThis));

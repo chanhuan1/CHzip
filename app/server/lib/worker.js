@@ -16,6 +16,7 @@ const {
   buildExtractArgs,
   buildListArgs,
   buildStdoutExtractArgs,
+  buildTestArgs,
 } = require("./sevenzip");
 const {
   findNestedTar,
@@ -590,6 +591,60 @@ function flattenSingleRootDirectory(job, options = {}) {
   }
 }
 
+// F6：从 `7z t` 的输出里抓坏文件归因行。
+//
+// 7-Zip 校验失败时对每个坏文件各打一行（通常在 stderr，与 stdout 合并进 log）：
+//   ERROR: Data Error : path/to/file.bin        —— 数据块解不出来
+//   ERROR: CRC Failed : path/to/file.bin        —— 解出来了但 CRC 对不上
+// 行首的 "ERROR: " 前缀与冒号两侧空白都可能随版本微调，正则只锚定
+// "Data Error"/"CRC Failed" 关键字（大小写不敏感），路径取到行尾。
+//
+// 诚实性红线：`7z t` 的输出**不标卷号**——多分卷包里它只说哪个内部文件坏了，
+// 不说坏在第几卷。因此调用方文案只能说「疑似」，绝不能假装能归因到分卷。
+//
+// 返回去重后的内部路径数组；一行都抓不到时返回空数组（调用方回落通用文案）。
+function extractTestFailures(log) {
+  const pattern = /(?:Data Error|CRC Failed)\s*:\s*([^\r\n]+)/gi;
+  const found = [];
+  const seen = new Set();
+  const text = String(log || "");
+  let match;
+  while ((match = pattern.exec(text))) {
+    const target = match[1].trim();
+    if (target && !seen.has(target)) {
+      seen.add(target);
+      found.push(target);
+    }
+  }
+  return found;
+}
+
+// F6：test 任务失败时的错误包装。DAMAGED（CRC/数据错误）且能抓到归因行时，
+// 把坏文件清单折进 message——这是用户在任务中心唯一能看到的文本。
+// 文案刻意写「疑似」：7z t 不标卷号，多分卷场景下无法指出坏在哪一卷。
+function wrapTestError(error) {
+  if (!error || error.code !== "DAMAGED") {
+    return error;
+  }
+  const failures = extractTestFailures(error.log);
+  if (!failures.length) {
+    return error;
+  }
+  const shown = failures.slice(0, 5);
+  const more = failures.length > shown.length
+    ? ` 等 ${failures.length} 个文件`
+    : "";
+  const wrapped = new Error(
+    `完整性校验失败，疑似损坏的文件：${shown.join("、")}${more}。`
+    + "压缩包数据已损坏，请重新获取完整副本后重试。",
+  );
+  wrapped.code = error.code;
+  wrapped.exitCode = error.exitCode;
+  wrapped.signal = error.signal;
+  wrapped.log = error.log;
+  return wrapped;
+}
+
 function requireActiveJob(store, jobId) {
   const job = store.read(jobId);
   if (!job) {
@@ -690,6 +745,48 @@ async function runWorker(jobId, options = {}) {
 
     verifyFingerprints(job.sourceFingerprint, sourceDescriptors);
     job = requireActiveJob(store, jobId);
+
+    // F6 完整性体检：kind=test 走最小路径——指纹校验后只跑一个 `7z t` phase
+    // 就出终态。跳过嵌套 tar 预解（体检目标是压缩包本身）、validateListing
+    // （不校验落盘路径安全性，因为根本不写盘）、cleanupOutput/rescue（没有
+    // 输出目录，cleanupOutput 的 outputOwned/outputDir 双守卫本来也是空转）。
+    if ((job.kind || "extract") === "test") {
+      const testArgs = buildTestArgs(job.selection, {
+        archivePath: job.archivePath,
+        password,
+        codePage: job.codePage,
+      });
+      await runPhase("testing", {
+        args: testArgs,
+        job,
+        store,
+        tool,
+        passwordProvided: Boolean(password),
+      });
+      store.update(jobId, (current) => {
+        if (current.status === "cancelling" || current.cancelRequestedAt) {
+          throw cancellationError();
+        }
+        return {
+          ...current,
+          status: "success",
+          phase: "complete",
+          processGroupPid: null,
+          progress: 100,
+          currentFile: "",
+          finishedAt: new Date().toISOString(),
+          error: null,
+        };
+      });
+      safeDiagnosticWrite(logger, {
+        event: "worker",
+        status: "success",
+        requestId: job.requestId || "",
+        jobId,
+        kind: "test",
+      });
+      return store.read(jobId);
+    }
 
     let extractionSelection = job.selection;
     let extractionArchivePath = job.archivePath;
@@ -800,6 +897,11 @@ async function runWorker(jobId, options = {}) {
     });
   } catch (error) {
     job = store.read(jobId) || job;
+    // F6：test 任务的 DAMAGED 错误先包一层归因文案（疑似坏文件清单）。
+    // 非 test / 非 DAMAGED 原样透传，行为与以前一致。
+    if ((job.kind || "extract") === "test") {
+      error = wrapTestError(error);
+    }
     const cancelled = job.status === "cancelling"
       || Boolean(job.cancelRequestedAt)
       || error.code === "CANCELLED";
@@ -883,8 +985,10 @@ module.exports = {
   createProgressWriter,
   defaultRunPhase,
   defaultValidateListing,
+  extractTestFailures,
   flattenSingleRootDirectory,
   markStartupFailure,
   registerProcessGroup,
   runWorker,
+  wrapTestError,
 };
