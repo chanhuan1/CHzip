@@ -367,6 +367,10 @@ function createServices(options = {}) {
         archivePath: archive.filePath,
         outputDir,
         outputOwned: true,
+        // F2 智能拍平：inspectArchive 已产出 outputStem（archive-service.js
+        // 透传自 archive.js classifyArchive），交给 worker 收尾时和 outputDir
+        // 下唯一目录名做大小写不敏感比较。
+        outputStem: archive.outputStem || "",
         selection: jobSelection,
         sevenZipPath: archive.tool.path,
         sevenZipSource: archive.tool.source,

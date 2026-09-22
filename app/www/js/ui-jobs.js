@@ -303,8 +303,14 @@
             );
             if (job.status === "success") {
                 finishPolling(state);
-                setJobProgress(100, "解压完成", job.outputDir, state, job);
-                setNotice("解压任务已完成。", "success", state);
+                // F2：拍平过就给用户更明确的提示。
+                const successLabel = job.flattened ? "已拍平到" : "已解压到";
+                setJobProgress(100, "解压完成", `${successLabel}：${job.outputDir}`, state, job);
+                setNotice(
+                    job.flattenNote || "解压任务已完成。",
+                    "success",
+                    state,
+                );
                 els.resultOutputDir.textContent = job.outputDir;
                 els.resultDialog.hidden = false;
             } else if (job.status === "failed") {
@@ -413,11 +419,17 @@
             job.error?.message || "",
             job.outputDir || "",
         ]);
+        // F2：终态的 flattened/flattenNote/outputDir 也进签名，保证未来
+        // 「同一终态下 flatten 字段变化」也能触发重渲（当前在 active→history
+        // 迁移时整体签名已变，这里是防御性补齐）。
         const historyPart = history.map((job) => [
             job.id,
             job.status,
             job.phase,
             job.progress,
+            job.outputDir || "",
+            job.flattened ? 1 : 0,
+            job.flattenNote || "",
         ]);
         return JSON.stringify([activePart, historyPart]);
     }
@@ -643,11 +655,13 @@
                 started ? `开始于 ${started}` : "",
             ].filter(Boolean).join("，");
             if (job.status === "success") {
+                // F2：拍平过就换文案，让用户一眼看出少了一层壳。
+                const prefix = job.flattened ? "已拍平到：" : "已解压到：";
                 appendTaskMeta(
                     main,
                     finished,
                     timeTitle,
-                    `已解压到：${job.outputDir || ""}`,
+                    `${prefix}${job.outputDir || ""}`,
                     job.outputDir || "",
                 );
             } else if (job.status === "failed") {

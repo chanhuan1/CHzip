@@ -518,6 +518,66 @@ function cancellationError() {
   return error;
 }
 
+// F2 智能拍平：解压成功收尾时，如果 outputDir 下只剩一个目录（隐藏文件如
+// .DS_Store 忽略），且这个目录名与 job.outputStem 大小写不敏感相等，就把这层
+// 壳拆掉——目录里的所有条目 renameSync 上移一级，空壳 rmdirSync。
+//
+// 设计要点：
+// - 整个 flatten 走独立 try/catch：rename 冲突（EINVAL/EEXIST/ENOTEMPTY）、
+//   EPERM、EACCES 都必须静默吞掉，返回 { flattened:false }。成功终态绝不能
+//   因拍平失败变成 failed。
+// - 不动 job.outputDir：拍平后 outputDir 仍然是用户看到的「解压目标」，
+//   只是内容少了一层壳。前端只根据 flattened/flattenNote 切文案。
+// - 仅在「唯一可见条目是一个目录」时触发；唯一文件、多目录、目录名不同
+//   都不动。
+// - 大小写不敏感比较：归档内目录项与文件名主干大小写可能不同，忽略大小写
+//   更贴近用户预期。
+// - fsModule 可注入，便于单测在不真动文件的前提下驱动所有分支。
+function flattenSingleRootDirectory(job, options = {}) {
+  const fsModule = options.fsModule || fs;
+  const result = { flattened: false, flattenNote: "" };
+  if (!job || !job.outputDir) {
+    return result;
+  }
+  const stem = String(job.outputStem || "").trim();
+  if (!stem) {
+    return result;
+  }
+  try {
+    const entries = fsModule.readdirSync(job.outputDir, { withFileTypes: true });
+    const visible = entries.filter((entry) => !entry.name.startsWith("."));
+    if (visible.length !== 1) {
+      return result;
+    }
+    const sole = visible[0];
+    const isDir = typeof sole.isDirectory === "function"
+      ? sole.isDirectory()
+      : false;
+    if (!isDir) {
+      return result;
+    }
+    if (sole.name.toLowerCase() !== stem.toLowerCase()) {
+      return result;
+    }
+    const inner = path.join(job.outputDir, sole.name);
+    const innerEntries = fsModule.readdirSync(inner);
+    for (const name of innerEntries) {
+      fsModule.renameSync(
+        path.join(inner, name),
+        path.join(job.outputDir, name),
+      );
+    }
+    fsModule.rmdirSync(inner);
+    result.flattened = true;
+    result.flattenNote = `已拍平同名一层目录：${sole.name}`;
+    return result;
+  } catch (error) {
+    // 任何失败（rename 冲突 / EPERM / 目录已被并发改动）都静默吞掉：
+    // 拍平只是 UX 优化，绝不能让 success 变 failed。
+    return { flattened: false, flattenNote: "" };
+  }
+}
+
 function requireActiveJob(store, jobId) {
   const job = store.read(jobId);
   if (!job) {
@@ -698,6 +758,10 @@ async function runWorker(jobId, options = {}) {
       passwordProvided: Boolean(extractionPassword),
     });
 
+    // F2 智能拍平：必须在落 success 终态**之前**尝试，把结果（flattened /
+    // flattenNote）并入同一次 store.update。flatten 内部失败已在其自带
+    // try/catch 里吞掉，这里拿到的只是 {flattened:false}，不影响终态本身。
+    const flattenResult = flattenSingleRootDirectory(job, { fsModule: fs });
     store.update(jobId, (current) => {
       if (current.status === "cancelling" || current.cancelRequestedAt) {
         throw cancellationError();
@@ -711,6 +775,8 @@ async function runWorker(jobId, options = {}) {
         currentFile: "",
         finishedAt: new Date().toISOString(),
         error: null,
+        flattened: Boolean(flattenResult.flattened),
+        flattenNote: flattenResult.flattenNote || "",
       };
     });
     safeDiagnosticWrite(logger, {
@@ -794,6 +860,7 @@ module.exports = {
   createProgressWriter,
   defaultRunPhase,
   defaultValidateListing,
+  flattenSingleRootDirectory,
   markStartupFailure,
   registerProcessGroup,
   runWorker,
