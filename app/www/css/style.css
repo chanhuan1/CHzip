@@ -385,6 +385,54 @@ dd {
     background: var(--success-soft);
 }
 
+/* F12 乱码检测横幅：警告色系，与 .warning-list 同族 */
+.mojibake-banner {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin: 0 0 8px;
+    padding: 9px 11px;
+    border: 1px solid #ecd29a;
+    border-radius: var(--radius-md);
+    color: var(--warning);
+    background: var(--warning-soft);
+    font-size: 12px;
+}
+
+.mojibake-banner-actions {
+    display: inline-flex;
+    gap: 6px;
+}
+
+.mojibake-banner-actions button {
+    padding: 4px 10px;
+    border: 1px solid currentColor;
+    border-radius: var(--radius-md);
+    color: inherit;
+    background: transparent;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.mojibake-banner-actions button:hover {
+    background: rgba(154, 91, 8, 0.12);
+}
+
+.missing-parts-list {
+    margin: 0;
+    padding: 0 0 0 20px;
+    max-height: 240px;
+    overflow-y: auto;
+    font-size: 13px;
+    line-height: 1.8;
+    user-select: text;
+}
+
+.missing-parts-list li {
+    word-break: break-all;
+}
+
 .work-grid {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 360px;

@@ -57,6 +57,50 @@
         uiTree.setPreviewControls(enabled, state);
     }
 
+    // F12 乱码检测横幅。预览成功后扫描文件名，命中乱码特征时在文件树上方
+    // 显示横幅，给 GBK / Big5 / Shift-JIS 一键切换按钮；当前选中的代码页
+    // 不再重复给出。纯前端动作：改 codePageSelect.value 后重跑 loadPreview。
+    const MOJIBAKE_CODE_PAGE_OPTIONS = [
+        { value: "gbk", label: "简体中文 GBK" },
+        { value: "big5", label: "繁体中文 Big5" },
+        { value: "shift_jis", label: "日文 Shift-JIS" },
+    ];
+
+    function updateMojibakeBanner() {
+        const banner = els.mojibakeBanner;
+        if (!banner) {
+            return;
+        }
+        banner.hidden = true;
+        els.mojibakeBannerActions.replaceChildren();
+        if (!state.previewReady || !state.entries.length) {
+            return;
+        }
+        const suggestion = uiPreview.detectMojibake(
+            state.entries.map((entry) => entry.name || entry.path),
+        );
+        if (!suggestion) {
+            return;
+        }
+        const current = els.codePageSelect.value;
+        for (const option of MOJIBAKE_CODE_PAGE_OPTIONS) {
+            if (option.value === current) {
+                continue;
+            }
+            const button = document.createElement("button");
+            button.type = "button";
+            button.textContent = option.value === suggestion
+                ? `${option.label}（推荐）`
+                : option.label;
+            button.addEventListener("click", () => {
+                els.codePageSelect.value = option.value;
+                loadPreview();
+            });
+            els.mojibakeBannerActions.append(button);
+        }
+        banner.hidden = false;
+    }
+
     async function loadPreview(options = {}) {
         const els = state.elements;
         if (!state.filePath || state.running) {
@@ -186,6 +230,9 @@
                 state.passwordVerified = false;
                 uiDialogs.setNotice("密码错误，请重新输入后验证。", "error", state);
                 passwordManagerApi.openPasswordPrompt("密码错误，请检查后重新验证。");
+            } else if (error.code === "MISSING_VOLUME") {
+                uiDialogs.setNotice(error.message, "error", state);
+                uiDialogs.openMissingPartsDialog(state, error.details);
             } else if (uiDialogs.handlePermissionError(error, state)) {
                 uiDialogs.setNotice(error.message, "error", state);
             } else {
@@ -193,6 +240,7 @@
             }
         } finally {
             state.previewing = false;
+            updateMojibakeBanner();
             uiTree.renderTree(state, treeApi);
             passwordManagerApi.updatePasswordManagerStatus();
             updateActionAvailability();
@@ -801,6 +849,13 @@
             closeDiagnostics();
         }
     });
+    els.closeMissingPartsBtn.addEventListener("click", () => uiDialogs.closeMissingPartsDialog(state));
+    els.confirmMissingPartsBtn.addEventListener("click", () => uiDialogs.closeMissingPartsDialog(state));
+    els.missingPartsDialog.addEventListener("click", (event) => {
+        if (event.target === els.missingPartsDialog) {
+            uiDialogs.closeMissingPartsDialog(state);
+        }
+    });
     els.closePermissionDialogBtn.addEventListener("click", () => uiDialogs.closePermissionDialog(state));
     els.retryPermissionBtn.addEventListener("click", retryPermissionAccess);
     els.permissionDiagnosticsBtn.addEventListener("click", openPermissionDiagnostics);
@@ -892,6 +947,7 @@
         ["passwordPromptDialog", () => passwordManagerApi.closePasswordPrompt()],
         ["passwordManagerDialog", () => passwordManagerApi.closePasswordManager()],
         ["permissionDialog", () => uiDialogs.closePermissionDialog(state)],
+        ["missingPartsDialog", () => uiDialogs.closeMissingPartsDialog(state)],
         ["resultDialog", () => closeResultDialog()],
         ["diagnosticsDialog", () => closeDiagnostics()],
         ["taskCenterDialog", () => uiJobs.closeTaskCenter(state, api)],

@@ -40,6 +40,81 @@
         els.createDirectoryError.hidden = !message;
     }
 
+    // ------------------------------------------------------------
+    // F12 分卷缺失引导卡：把 missingParts 数字按分卷命名规则还原成
+    // 具体缺失文件名。纯函数，Node 单测直接消费。
+    //
+    // missingParts 数字的含义随 kind 变化（见 archive.js collectVolumeNames）：
+    //   split     —— .7z.001/.zip.001 式，数字就是序号（1 起）
+    //   rar-parts —— .partN.rar，数字就是 N（1 起）
+    //   zip-z     —— .z01 式，数字是 z 后缀号（1 起）
+    //   rar-old   —— .r00 式，数字是**原始号**（0 = 第二卷 .r00）
+    function buildMissingVolumeNames(details) {
+        if (!details || !Array.isArray(details.missingParts)) {
+            return [];
+        }
+        const stem = String(details.seriesStem || "");
+        const width = Number(details.partWidth) > 0
+            ? Number(details.partWidth)
+            : 2;
+        const pad = (value) => String(value).padStart(width, "0");
+        const pad2 = (value) => String(value).padStart(Math.max(width, 2), "0");
+        switch (details.kind) {
+        case "split":
+            return details.missingParts.map((n) => `${stem}.${pad(n)}`);
+        case "rar-parts":
+            return details.missingParts.map(
+                (n) => `${stem}.part${pad(n)}.rar`,
+            );
+        case "zip-z":
+            return details.missingParts.map((n) => `${stem}.z${pad2(n)}`);
+        case "rar-old":
+            return details.missingParts.map((n) => `${stem}.r${pad2(n)}`);
+        default:
+            return [];
+        }
+    }
+
+    function closeMissingPartsDialog(state) {
+        state.elements.missingPartsDialog.hidden = true;
+    }
+
+    // details 可能缺失（engine.js 的 classifySevenZipError 也会抛
+    // MISSING_VOLUME，那条路径没有 archive 上下文）——此时降级为纯文案，
+    // 不渲染缺失清单。
+    function openMissingPartsDialog(state, details) {
+        const els = state.elements;
+        const names = buildMissingVolumeNames(details);
+        const total = details && Number(details.missingTotal) > 0
+            ? Number(details.missingTotal)
+            : names.length;
+        if (names.length) {
+            els.missingPartsList.replaceChildren();
+            for (const name of names) {
+                const item = document.createElement("li");
+                item.textContent = name;
+                els.missingPartsList.append(item);
+            }
+            if (details.missingTruncated || total > names.length) {
+                const more = document.createElement("li");
+                more.textContent = `…共缺失 ${total} 个分卷`;
+                els.missingPartsList.append(more);
+            }
+            els.missingPartsList.hidden = false;
+        } else {
+            els.missingPartsList.replaceChildren();
+            els.missingPartsList.hidden = true;
+        }
+        const firstVolume = details && details.firstVolumeName
+            ? details.firstVolumeName
+            : "";
+        els.missingPartsHint.textContent = firstVolume
+            ? `压缩包分卷不完整。请把上方缺失的分卷文件补齐到同一目录后，右键首卷 “${firstVolume}” 重新打开。`
+            : "压缩包分卷不完整。请把缺失的分卷文件补齐到同一目录后，右键首卷重新打开。";
+        els.missingPartsDialog.hidden = false;
+        els.closeMissingPartsBtn?.focus?.();
+    }
+
     function isPermissionError(error) {
         return error?.code === "SOURCE_FILE_DENIED"
             || error?.code === "SOURCE_PARENT_DENIED";
@@ -439,9 +514,11 @@
     }
 
     root.CHzipUiDialogs = {
+        buildMissingVolumeNames,
         chooseBrowsingDirectory,
         closeCreateDirectoryDialog,
         closeDirectoryDialog,
+        closeMissingPartsDialog,
         closePermissionDialog,
         createDirectory,
         currentBrowsingRoot,
@@ -454,6 +531,7 @@
         loadDirectoryRoots,
         openCreateDirectoryDialog,
         openDirectoryDialog,
+        openMissingPartsDialog,
         openPermissionDialog,
         recordDiagnosticError,
         refreshDirectoryRoots,

@@ -399,12 +399,22 @@ function createServices(options = {}) {
   // providedArchive：调用方（extract）已经解析过同一个压缩包时可以直接传入，
   // 避免 inspectArchive 在同一请求内跑两遍（分卷多时这一遍是逐级 stat 的
   // 重活，见 archive-service.inspectArchive → source-access.inspectSourceFile）。
+  // F12：MISSING_VOLUME 抛错时把 inspectArchive 产出的 missingDetails
+  // 挂到 error.details，api.js catch 会平铺进响应，前端据此渲染
+  // 「缺哪几卷、请右键首卷」引导卡。
+  function attachMissingDetails(error, archive) {
+    if (archive.missingDetails) {
+      error.details = archive.missingDetails;
+    }
+    return error;
+  }
+
   function preview(input, providedArchive = null) {
     const archive = providedArchive || info(input);
     if (archive.missingParts.length) {
       const error = new Error(archive.warnings[0]);
       error.code = "MISSING_VOLUME";
-      throw error;
+      throw attachMissingDetails(error, archive);
     }
     return withPreparedArchive(archive, input, (listingArchive) => {
       let result = runSync(listingArchive.tool, buildListArgs(
@@ -507,7 +517,7 @@ function createServices(options = {}) {
     if (archive.missingParts.length) {
       const error = new Error(archive.warnings[0]);
       error.code = "MISSING_VOLUME";
-      throw error;
+      throw attachMissingDetails(error, archive);
     }
 
     let previewResult = null;

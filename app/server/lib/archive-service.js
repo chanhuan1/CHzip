@@ -59,6 +59,21 @@ function inspectArchive(selectedPath, options = {}) {
     filePath === archivePath ? firstSource : inspectSource(filePath)
   ));
   const missingParts = volumeInfo.missingParts;
+  // F12：分卷缺失引导卡需要的结构化信息。此前 missingTotal/missingTruncated
+  // 只折进 warnings 文案，前端拿不到；kind/seriesStem/partWidth 是前端按四种
+  // 命名规则（.001/.z01/.partN.rar/.rNN）还原缺失文件名所必需的。
+  const missingDetails = missingParts.length
+    ? {
+      missingParts,
+      missingTotal: volumeInfo.missingTotal,
+      missingTruncated: volumeInfo.missingTruncated,
+      kind: selection.kind,
+      seriesStem: selection.seriesStem || selection.outputStem,
+      partWidth: selection.partWidth || 2,
+      firstVolumeName: volumeInfo.firstVolumeName || selection.firstVolumeName,
+      format: selection.format || "",
+    }
+    : null;
   const warnings = [];
   if (missingParts.length) {
     // 缺失枚举有上界（见 archive.js 的 MAX_MISSING_ENUM / MAX_VOLUME_NUMBER）：
@@ -82,6 +97,9 @@ function inspectArchive(selectedPath, options = {}) {
     // 复用构造源文件指纹，避免对同一批分卷再跑一遍 realpath+stat。
     sources: volumeSources,
     missingParts,
+    missingTotal: volumeInfo.missingTotal,
+    missingTruncated: volumeInfo.missingTruncated,
+    missingDetails,
     warnings,
     tool: options.sevenZip || null,
   };

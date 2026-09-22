@@ -172,6 +172,75 @@
         }
     }
 
+    // ------------------------------------------------------------
+    // F12 乱码检测（纯函数，无 DOM 依赖，Node 测试直接消费）。
+    //
+    // 误报红线（比漏报更糟）：
+    //   1. 纯 ASCII 名永不命中。
+    //   2. 已正确解码的 CJK（U+4E00-U+9FFF）、平/片假名、韩文音节、
+    //      希腊/西里尔、越南文 Latin Extended Additional 都不算乱码。
+    //   3. 欧洲语言文件名（Café / naïve / Łódź）只含零星高字节字符，
+    //      要求「连续堆叠 >= 3」才命中，单字符不算。
+    //   4. C1 控制符（U+0080-U+009F）在合法 UTF-8 解码结果里不可能出现，
+    //      出现即说明字节流被 Latin-1/CP1252 误读，直接命中。
+    //   5. U+FFFD 替换字符同理：合法文件名不会含它。
+    //
+    // UTF-8 被 Latin-1/CP1252 误读时的典型残留：原 UTF-8 lead byte
+    //（0xC0-0xFF）落成 Latin-1 Supplement 字母（À-ÿ），continuation byte
+    //（0x80-0xBF）落成 C1 或 ¡-¿；过 CP1252 还会把 0x80-0x9F 映射到
+    // General Punctuation（‹ › • † ‡ … ‰ € 等）。Big5 / Shift-JIS
+    // 被误读时落在同一批区间，只是分布不同。
+    const MOJIBAKE_MAX_SCAN = 200;
+    const MOJIBAKE_LATIN1 = "\u00c0-\u00ff";
+    const MOJIBAKE_C1_PUNCT = "\u0080-\u00bf";
+    const MOJIBAKE_CP1252 = "\u2013-\u203a\u20ac";
+    const MOJIBAKE_STACK = new RegExp(
+        `[${MOJIBAKE_LATIN1}${MOJIBAKE_C1_PUNCT}${MOJIBAKE_CP1252}]{3,}`,
+        "u",
+    );
+    const MOJIBAKE_C1 = /[\u0080-\u009f]/u;
+    const MOJIBAKE_PAIR = new RegExp(
+        `[${MOJIBAKE_LATIN1}][${MOJIBAKE_C1_PUNCT}${MOJIBAKE_CP1252}]`,
+        "gu",
+    );
+
+    function isMojibakeName(name) {
+        const text = String(name == null ? "" : name);
+        if (!text) {
+            return false;
+        }
+        if (text.includes("\ufffd") || MOJIBAKE_C1.test(text)) {
+            return true;
+        }
+        if (MOJIBAKE_STACK.test(text)) {
+            return true;
+        }
+        // 弱信号兜底：两个及以上 lead+continuation 对。堆叠里夹着不在
+        // 字符类内的字符时 STACK 可能断成两段长度 2 的串，靠 pair 计数接住。
+        const pairs = text.match(MOJIBAKE_PAIR);
+        return Boolean(pairs && pairs.length >= 2);
+    }
+
+    // 扫描文件名列表，返回 false（干净）或建议代码页字符串。
+    // 命中时无法可靠区分 GBK/Big5/Shift-JIS 三种来源编码（字节被误读后
+    // 落在同一批 Unicode 区间），统一建议 "gbk"（用户基数最大的场景），
+    // 横幅同时给出 Big5 / Shift-JIS 按钮一键试。限扫前 200 条控制成本。
+    function detectMojibake(names, options) {
+        const limit = options && options.maxScan > 0
+            ? options.maxScan
+            : MOJIBAKE_MAX_SCAN;
+        if (!Array.isArray(names)) {
+            return false;
+        }
+        const slice = names.slice(0, limit);
+        for (const name of slice) {
+            if (isMojibakeName(name)) {
+                return "gbk";
+            }
+        }
+        return false;
+    }
+
     function formatSize(bytes) {
         if (!Number.isFinite(Number(bytes))) {
             return "-";
@@ -190,7 +259,9 @@
     root.CHzipPreview = {
         MAX_HIGHLIGHT_LINES,
         MAX_PREVIEW_LINES,
+        MOJIBAKE_MAX_SCAN,
         PREVIEW_MAX_SIZE,
+        detectMojibake,
         escapeHtml,
         formatSize,
         formatTextPreview,
@@ -199,6 +270,7 @@
         getFileType,
         highlightSyntax,
         isImageFile,
+        isMojibakeName,
         isPreviewable,
         isTextFile,
         revokeBlobUrl,

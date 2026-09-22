@@ -368,6 +368,13 @@ async function runCli() {
       error: {
         code: error.code || "INTERNAL",
         message: error.message || "调用错误",
+        // F12：把 services 挂上来的结构化 details（如 MISSING_VOLUME 的
+        // missingParts/firstVolumeName）平铺进响应 error。api-client 已有
+        // error.details = data.error，前端 error.details.missingParts 即可用。
+        // 只接受纯对象，防止意外把 Error 实例/循环引用塞进 JSON。
+        ...(error.details && typeof error.details === "object"
+          ? error.details
+          : {}),
       },
       msg: error.message || "调用错误",
       requestId: error.requestId || "",
