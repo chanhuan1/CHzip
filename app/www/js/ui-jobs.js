@@ -251,6 +251,7 @@
                 path: state.filePath,
                 password: els.passwordInput.value,
                 codePage: els.codePageSelect.value,
+                conflictPolicy: els.conflictPolicySelect.value,
                 destinationRoot: state.selectedDirectory,
                 selectedPaths,
             });

@@ -151,6 +151,7 @@ async function routeRequest(api, request, services) {
       path: request.body.path,
       password: request.body.password || "",
       codePage: request.body.codePage || "auto",
+      conflictPolicy: request.body.conflictPolicy || "rename",
       destinationRoot: request.body.destinationRoot || "",
       selectedPaths: request.body.selectedPaths,
       requestId,

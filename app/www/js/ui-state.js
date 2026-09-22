@@ -77,6 +77,7 @@
             closePermissionDialogBtn: $("closePermissionDialogBtn"),
             closeResultDialogBtn: $("closeResultDialogBtn"),
             codePageSelect: $("codePageSelect"),
+            conflictPolicySelect: $("conflictPolicySelect"),
             confirmPasswordManagerBtn: $("confirmPasswordManagerBtn"),
             confirmPasswordRecordBtn: $("confirmPasswordRecordBtn"),
             confirmCreateDirectoryBtn: $("confirmCreateDirectoryBtn"),

@@ -167,6 +167,16 @@
                                 <option value="korean">韩文（949）</option>
                             </select>
                         </label>
+
+                        <label class="field conflict-policy-field">
+                            <span>同名文件冲突时</span>
+                            <select id="conflictPolicySelect">
+                                <option value="rename">自动重命名新文件</option>
+                                <option value="overwrite">覆盖已存在文件</option>
+                                <option value="skip">跳过已存在文件</option>
+                                <option value="keepnew">保留较新文件</option>
+                            </select>
+                        </label>
                     </div>
                 </aside>
             </section>

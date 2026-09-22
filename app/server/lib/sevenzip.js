@@ -17,18 +17,18 @@ function normalizeCodePage(value = "auto") {
   return { id, codePage: CODE_PAGES[id] };
 }
 
-// 解压冲突策略：覆盖已存在文件时的行为。
+// 解压冲突策略：覆盖已存在文件时的行为。键一律小写（normalize 里会 toLowerCase）。
 //   rename    —— 自动重命名新文件为 "name (2).ext"（-aou，默认，保持现状）
 //   overwrite —— 无条件覆盖（-aoa）
 //   skip      —— 跳过已存在文件（-aos，供「失败续跑」复用）
-//   keepNew   —— 保留较新：新文件占原名、旧文件改名（-aot）
+//   keepnew   —— 保留较新：新文件占原名、旧文件改名（-aot）
 // 与 normalizeCodePage 同款白名单：CGI 参数直通 spawn，未知值立刻 throw，
 // 不给命令注入留缝。F8（失败续跑）复用 skip，不要再造第二个 overwriteMode。
 const CONFLICT_POLICIES = Object.freeze({
   rename: Object.freeze({ flag: "-aou", label: "自动重命名" }),
   overwrite: Object.freeze({ flag: "-aoa", label: "覆盖已存在文件" }),
   skip: Object.freeze({ flag: "-aos", label: "跳过已存在文件" }),
-  keepNew: Object.freeze({ flag: "-aot", label: "保留较新文件" }),
+  keepnew: Object.freeze({ flag: "-aot", label: "保留较新文件" }),
 });
 
 function normalizeConflictPolicy(value = "rename") {

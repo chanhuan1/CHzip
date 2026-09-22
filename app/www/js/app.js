@@ -607,6 +607,7 @@
         els.cancelBtn.hidden = !state.running;
         els.refreshPreviewBtn.disabled = state.running || state.previewing || !state.info;
         els.codePageSelect.disabled = state.running || state.previewing;
+        els.conflictPolicySelect.disabled = state.running || state.previewing;
         els.openPasswordManagerBtn.disabled = state.running || state.previewing || !state.info;
         els.passwordInput.disabled = state.running || state.previewing;
         els.passwordPresetToggleBtn.disabled = state.running || state.previewing;

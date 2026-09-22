@@ -686,6 +686,9 @@ async function runWorker(jobId, options = {}) {
       selectionFile: job.selectionFile,
       password: extractionPassword,
       codePage: extractionCodePage,
+      // F1：正式解压应用用户选择的冲突策略；旧 job JSON 没有该字段时
+      // normalizeConflictPolicy(undefined) 回落 rename，与以前行为一致。
+      conflictPolicy: job.conflictPolicy,
     });
     const extractResult = await runPhase("extracting", {
       args: extractArgs,

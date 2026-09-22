@@ -371,6 +371,7 @@ function createServices(options = {}) {
         sevenZipPath: archive.tool.path,
         sevenZipSource: archive.tool.source,
         codePage: input.codePage || "auto",
+        conflictPolicy: input.conflictPolicy || "rename",
         partCount: archive.partCount,
         // info() 已对每卷跑过 realpath+stat（结果在 archive.sources 的
         // .stat 上），直接复用构造指纹；只对没有 stat 的退化路径才
