@@ -581,3 +581,121 @@ test("a mid-render deselection is also honoured by the remaining batches", () =>
   assert.equal(stillChecked.length, 0, "取消勾选后不应还有行显示为已勾选");
 });
 
+
+
+
+// ------------------------------------------- F13: 压缩率列 + 加密锁标
+
+test("file rows render ratio cell and lock badge; directory rows leave ratio empty", () => {
+  const { renderTree } = globalThis.CHzipUiTree;
+  const entries = [
+    {
+      path: "dir/encrypted.zip",
+      type: "file",
+      size: 100,
+      packedSize: 38,
+      encrypted: true,
+      modified: "2024-01-15T10:30:00.000Z",
+    },
+    { path: "dir/plain.txt", type: "file", size: 200, packedSize: 50 },
+    { path: "dir/empty.txt", type: "file", size: 0, packedSize: 0 },
+    { path: "dir/nopack.txt", type: "file", size: 100 },
+    { path: "dir/negative.txt", type: "file", size: 100, packedSize: 150 },
+  ];
+  const state = createState({
+    entries,
+    tree: buildTree(entries),
+    allFilePaths: entries.map((e) => e.path),
+    expandedPaths: new Set(["dir"]),
+  });
+
+  renderTree(state, globalThis.CHzipTree);
+
+  const rowByPath = new Map(rowsOf(fileTree).map((r) => [r.dataset.path, r]));
+  const childOf = (path, cls) => rowByPath
+    .get(path)
+    .children.find((c) => c.classList.contains(cls));
+
+  // 压缩率文本：100→38 = -62%，200→50 = -75%
+  assert.equal(childOf("dir/encrypted.zip", "tree-ratio").textContent, "-62%");
+  assert.equal(childOf("dir/plain.txt", "tree-ratio").textContent, "-75%");
+  // size<=0 / packedSize 缺失 / 压完反而更大 → 空串
+  assert.equal(childOf("dir/empty.txt", "tree-ratio").textContent, "");
+  assert.equal(childOf("dir/nopack.txt", "tree-ratio").textContent, "");
+  assert.equal(childOf("dir/negative.txt", "tree-ratio").textContent, "");
+
+  // 目录行：仍占位列但内容为空
+  const dirRatio = childOf("dir", "tree-ratio");
+  assert.ok(dirRatio, "目录行仍应渲染 .tree-ratio 占位元素");
+  assert.equal(dirRatio.textContent, "");
+  const dirLock = childOf("dir", "tree-lock");
+  assert.ok(dirLock, "目录行仍应渲染 .tree-lock 占位元素");
+  assert.equal(dirLock.innerHTML, "");
+
+  // 加密锁标：只有 encrypted=true 的文件才挂 SVG
+  assert.ok(
+    childOf("dir/encrypted.zip", "tree-lock").innerHTML.includes("<svg"),
+    "加密文件应在锁标位渲染 SVG",
+  );
+  assert.equal(childOf("dir/plain.txt", "tree-lock").innerHTML, "");
+
+  // label 仍是纯 textContent（未被 innerHTML 污染）
+  const encLabel = rowByPath.get("dir/encrypted.zip").children
+    .find((c) => c.classList.contains("tree-label"));
+  assert.equal(encLabel.textContent, "encrypted.zip");
+  assert.equal(encLabel.innerHTML, "");
+
+  // tooltip：完整路径 + 修改时间 + 原始/压缩后大小
+  const tip = rowByPath.get("dir/encrypted.zip").title;
+  assert.ok(tip.includes("dir/encrypted.zip"), "tooltip 应含完整路径");
+  assert.ok(tip.includes("2024-01-15"), "tooltip 应含修改时间");
+  assert.ok(tip.includes("100 B"), "tooltip 应含原始大小");
+  assert.ok(tip.includes("38 B"), "tooltip 应含压缩后大小");
+
+  // 目录行 tooltip 仍只是路径
+  assert.equal(rowByPath.get("dir").title, "dir");
+});
+
+test("search rows also render ratio cell and lock badge", () => {
+  const { renderTree } = globalThis.CHzipUiTree;
+  const entries = [
+    {
+      path: "x/locked.bin",
+      type: "file",
+      size: 100,
+      packedSize: 20,
+      encrypted: true,
+      modified: "2024-02-01T00:00:00.000Z",
+    },
+    { path: "x/open.bin", type: "file", size: 100, packedSize: 20 },
+  ];
+  const state = createState({
+    entries,
+    tree: buildTree(entries),
+    allFilePaths: entries.map((e) => e.path),
+  });
+  state.elements.treeSearchInput.value = ".bin";
+
+  renderTree(state, globalThis.CHzipTree);
+
+  const rows = rowsOf(fileTree);
+  assert.equal(rows.length, 2);
+  const byPath = new Map(rows.map((r) => [r.dataset.path, r]));
+  const find = (path, cls) => byPath.get(path).children
+    .find((c) => c.classList.contains(cls));
+
+  // 100→20 = -80%
+  assert.equal(find("x/locked.bin", "tree-ratio").textContent, "-80%");
+  assert.equal(find("x/open.bin", "tree-ratio").textContent, "-80%");
+
+  assert.ok(find("x/locked.bin", "tree-lock").innerHTML.includes("<svg"));
+  assert.equal(find("x/open.bin", "tree-lock").innerHTML, "");
+
+  // 搜索行 tooltip 同样含修改时间与大小
+  const tip = byPath.get("x/locked.bin").title;
+  assert.ok(tip.includes("x/locked.bin"));
+  assert.ok(tip.includes("2024-02-01"));
+  assert.ok(tip.includes("100 B"));
+  assert.ok(tip.includes("20 B"));
+});
+

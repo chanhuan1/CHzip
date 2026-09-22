@@ -45,6 +45,54 @@
         + '<circle class="tree-preview-pupil" cx="8" cy="8" r="2.1"/>'
         + "</svg>";
 
+    // 加密文件的锁标：与 TREE_ICONS / PREVIEW_EYE_ICON 同一套 currentColor 方案，
+    // 不用 emoji（跨平台字形不一致）。填充/描边颜色由 .tree-lock-body / .tree-lock-shackle
+    // CSS 规则驱动，便于主题切换。
+    // 注意：这是模块内部常量，不要挂到 CHzipUiTree 导出对象上 ——
+    // tests/ui-dialogs.test.js 的 assertExportedCallsResolve 只扫 app.js 里的
+    // uiXxx.Y( 调用，新增内部常量若误导出会破坏「导出最小面」的约定。
+    const LOCK_ICON = '<svg viewBox="0 0 16 16" focusable="false" aria-hidden="true">'
+        + '<path class="tree-lock-shackle" d="M5 7V5a3 3 0 0 1 6 0v2"'
+        + ' fill="none" stroke-width="1.6" stroke-linecap="round"/>'
+        + '<rect class="tree-lock-body" x="3.5" y="7" width="9" height="7" rx="1.4"/>'
+        + "</svg>";
+
+    // 压缩率展示：返回 "-62%" 这种短串；没有可展示的收益
+    // （size<=0、packedSize 缺失/非法、或压完反而更大）返回空串，
+    // 调用方据此把 .tree-ratio 留空。
+    // 内部辅助函数，不导出（理由同 LOCK_ICON）。
+    function formatRatio(packedSize, size) {
+        const original = Number(size);
+        const packed = Number(packedSize);
+        if (!Number.isFinite(original) || original <= 0) {
+            return "";
+        }
+        // packedSize===0 而 size>0 视为"无压缩数据"（buildTree 对缺失的 packedSize
+        // 默认 0，不是真的压成 0 字节 —— 原文件非空的话压到 0 不可能）。
+        if (!Number.isFinite(packed) || packed <= 0) {
+            return "";
+        }
+        const savings = 1 - packed / original;
+        if (savings <= 0) {
+            return "";
+        }
+        return `-${Math.round(savings * 100)}%`;
+    }
+
+    // 文件行的多行 tooltip：完整路径 + 修改时间（若有）+ 原始/压缩后大小。
+    // entry 可以是 buildTree 的叶子节点，也可以是 searchFiles 返回的原始 entry —
+    // 两个路径上的字段名一致（size/packedSize/modified/encrypted），统一在这里拼。
+    function buildFileTooltip(path, entry) {
+        const lines = [String(path || "")];
+        if (entry && entry.modified) {
+            lines.push(`修改时间: ${entry.modified}`);
+        }
+        if (entry && Number.isFinite(Number(entry.size)) && Number(entry.size) > 0) {
+            lines.push(`原始: ${formatSize(entry.size)} / 压缩后: ${formatSize(entry.packedSize)}`);
+        }
+        return lines.join("\n");
+    }
+
     const RENDER_BATCH_SIZE = 200;
 
     // ---------------------------------------------------------------- 渲染期索引
@@ -83,7 +131,7 @@
         const row = registerRow(document.createElement("div"), entry.path);
         row.className = "tree-row tree-search-row";
         row.style.setProperty("--tree-depth", "0");
-        row.title = entry.path;
+        row.title = buildFileTooltip(entry.path, entry);
 
         const toggle = document.createElement("button");
         toggle.type = "button";
@@ -99,16 +147,31 @@
 
         const icon = createTreeIcon(false);
 
+        // 加密锁标：始终占位（非加密留空），保证 grid 列对齐；
+        // 空元素通过 CSS .tree-lock:empty { display:none } 折叠，
+        // 没加密文件时该列不占宽度。
+        const lock = document.createElement("span");
+        lock.className = "tree-lock";
+        lock.setAttribute("aria-hidden", "true");
+        if (entry.encrypted) {
+            lock.innerHTML = LOCK_ICON;
+            lock.title = "已加密";
+        }
+
         const label = document.createElement("span");
         label.className = "tree-label";
         const normalizedPath = String(entry.path || "").replace(/\\/g, "/");
         label.textContent = normalizedPath.slice(normalizedPath.lastIndexOf("/") + 1);
 
+        const ratio = document.createElement("span");
+        ratio.className = "tree-ratio";
+        ratio.textContent = formatRatio(entry.packedSize, entry.size);
+
         const size = document.createElement("span");
         size.className = "tree-size";
         size.textContent = formatSize(entry.size);
 
-        row.append(toggle, checkbox, icon, label, size);
+        row.append(toggle, checkbox, icon, lock, label, ratio, size);
         container.append(row);
     }
 
@@ -116,7 +179,7 @@
         const row = registerRow(document.createElement("div"), node.path);
         row.className = "tree-row";
         row.style.setProperty("--tree-depth", String(depth));
-        row.title = node.path;
+        row.title = node.type === "file" ? buildFileTooltip(node.path, node) : node.path;
 
         const toggle = document.createElement("button");
         toggle.type = "button";
@@ -144,15 +207,31 @@
 
         const icon = createTreeIcon(node.type === "directory");
 
+        // 加密锁标：仅文件可能加密；目录行也占位（空），保证 grid 列对齐。
+        const lock = document.createElement("span");
+        lock.className = "tree-lock";
+        lock.setAttribute("aria-hidden", "true");
+        if (node.type === "file" && node.encrypted) {
+            lock.innerHTML = LOCK_ICON;
+            lock.title = "已加密";
+        }
+
         const label = document.createElement("span");
         label.className = "tree-label";
         label.textContent = node.name;
+
+        // 压缩率列：仅文件节点显示；目录行留空占位。
+        const ratio = document.createElement("span");
+        ratio.className = "tree-ratio";
+        ratio.textContent = node.type === "file"
+            ? formatRatio(node.packedSize, node.size)
+            : "";
 
         const size = document.createElement("span");
         size.className = "tree-size";
         size.textContent = node.type === "file" ? formatSize(node.size) : "";
 
-        row.append(toggle, checkbox, icon, label, size);
+        row.append(toggle, checkbox, icon, lock, label, ratio, size);
 
         if (node.type === "file" && state.previewableFiles && state.previewableFiles.has(node.path)) {
             const previewBtn = document.createElement("button");

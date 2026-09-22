@@ -485,7 +485,7 @@ dd {
 
 .tree-row {
     display: grid;
-    grid-template-columns: 26px 20px 20px minmax(0, 1fr) auto;
+    grid-template-columns: 26px 20px 20px auto minmax(0, 1fr) auto auto;
     gap: 5px;
     align-items: center;
     min-height: 34px;
@@ -592,6 +592,45 @@ dd {
     color: var(--muted);
     font-size: 11px;
     white-space: nowrap;
+}
+
+/* 压缩率列：右对齐、等宽数字、弱化色，避免与文件名抢视觉焦点。 */
+.tree-ratio {
+    color: var(--muted);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+    text-align: right;
+    white-space: nowrap;
+}
+
+/* 加密锁标：始终渲染一个 span（空表示未加密），便于 grid 列对齐；
+   未加密时用 :empty 折叠，没加密文件的列宽自然归零。 */
+.tree-lock {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    color: var(--muted);
+}
+
+.tree-lock:empty {
+    display: none;
+}
+
+.tree-lock svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.tree-lock-body {
+    fill: currentColor;
+}
+
+.tree-lock-shackle {
+    stroke: currentColor;
 }
 
 .settings-form {
@@ -1641,10 +1680,11 @@ dd {
     }
 
     .tree-row {
-        grid-template-columns: 25px 19px 18px minmax(0, 1fr);
+        grid-template-columns: 25px 19px 18px auto minmax(0, 1fr);
     }
 
-    .tree-size {
+    .tree-size,
+    .tree-ratio {
         display: none;
     }
 
