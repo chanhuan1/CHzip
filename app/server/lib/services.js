@@ -105,6 +105,13 @@ function toJobView(job) {
     startedAt: job.startedAt || "",
     finishedAt: job.finishedAt || "",
     createdAt: job.createdAt || "",
+    // 对外扩展字段（F2/F6/F7/F8）。旧 job JSON 缺字段时用 || 默认值兜底。
+    // conflictPolicy/outputStem/retryOf 是内部字段，刻意不透传给前端。
+    kind: job.kind || "extract",
+    partialSuccess: Boolean(job.partialSuccess),
+    flattened: Boolean(job.flattened),
+    flattenNote: job.flattenNote || "",
+    queueAhead: job.queueAhead ?? null,
     error: job.error
       ? { code: job.error.code || "", message: job.error.message || "" }
       : null,

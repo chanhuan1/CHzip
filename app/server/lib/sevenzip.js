@@ -17,6 +17,28 @@ function normalizeCodePage(value = "auto") {
   return { id, codePage: CODE_PAGES[id] };
 }
 
+// 解压冲突策略：覆盖已存在文件时的行为。
+//   rename    —— 自动重命名新文件为 "name (2).ext"（-aou，默认，保持现状）
+//   overwrite —— 无条件覆盖（-aoa）
+//   skip      —— 跳过已存在文件（-aos，供「失败续跑」复用）
+//   keepNew   —— 保留较新：新文件占原名、旧文件改名（-aot）
+// 与 normalizeCodePage 同款白名单：CGI 参数直通 spawn，未知值立刻 throw，
+// 不给命令注入留缝。F8（失败续跑）复用 skip，不要再造第二个 overwriteMode。
+const CONFLICT_POLICIES = Object.freeze({
+  rename: Object.freeze({ flag: "-aou", label: "自动重命名" }),
+  overwrite: Object.freeze({ flag: "-aoa", label: "覆盖已存在文件" }),
+  skip: Object.freeze({ flag: "-aos", label: "跳过已存在文件" }),
+  keepNew: Object.freeze({ flag: "-aot", label: "保留较新文件" }),
+});
+
+function normalizeConflictPolicy(value = "rename") {
+  const id = String(value || "rename").toLowerCase();
+  if (!Object.hasOwn(CONFLICT_POLICIES, id)) {
+    throw new Error("不支持的解压冲突策略");
+  }
+  return { id, ...CONFLICT_POLICIES[id] };
+}
+
 // 7-Zip 26.x 对 RAR5 多分卷（Volume Locator）在强制 -tRar 时反而 Open ERROR，
 // RAR/RAR5 一律交给引擎自动识别更稳；`.split` 是内部伪类型，也不下发。
 // comment 读/写与 list/extract 共用同一条红线。
@@ -54,7 +76,10 @@ function buildExtractArgs(selection, options) {
   const args = [
     "x",
     "-y",
-    "-aou",
+    // 冲突策略来自 job.conflictPolicy（F1），默认 rename 维持现状。
+    // 注意：嵌套 tar 预解与预览准备目录是 mkdtemp 出来的空目录，
+    // 必须继续传默认 -aou，不能让用户策略污染那条路径。
+    normalizeConflictPolicy(options.conflictPolicy).flag,
     "-mmt=on",
     "-bsp1",
     "-bb1",
@@ -107,12 +132,27 @@ function buildReadCommentArgs(selection, options) {
   return args;
 }
 
+// 完整性体检（F6）：`7z t` 流式校验整个压缩包的 CRC。
+// 与 x 的关键差别：只读不写盘（无 -o），因此对固实包、大归档都是安全预检；
+// -bsp1 让进度行与解压同构，前端轮询同一套解析即可复用。
+// 密码与代码页走与 list/extract 相同的 appendArchiveOptions（含 -p 临时文件语义
+// 由调用方保证；这里只拼参数）。
+function buildTestArgs(selection, options) {
+  const args = ["t", "-y", "-bsp1", "-bb1", "-sccUTF-8"];
+  appendArchiveOptions(args, selection, options);
+  args.push(options.archivePath);
+  return args;
+}
+
 module.exports = {
   CODE_PAGES,
+  CONFLICT_POLICIES,
   buildCommentArgs,
   buildExtractArgs,
   buildListArgs,
   buildReadCommentArgs,
   buildStdoutExtractArgs,
+  buildTestArgs,
   normalizeCodePage,
+  normalizeConflictPolicy,
 };

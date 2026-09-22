@@ -101,10 +101,24 @@ class JobStore {
     const job = {
       id,
       requestId: input.requestId || "",
+      // 任务类型（F6）：extract=解压（默认）/test=完整性体检。一次扩齐避免
+      // 多次 schema 漂移；旧 job JSON 缺这些字段，各消费方用 || 默认值兜底。
+      kind: input.kind || "extract",
       status: "queued",
       archivePath: input.archivePath,
       outputDir: input.outputDir,
       outputOwned: input.outputOwned !== false,
+      // 解压冲突策略（F1）：rename/overwrite/skip/keepNew，worker 映射到 -ao*。
+      conflictPolicy: input.conflictPolicy || "rename",
+      // 压缩包名主干（F2）：用于「拍平同名一层目录」的比对。
+      outputStem: input.outputStem || "",
+      // 失败保留部分成果（F8）：非源文件问题时已解压文件保留，置 true。
+      partialSuccess: false,
+      // 智能拍平（F2）：成功收尾时若上移了内容，置 true 并记 flattenNote。
+      flattened: false,
+      flattenNote: "",
+      // 续跑重试（F8）：由哪个 failed job 续跑而来，空串=全新任务。
+      retryOf: input.retryOf || "",
       selection: input.selection || null,
       sevenZipPath: input.sevenZipPath || "",
       sevenZipSource: input.sevenZipSource || "",
