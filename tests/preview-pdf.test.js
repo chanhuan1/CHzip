@@ -43,7 +43,7 @@ function createPreviewServices(toolPath, overrides = {}) {
 }
 
 test("previewFile returns base64 encoding for PDF files", async () => {
-  const tool = writeFakeTool("pdf.sh", "printf '\\x25\\x50\\x44\\x46'"); // %PDF
+  const tool = writeFakeTool("pdf.sh", "printf '\\045\\120\\104\\106'"); // %PDF
   const archivePath = writeArchive();
   const services = createPreviewServices(tool, { previewFileTimeoutMs: 10 * 1000 });
 
@@ -56,7 +56,7 @@ test("previewFile returns base64 encoding for PDF files", async () => {
 });
 
 test("previewFile keeps binary PDF bytes intact (encoding null)", async () => {
-  const tool = writeFakeTool("pdfbin.sh", "printf '\\x25\\x50\\x44\\x46\\x00\\xFF'");
+  const tool = writeFakeTool("pdfbin.sh", "printf '\\045\\120\\104\\106\\000\\377'");
   const archivePath = writeArchive();
   const services = createPreviewServices(tool, { previewFileTimeoutMs: 10 * 1000 });
 
