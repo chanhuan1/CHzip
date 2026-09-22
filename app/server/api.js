@@ -81,7 +81,7 @@ function normalizeApiName(query, body) {
 
 // 只有用户主动动作的接口才值得顺带做过期清理；status/preview/info 这些
 // 会被高频轮询或反复调用的接口不触发（清理本身要全量扫 jobs 目录）。
-const CLEANUP_APIS = new Set(["extract", "jobs", "clear-history"]);
+const CLEANUP_APIS = new Set(["extract", "jobs", "clear-history", "resume"]);
 
 // 高频轮询接口的成功路径不写诊断日志：status 每秒一次、jobs 弹窗 3s 一次，
 // 成功回包毫无信息量，但每次 appendFileSync + 轮转检查是请求里最贵的部分。
@@ -153,6 +153,16 @@ async function routeRequest(api, request, services) {
       codePage: request.body.codePage || "auto",
       conflictPolicy: request.body.conflictPolicy || "rename",
       destinationRoot: request.body.destinationRoot || "",
+      selectedPaths: request.body.selectedPaths,
+      requestId,
+    });
+  } else if (api === "resume") {
+    // F8 续跑：密码必须由用户当次重新输入（旧密码文件已被销毁），
+    // selectedPaths 可选——不传则整包续跑（skip 跳过已完成文件）。
+    data = await services.resume({
+      jobId: request.body.jobId,
+      password: request.body.password || "",
+      codePage: request.body.codePage || "auto",
       selectedPaths: request.body.selectedPaths,
       requestId,
     });
@@ -259,7 +269,12 @@ async function main() {
     // services.status/listJobs 内部也调，extract 是新任务入口，先唤起再创建
     // 可让「刚腾出名额 + 新任务到来」时老任务优先启动，符合 FIFO）。
     // 不再 429 硬拒绝：满员的任务保持 queued，由 spawnQueued 腾出名额时唤起。
-    if (api === "extract" || api === "status" || api === "jobs") {
+    if (
+      api === "extract"
+      || api === "status"
+      || api === "jobs"
+      || api === "resume"
+    ) {
       services.spawnQueued();
     }
 

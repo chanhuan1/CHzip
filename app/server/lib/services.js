@@ -642,6 +642,169 @@ function createServices(options = {}) {
     }
   }
 
+  // F8 续跑重试：把「failed + partialSuccess」的旧任务接续起来。
+  // 关键约束（与 extract 的差异）：
+  // - 沿用旧 outputDir，绝不调 createUniqueOutputDir——部分成果就躺在那里；
+  // - conflictPolicy 强制 "skip"：已存在文件一律跳过，不询问、不覆盖；
+  // - 重新 inspectArchive 拿新指纹（源文件可能已被替换/移动）；
+  // - 重写 passwordFile/selectionFile：旧密码文件已被 worker 启动时
+  //   readAndRemoveSecret 物理销毁（覆写后删除），本次必须重新收集；
+  // - catch 兜底绝不 rmSync(outputDir)——里面是用户的部分成果。
+  function resume(input) {
+    const oldJob = store.read(input.jobId);
+    if (!oldJob) {
+      const error = new Error("原任务不存在或已过期");
+      error.code = "RESUME_INVALID";
+      throw error;
+    }
+    if ((oldJob.kind || "extract") !== "extract") {
+      const error = new Error("仅解压任务支持续跑");
+      error.code = "RESUME_INVALID";
+      throw error;
+    }
+    if (oldJob.status !== "failed" || !oldJob.partialSuccess) {
+      const error = new Error("仅「失败且保留了部分成果」的任务可以续跑");
+      error.code = "RESUME_INVALID";
+      throw error;
+    }
+    if (!oldJob.outputDir || !fs.existsSync(oldJob.outputDir)) {
+      const error = new Error("原输出目录已被删除，无法续跑；请重新解压");
+      error.code = "RESUME_OUTPUT_MISSING";
+      throw error;
+    }
+
+    // 重新 inspect：源文件可能已被替换/移动，指纹必须重取，
+    // 否则 verifyFingerprints 会在 worker 启动段就失败。
+    const archive = info({ path: oldJob.archivePath });
+    if (archive.missingParts.length) {
+      const error = new Error(archive.warnings[0]);
+      error.code = "MISSING_VOLUME";
+      throw error;
+    }
+
+    // 选择性解压：前端可重传 selectedPaths；不传则整包续跑
+    //（已存在文件由 skip 策略跳过，相当于只补未完成的）。
+    let previewResult = null;
+    if (Array.isArray(input.selectedPaths)) {
+      previewResult = preview(
+        {
+          path: oldJob.archivePath,
+          password: input.password || "",
+          codePage: input.codePage || "auto",
+        },
+        archive,
+      );
+    }
+
+    let job;
+    try {
+      const jobSelection = isNestedTar(archive.selection)
+        ? archive.selection
+        : {
+          ...archive.selection,
+          format: previewResult?.format || archive.selection.format,
+          type: previewResult?.type ?? archive.selection.type,
+        };
+      job = store.create({
+        requestId: input.requestId || "",
+        archivePath: archive.filePath,
+        outputDir: oldJob.outputDir,
+        outputOwned: true,
+        outputStem: oldJob.outputStem || archive.outputStem || "",
+        selection: jobSelection,
+        sevenZipPath: archive.tool.path,
+        sevenZipSource: archive.tool.source,
+        codePage: input.codePage || oldJob.codePage || "auto",
+        conflictPolicy: "skip",
+        retryOf: oldJob.id,
+        partCount: archive.partCount,
+        sourceFingerprint: (archive.sources && archive.sources.length
+          ? archive.sources
+          : [{ path: archive.filePath, stat: null }]).map((source) => (
+          source.stat
+            ? {
+              path: source.path,
+              dev: source.stat.dev,
+              ino: source.stat.ino,
+              size: source.stat.size,
+              mtimeMs: source.stat.mtimeMs,
+            }
+            : fingerprintFiles([source.path])[0])),
+      });
+
+      let selectionFile = "";
+      if (Array.isArray(input.selectedPaths)) {
+        const selectedPaths = validateSelectedPaths(
+          input.selectedPaths,
+          previewResult.entries,
+        );
+        selectionFile = writeSelectionFile(store.dataDir(job.id), selectedPaths);
+      }
+
+      let passwordFile = "";
+      if (input.password) {
+        passwordFile = path.join(store.dataDir(job.id), "password.txt");
+        fs.writeFileSync(passwordFile, input.password, {
+          encoding: "utf8",
+          mode: PERMISSIONS.MODE_FILE_SECRET,
+        });
+      }
+
+      job = store.update(job.id, (current) => ({
+        ...current,
+        selectionFile,
+        passwordFile,
+      }));
+
+      // F7 同款：countActive 未满立刻启动；满员保持 queued，
+      // 由后续请求的 spawnQueued 在腾出名额时唤起。
+      let queued = false;
+      if (store.countActive() < LIMITS.MAX_CONCURRENT_EXTRACTS) {
+        job = launchWorker(job.id);
+      } else {
+        queued = true;
+      }
+
+      const result = {
+        jobId: job.id,
+        outputDir: job.outputDir,
+        partCount: job.partCount,
+        retryOf: oldJob.id,
+      };
+      if (queued) {
+        result.queued = true;
+        result.queueAhead = computeQueueAhead(job);
+      }
+      return result;
+    } catch (error) {
+      // 续跑启动失败绝不删旧 outputDir——里面是用户的部分成果。
+      // 仅清理新任务的机密文件并把新任务标记 failed。
+      if (job) {
+        const current = store.read(job.id);
+        if (current?.passwordFile) {
+          overwriteFileSync(current.passwordFile);
+        }
+        for (const filePath of [current?.passwordFile, current?.selectionFile]) {
+          if (filePath) {
+            fs.rmSync(filePath, { force: true });
+          }
+        }
+        store.update(job.id, (current) => ({
+          ...current,
+          status: "failed",
+          passwordFile: "",
+          selectionFile: "",
+          error: {
+            code: error.code || "START_FAILED",
+            message: error.message,
+          },
+          finishedAt: new Date().toISOString(),
+        }));
+      }
+      throw error;
+    }
+  }
+
   function status(input) {
     // 高频轮询入口：顺带唤起排队任务（名额释放后 1~3s 内启动）。
     spawnQueued();
@@ -821,6 +984,7 @@ function createServices(options = {}) {
     listJobs,
     preview,
     previewFile,
+    resume,
     spawnQueued,
     status,
     store,

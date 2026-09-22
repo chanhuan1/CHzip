@@ -433,6 +433,8 @@
         // F2：终态的 flattened/flattenNote/outputDir 也进签名，保证未来
         // 「同一终态下 flatten 字段变化」也能触发重渲（当前在 active→history
         // 迁移时整体签名已变，这里是防御性补齐）。
+        // F8：partialSuccess 进签名，让「同一 failed 任务从未保留 → 已保留」
+        // 也能触发重渲。
         const historyPart = history.map((job) => [
             job.id,
             job.status,
@@ -441,6 +443,7 @@
             job.outputDir || "",
             job.flattened ? 1 : 0,
             job.flattenNote || "",
+            job.partialSuccess ? 1 : 0,
         ]);
         return JSON.stringify([activePart, historyPart]);
     }
@@ -704,6 +707,23 @@
                 cancelTaskCenter(state, api, job.id);
             });
             actions.append(stop);
+        } else if (job.status === "failed" && job.partialSuccess) {
+            // F8：失败但保留了部分成果 → 给「续跑」入口。
+            // 点击即禁用，防弱网连发；resumeTaskCenter 内部 finally 恢复。
+            const resumeBtn = document.createElement("button");
+            resumeBtn.type = "button";
+            resumeBtn.className = "task-resume-btn";
+            resumeBtn.textContent = "续跑";
+            resumeBtn.title = "保留已解压文件，从中断处继续（已存在文件跳过）";
+            resumeBtn.addEventListener("click", () => {
+                resumeBtn.disabled = true;
+                resumeBtn.textContent = "续跑中…";
+                resumeTaskCenter(state, api, job).finally(() => {
+                    resumeBtn.disabled = false;
+                    resumeBtn.textContent = "续跑";
+                });
+            });
+            actions.append(resumeBtn);
         }
         row.append(main, actions);
         list.append(row);
@@ -762,6 +782,34 @@
             await api.postApi("cancel", { jobId });
         } catch (error) {
             // 下一次轮询会反映真实状态
+        }
+        await pollTaskCenter(state, api);
+    }
+
+    // F8 续跑：复用旧 outputDir + conflictPolicy=skip。
+    // 密码必须由用户当次重新输入（旧密码文件已被 worker 启动时物理销毁，
+    // 服务端无从恢复）；未加密的包直接留空确定即可。
+    async function resumeTaskCenter(state, api, job) {
+        if (!job || !job.id) {
+            return;
+        }
+        let password = "";
+        if (typeof window !== "undefined" && typeof window.prompt === "function") {
+            password = window.prompt(
+                `续跑「${job.archiveName || "压缩包"}」：若该包加密，请重新输入密码；未加密直接确定。`,
+                "",
+            ) || "";
+        }
+        try {
+            await api.postApi("resume", {
+                jobId: job.id,
+                password,
+                codePage: state?.elements?.codePageSelect?.value || "auto",
+            });
+            setNotice("续跑任务已创建，已存在的文件将被跳过。", "success", state);
+        } catch (error) {
+            setNotice(`续跑失败：${error.message}`, "error", state);
+            recordDiagnosticError(error, state);
         }
         await pollTaskCenter(state, api);
     }
@@ -949,6 +997,7 @@
         pollTaskMini,
         resetClearHistoryConfirm,
         resumePollers,
+        resumeTaskCenter,
         setJobProgress,
         startExtract,
         startTaskWatch,

@@ -40,6 +40,18 @@ const {
 const PROGRESS_THROTTLE_MS = 200;
 const PROGRESS_PERCENT_STEP = 1;
 
+// F8 失败保留部分成果：这些错误码都属于「非源文件问题」（源文件被换 /
+// 权限被拒走 SOURCE_* 分支，不在此列），已解压出来的文件仍然有价值，
+// 终态时保留 outputDir 并把 partialSuccess 置 true，供「续跑」入口识别。
+// 仅 extract kind 走此逻辑；test kind 无 outputDir 产出，不在此集合生效。
+const PARTIAL_KEEP_CODES = new Set([
+  "FILE_NAME_TOO_LONG",
+  "DAMAGED",
+  "MISSING_VOLUME",
+  "PERMISSION",
+  "ENGINE_INTERRUPTED",
+]);
+
 // 进度回写节流器。
 //
 // 7-Zip 在高频吐进度（-bsp1），原实现每收到一个 chunk 就做一次
@@ -809,11 +821,21 @@ async function runWorker(jobId, options = {}) {
         // 救援失败按普通失败处理，但仍保留已解压的输出
       }
     }
-    const keepPartial = error.code === "FILE_NAME_TOO_LONG";
+    // F8：PARTIAL_KEEP_CODES 全部保留 outputDir（不再只 FILE_NAME_TOO_LONG）。
+    // 限定条件：extract kind（test 无产出）+ 非取消 + 错误码在集合内。
+    const isExtractKind = (job.kind || "extract") === "extract";
+    const keepPartial = !cancelled
+      && isExtractKind
+      && PARTIAL_KEEP_CODES.has(error.code);
     if (!keepPartial) {
       cleanupOutput(job);
     }
     const finalOk = Boolean(rescuedNote) && !cancelled;
+    // partialSuccess 仅在「failed 且保留了部分成果」时落 true：
+    // - cancelled 永不保留（用户主动停止，已清干净）；
+    // - finalOk（救援成功→success）不算部分成果，整体已成功；
+    // - test kind 不进入此逻辑（isExtractKind 已过滤）。
+    const partialSuccess = !cancelled && !finalOk && keepPartial;
     store.update(jobId, (current) => ({
       ...current,
       status: cancelled ? "cancelled" : finalOk ? "success" : "failed",
@@ -822,6 +844,7 @@ async function runWorker(jobId, options = {}) {
       currentFile: "",
       progress: finalOk ? 100 : current.progress,
       finishedAt: new Date().toISOString(),
+      partialSuccess,
       error: cancelled || finalOk
         ? null
         : {
