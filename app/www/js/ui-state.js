@@ -29,6 +29,12 @@
             // 压缩包是否固实（solid）压缩。固实包取出任一文件都要先解压整包，
             // 预览单文件会非常慢，需要提前给用户预警。
             previewSolid: false,
+            // F11 视图切换：'list' | 'thumbs'。默认列表。
+            fileViewMode: "list",
+            // 缩略图墙当前的控制器（renderThumbWall 返回值），切视图/换包时
+            // 调它的 dispose() 停掉观察器与队列。缩略图墙的 LRU 缓存挂在
+            // 这个控制器上，跨「切到列表再切回」保留。
+            thumbWallController: null,
             // 当前在途的预览请求。新请求发起前先 abort 掉上一个，避免连点
             // 导致多个 7z 同时跑（那会把单核占满升级成多核占满）。
             previewAbortController: null,
@@ -109,6 +115,10 @@
             fileCount: $("fileCount"),
             filePath: $("filePath"),
             fileTree: $("fileTree"),
+            thumbWall: $("thumbWall"),
+            thumbWallEmpty: $("thumbWallEmpty"),
+            viewListBtn: $("viewListBtn"),
+            viewThumbsBtn: $("viewThumbsBtn"),
             jobState: $("jobState"),
             notice: $("notice"),
             outputPreview: $("outputPreview"),

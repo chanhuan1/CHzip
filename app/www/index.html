@@ -98,6 +98,16 @@
                             <span class="sr-only">搜索文件</span>
                             <input id="treeSearchInput" type="search" placeholder="搜索文件" disabled>
                         </label>
+                        <div class="view-switch" role="tablist" aria-label="视图切换">
+                            <button id="viewListBtn" class="view-switch-btn is-active" type="button" aria-pressed="true" title="列表视图">
+                                <svg viewBox="0 0 16 16" focusable="false" aria-hidden="true"><path d="M2 3.5h12M2 8h12M2 12.5h12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+                                <span>列表</span>
+                            </button>
+                            <button id="viewThumbsBtn" class="view-switch-btn" type="button" aria-pressed="false" title="缩略图墙（仅图片）" disabled>
+                                <svg viewBox="0 0 16 16" focusable="false" aria-hidden="true"><rect x="2" y="2" width="5" height="5" rx="1" fill="currentColor"/><rect x="9" y="2" width="5" height="5" rx="1" fill="currentColor"/><rect x="2" y="9" width="5" height="5" rx="1" fill="currentColor"/><rect x="9" y="9" width="5" height="5" rx="1" fill="currentColor"/></svg>
+                                <span>缩略图</span>
+                            </button>
+                        </div>
                     </div>
 
                     <div id="mojibakeBanner" class="mojibake-banner" hidden>
@@ -108,6 +118,8 @@
                     <div id="fileTree" class="file-tree" aria-label="压缩包文件树">
                         <div class="tree-empty">尚未载入压缩包目录</div>
                     </div>
+                    <div id="thumbWall" class="thumb-wall" aria-label="图片缩略图墙" hidden></div>
+                    <div id="thumbWallEmpty" class="thumb-wall-empty" role="status" hidden></div>
                 </section>
 
                 <aside class="settings-panel" aria-labelledby="settingsTitle">
@@ -509,6 +521,7 @@
     <script defer src="./index.cgi/js/ui-jobs.js?v=3.6"></script>
     <script defer src="./index.cgi/js/ui-passwords.js?v=3.6"></script>
     <script defer src="./index.cgi/js/ui-preview.js?v=3.6"></script>
+    <script defer src="./index.cgi/js/ui-thumbs.js?v=3.6"></script>
     <script defer src="./index.cgi/js/ui-theme.js?v=3.6"></script>
     <script defer src="./index.cgi/js/ui-comment.js?v=3.6"></script>
     <script defer src="./index.cgi/js/app.js?v=3.6"></script>

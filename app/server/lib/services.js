@@ -1058,7 +1058,12 @@ function createServices(options = {}) {
         ? result.stdout
         : Buffer.from(String(result.stdout || ""), "utf8");
       const isImage = /\.(png|jpe?g|gif|bmp|webp|ico|tiff?)$/i.test(targetPath);
-      if (isImage) {
+      // F11：PDF 与图片走同一条 base64 路径 —— 前端拿到后装进
+      // <iframe src=blob:...> 交给浏览器内置 PDF 查看器渲染，避免引入
+      // pdf.js 这类新依赖。体积仍受 maxPreviewFileBytes（默认 12 MiB）封顶；
+      // 超出的 PDF 走 PREVIEW_TOO_LARGE，前端在 previewFile 里转成明确提示。
+      const isPdf = /\.pdf$/i.test(targetPath);
+      if (isImage || isPdf) {
         return {
           content: output.toString("base64"),
           fileName: path.basename(targetPath),

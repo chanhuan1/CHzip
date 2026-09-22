@@ -27,6 +27,12 @@
         ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".ico", ".tiff", ".tif",
     ]);
 
+    // F11：PDF 走浏览器内置查看器（iframe src=blob:...），与图片一样按
+    // base64 取回。仍受 PREVIEW_MAX_SIZE 限制 —— 后端 preview-file 的 12 MiB
+    // 上限没放宽，前端跟着不放宽；更大的 PDF 在 previewFile 弹窗里走
+    // PREVIEW_TOO_LARGE 的明确提示，不在此静默放行。
+    const PDF_EXTENSIONS = new Set([".pdf"]);
+
     const CODE_KEYWORDS = new Set([
         "function", "const", "let", "var", "if", "else", "for", "while", "do",
         "switch", "case", "default", "break", "continue", "return", "try",
@@ -55,11 +61,15 @@
         return IMAGE_EXTENSIONS.has(getFileExtension(filename));
     }
 
+    function isPdfFile(filename) {
+        return PDF_EXTENSIONS.has(getFileExtension(filename));
+    }
+
     function isPreviewable(filename, size) {
         if (size > PREVIEW_MAX_SIZE) {
             return false;
         }
-        return isTextFile(filename) || isImageFile(filename);
+        return isTextFile(filename) || isImageFile(filename) || isPdfFile(filename);
     }
 
     function getFileType(filename) {
@@ -68,6 +78,9 @@
         }
         if (isImageFile(filename)) {
             return "image";
+        }
+        if (isPdfFile(filename)) {
+            return "pdf";
         }
         return "unknown";
     }
@@ -165,10 +178,25 @@
         return img;
     }
 
+    // F11：把 base64 PDF 字节包成 <iframe> 交给浏览器内置 PDF 查看器。
+    // 与 formatImagePreview 一样返回已挂好 blob URL 的元素，URL 记在
+    // dataset.blobUrl 上，沿用 revokeBlobUrl 的回收路径（上面已加查 .preview-pdf）。
+    function formatPdfPreview(blob, fileName) {
+        const url = URL.createObjectURL(blob);
+        const frame = document.createElement("iframe");
+        frame.className = "preview-pdf";
+        frame.src = url;
+        frame.title = fileName;
+        frame.dataset.blobUrl = url;
+        return frame;
+    }
+
     function revokeBlobUrl(element) {
-        const img = element.querySelector(".preview-image");
-        if (img && img.dataset.blobUrl) {
-            URL.revokeObjectURL(img.dataset.blobUrl);
+        // 同时查 .preview-image 与 F11 的 .preview-pdf（iframe）——
+        // 两者都把 blob URL 记在 dataset.blobUrl 上。
+        const media = element.querySelector(".preview-image, .preview-pdf");
+        if (media && media.dataset.blobUrl) {
+            URL.revokeObjectURL(media.dataset.blobUrl);
         }
     }
 
@@ -266,11 +294,13 @@
         formatSize,
         formatTextPreview,
         formatImagePreview,
+        formatPdfPreview,
         getFileExtension,
         getFileType,
         highlightSyntax,
         isImageFile,
         isMojibakeName,
+        isPdfFile,
         isPreviewable,
         isTextFile,
         revokeBlobUrl,

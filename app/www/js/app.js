@@ -11,6 +11,7 @@
     const uiJobs = window.CHzipUiJobs;
     const uiPasswords = window.CHzipUiPasswords;
     const uiPreview = window.CHzipPreview;
+    const uiThumbs = window.CHzipUiThumbs;
     const uiTheme = window.CHzipTheme;
     const uiComment = window.CHzipComment;
 
@@ -127,6 +128,20 @@
             state.passwordRequired = false;
             state.passwordVerified = true;
             els.fileTree.innerHTML = '<div class="tree-empty">正在生成文件树...</div>';
+            // F11：换包/刷新时，若缩略图墙还活着，先停掉观察器与队列。
+            // 保留 LRU 缓存（挂在 controller 上），新包路径不同不会命中旧缓存，
+            // 但 dispose 只是停观察器，缓存随 controller 一起被 GC。
+            if (state.thumbWallController) {
+                state.thumbWallController.dispose();
+                state.thumbWallController = null;
+            }
+            state.fileViewMode = "list";
+            els.fileTree.hidden = false;
+            els.thumbWall.hidden = true;
+            els.viewListBtn.classList.add("is-active");
+            els.viewListBtn.setAttribute("aria-pressed", "true");
+            els.viewThumbsBtn.classList.remove("is-active");
+            els.viewThumbsBtn.setAttribute("aria-pressed", "false");
         }
         setPreviewControls(false);
         uiDialogs.setNotice("正在读取压缩包目录...", "", state);
@@ -425,10 +440,26 @@
             previewContent = result.content;
             const fileType = uiPreview.getFileType(entry.name);
             els.previewIcon.classList.toggle("is-image", fileType === "image");
-            // 连续预览时先回收上一张图片的 blob URL，否则每次换图都泄漏一个。
+            // 连续预览时先回收上一张图片/PDF 的 blob URL，否则每次换图都泄漏一个。
             // 对纯文本子树 revokeBlobUrl 是 no-op，两个分支都调最安全。
             uiPreview.revokeBlobUrl(els.previewBody);
-            if (fileType === "image") {
+            if (fileType === "pdf") {
+                // F11：PDF 走浏览器内置查看器。iframe src=blob:... 不引入 pdf.js。
+                try {
+                    const binaryString = atob(result.content);
+                    const bytes = Uint8Array.from(
+                        binaryString,
+                        (ch) => ch.charCodeAt(0),
+                    );
+                    const blob = new Blob([bytes], { type: "application/pdf" });
+                    const container = document.createElement("div");
+                    container.className = "preview-pdf-container";
+                    container.appendChild(uiPreview.formatPdfPreview(blob, entry.name));
+                    els.previewBody.replaceChildren(container);
+                } catch {
+                    els.previewBody.innerHTML = '<div class="preview-error">PDF 预览失败</div>';
+                }
+            } else if (fileType === "image") {
                 try {
                     const binaryString = atob(result.content);
                     // 用原生 Uint8Array.from 代替逐字符 JS 循环：
@@ -639,6 +670,23 @@
 
     function updateActionAvailability() {
         const els = state.elements;
+        // F11：缩略图墙按钮只在「预览就绪 + 非固实 + 包内有可预览图片」时可用。
+        const hasPreviewableImages = state.entries.some((entry) => (
+            entry.type === "file"
+            && uiPreview.isImageFile(entry.name)
+            && entry.size > 0
+            && entry.size <= uiPreview.PREVIEW_MAX_SIZE
+        ));
+        els.viewThumbsBtn.disabled = !(
+            state.previewReady
+            && !state.previewSolid
+            && hasPreviewableImages
+        );
+        // 如果当前在缩略图视图但条件不再满足（比如换了一个固实包），
+        // 自动切回列表视图，避免对着一个被禁用的空墙。
+        if (els.viewThumbsBtn.disabled && state.fileViewMode === "thumbs") {
+            setFileViewMode("list");
+        }
         const hasPreview = state.previewReady || state.previewLimited;
         const hasSelection = state.previewLimited || state.selectedPaths.size > 0;
         const passwordReady = !state.passwordRequired || state.passwordVerified;
@@ -684,6 +732,36 @@
         els.openDirectoryPickerBtn.disabled = state.running || !state.info;
         passwordManagerApi.updatePasswordManagerStatus();
     }
+
+    // F11：视图切换。切到缩略图墙时调用 renderThumbWall；切回列表时 dispose
+    // 掉观察器/队列，但保留 LRU 缓存（挂在 controller 上，切回时仍可命中）。
+    function setFileViewMode(mode) {
+        if (state.fileViewMode === mode) {
+            return;
+        }
+        state.fileViewMode = mode;
+        const isThumbs = mode === "thumbs";
+        els.fileTree.hidden = isThumbs;
+        els.thumbWall.hidden = !isThumbs;
+        els.viewListBtn.classList.toggle("is-active", !isThumbs);
+        els.viewListBtn.setAttribute("aria-pressed", String(!isThumbs));
+        els.viewThumbsBtn.classList.toggle("is-active", isThumbs);
+        els.viewThumbsBtn.setAttribute("aria-pressed", String(isThumbs));
+        if (isThumbs) {
+            state.thumbWallController = uiThumbs.renderThumbWall(state, {
+                api,
+                uiPreview,
+                archivePath: state.filePath,
+                getPassword: () => els.passwordInput.value,
+                getCodePage: () => els.codePageSelect.value,
+            });
+        } else if (state.thumbWallController) {
+            state.thumbWallController.dispose();
+            state.thumbWallController = null;
+        }
+    }
+    els.viewListBtn.addEventListener("click", () => setFileViewMode("list"));
+    els.viewThumbsBtn.addEventListener("click", () => setFileViewMode("thumbs"));
 
     els.refreshPreviewBtn.addEventListener("click", loadPreview);
     els.codePageSelect.addEventListener("change", loadPreview);

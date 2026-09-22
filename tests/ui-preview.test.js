@@ -132,7 +132,9 @@ test("revokeBlobUrl revokes the URL recorded on the preview image", () => {
   try {
     const container = {
       querySelector(selector) {
-        return selector === ".preview-image"
+        // F11 后选择器是 ".preview-image, .preview-pdf"：只要命中其中
+        // .preview-image 部分就返回带 blobUrl 的元素。
+        return String(selector).includes(".preview-image")
           ? { dataset: { blobUrl: "blob:fake-1" } }
           : null;
       },

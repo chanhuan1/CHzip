@@ -46,7 +46,8 @@ test("C14 every asset cache-busting key matches the manifest version", () => {
 
   // 品牌图标刻意保持 ?v=1.0.0：图标文件没改则缓存键无需变，不要「顺手统一」。
   const assets = entries.filter((entry) => !entry.url.endsWith("icon_64.png"));
-  assert.equal(assets.length, 13, "应为 1 个 CSS + 12 个 JS");
+  // 1 个 CSS + 13 个 JS（v3.7 起新增 ui-thumbs.js 缩略图墙模块）。
+  assert.equal(assets.length, 14, "应为 1 个 CSS + 13 个 JS");
 
   for (const asset of assets) {
     assert.equal(
