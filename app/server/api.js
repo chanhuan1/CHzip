@@ -255,13 +255,12 @@ async function main() {
       runDueCleanup(services.store, services.logger);
     }
 
-    if (
-      api === "extract"
-      && services.store.countActive() >= LIMITS.MAX_CONCURRENT_EXTRACTS
-    ) {
-      const error = new Error("当前解压任务过多，请稍后再试");
-      error.code = "TOO_MANY_REQUESTS";
-      throw error;
+    // F7：extract/status/jobs 三个入口顺带唤起排队任务（双保险——
+    // services.status/listJobs 内部也调，extract 是新任务入口，先唤起再创建
+    // 可让「刚腾出名额 + 新任务到来」时老任务优先启动，符合 FIFO）。
+    // 不再 429 硬拒绝：满员的任务保持 queued，由 spawnQueued 腾出名额时唤起。
+    if (api === "extract" || api === "status" || api === "jobs") {
+      services.spawnQueued();
     }
 
     const result = await withTimeout(
@@ -337,7 +336,6 @@ async function runCli() {
       NOT_FOUND: 404,
       INVALID_JSON: 400,
       BODY_TOO_LARGE: 413,
-      TOO_MANY_REQUESTS: 429,
     }[error.code] || 200;
     sendJson({
       success: false,

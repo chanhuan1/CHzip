@@ -157,6 +157,182 @@ function createServices(options = {}) {
     child.unref();
     return child;
   });
+
+  // 统一的「为一个已创建 job 启动 worker」入口（F7 排队唤起 / F8 续跑复用）。
+  // extract 满员时不调用，由后续请求的 spawnQueued() 在腾出名额时唤起。
+  // 返回最新写入的 job（成功时已带真实 workerPid）。
+  // 并发安全：多个 CGI 进程同时进入时，先用 store.update 把 workerPid 占位
+  // 为 -1 抢到启动权；没抢到的进程看到 workerPid !== -1 直接返回。
+  function launchWorker(jobId) {
+    const claim = store.update(jobId, (current) => {
+      if (
+        current.status !== "queued"
+        || current.workerPid
+        || current.cancelRequestedAt
+      ) {
+        return current;
+      }
+      return { ...current, workerPid: -1 };
+    });
+    if (claim.workerPid !== -1) {
+      return claim;
+    }
+    let worker;
+    try {
+      worker = spawnWorker(jobId);
+    } catch (spawnError) {
+      // spawn 同步抛错：抹掉占位，让任务回到「待唤起」状态，下一次
+      // spawnQueued 会重试。同时记一条诊断方便排查。
+      try {
+        store.update(jobId, (current) => (
+          current.workerPid === -1
+            ? { ...current, workerPid: null }
+            : current
+        ));
+      } catch (revertError) {
+        // 任务可能已被并发清理，静默。
+      }
+      safeDiagnosticWrite(logger, {
+        event: "worker_spawn_error",
+        jobId,
+        message: spawnError.message,
+      });
+      throw spawnError;
+    }
+    const job = store.update(jobId, (current) => ({
+      ...current,
+      workerPid: worker.pid || null,
+    }));
+    const failWorker = (workerError, code) => {
+      const current = store.read(jobId);
+      if (!current || TERMINAL_STATUSES.has(current.status)) {
+        return;
+      }
+      if (current.passwordFile) {
+        overwriteFileSync(current.passwordFile);
+      }
+      for (const filePath of [current.passwordFile, current.selectionFile]) {
+        if (filePath) {
+          fs.rmSync(filePath, { force: true });
+        }
+      }
+      if (current.outputOwned && current.outputDir) {
+        fs.rmSync(current.outputDir, { recursive: true, force: true });
+      }
+      store.update(jobId, (latest) => ({
+        ...latest,
+        status: "failed",
+        phase: "failed",
+        passwordFile: "",
+        selectionFile: "",
+        workerPid: null,
+        finishedAt: new Date().toISOString(),
+        error: {
+          code,
+          message: workerError.message || "Worker 运行失败",
+        },
+      }));
+    };
+    if (typeof worker.once === "function") {
+      worker.once("error", (workerError) => {
+        failWorker(workerError, "WORKER_START");
+      });
+      worker.once("exit", (exitCode, signal) => {
+        if (exitCode !== 0) {
+          failWorker(
+            new Error(
+              `Worker 异常退出${signal ? `（${signal}）` : `（${exitCode}）`}`,
+            ),
+            "WORKER_EXIT",
+          );
+        }
+      });
+    }
+    return job;
+  }
+
+  // 计算指定 queued job 在「等待唤起」队列里前面还有多少个。
+  // 仅统计同类（kind 缺省视为 extract），且自身也必须仍在排队。
+  function computeQueueAhead(targetJob) {
+    if (!targetJob || targetJob.status !== "queued" || targetJob.workerPid) {
+      return null;
+    }
+    let ahead = 0;
+    for (const name of fs.readdirSync(store.jobsDir)) {
+      if (!/^[a-f0-9]{32}\.json$/.test(name)) {
+        continue;
+      }
+      const other = store.read(name.slice(0, -5));
+      if (!other || other.id === targetJob.id) {
+        continue;
+      }
+      if ((other.kind || "extract") !== (targetJob.kind || "extract")) {
+        continue;
+      }
+      if (other.status !== "queued" || other.workerPid || other.cancelRequestedAt) {
+        continue;
+      }
+      if (String(other.createdAt || "") < String(targetJob.createdAt || "")) {
+        ahead += 1;
+      }
+    }
+    return ahead;
+  }
+
+  // 顺带唤起：扫 jobs 找到仍在 queued（无 workerPid、无 cancelRequestedAt）的
+  // extract 类任务，按 createdAt 升序在还有名额时逐个 launchWorker。
+  // 这是 status / jobs / extract 高频路径上的顺手动作，必须轻量且永不抛出——
+  // 单个任务的启动失败只影响它自己，不能拖垮用户的轮询请求。
+  function spawnQueued() {
+    try {
+      const pending = [];
+      for (const name of fs.readdirSync(store.jobsDir)) {
+        if (!/^[a-f0-9]{32}\.json$/.test(name)) {
+          continue;
+        }
+        let job = null;
+        try {
+          job = store.read(name.slice(0, -5));
+        } catch (readError) {
+          continue;
+        }
+        if (!job) {
+          continue;
+        }
+        if ((job.kind || "extract") !== "extract") {
+          continue;
+        }
+        if (job.status !== "queued" || job.workerPid || job.cancelRequestedAt) {
+          continue;
+        }
+        pending.push(job);
+      }
+      if (!pending.length) {
+        return;
+      }
+      pending.sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")));
+      for (const job of pending) {
+        if (store.countActive() >= LIMITS.MAX_CONCURRENT_EXTRACTS) {
+          return;
+        }
+        try {
+          launchWorker(job.id);
+        } catch (launchError) {
+          safeDiagnosticWrite(logger, {
+            event: "queue_launch_error",
+            jobId: job.id,
+            message: launchError.message,
+          });
+        }
+      }
+    } catch (error) {
+      // 整体兜底：spawnQueued 是顺手做的事，任何意外都不能冒到调用方。
+      safeDiagnosticWrite(logger, {
+        event: "queue_scan_error",
+        message: error.message,
+      });
+    }
+  }
   function withPreparedArchive(archive, input, callback) {
     if (!isNestedTar(archive.selection)) {
       return callback(archive);
@@ -418,62 +594,26 @@ function createServices(options = {}) {
         passwordFile,
       }));
 
-      const worker = spawnWorker(job.id);
-      job = store.update(job.id, (current) => ({
-        ...current,
-        workerPid: worker.pid || null,
-      }));
-      const failWorker = (workerError, code) => {
-        const current = store.read(job.id);
-        if (!current || TERMINAL_STATUSES.has(current.status)) {
-          return;
-        }
-        if (current.passwordFile) {
-          overwriteFileSync(current.passwordFile);
-        }
-        for (const filePath of [current.passwordFile, current.selectionFile]) {
-          if (filePath) {
-            fs.rmSync(filePath, { force: true });
-          }
-        }
-        if (current.outputOwned && current.outputDir) {
-          fs.rmSync(current.outputDir, { recursive: true, force: true });
-        }
-        store.update(job.id, (latest) => ({
-          ...latest,
-          status: "failed",
-          phase: "failed",
-          passwordFile: "",
-          selectionFile: "",
-          workerPid: null,
-          finishedAt: new Date().toISOString(),
-          error: {
-            code,
-            message: workerError.message || "Worker 运行失败",
-          },
-        }));
-      };
-      if (typeof worker.once === "function") {
-        worker.once("error", (workerError) => {
-          failWorker(workerError, "WORKER_START");
-        });
-        worker.once("exit", (exitCode, signal) => {
-          if (exitCode !== 0) {
-            failWorker(
-              new Error(
-                `Worker 异常退出${signal ? `（${signal}）` : `（${exitCode}）`}`,
-              ),
-              "WORKER_EXIT",
-            );
-          }
-        });
+      // F7：不再 429 硬拒绝。countActive 未满立刻启动；满员则保持 queued，
+      // 由后续请求（status/jobs/extract）的 spawnQueued 在腾出名额时唤起。
+      // 返回体多带 queued/queueAhead 让前端任务中心能显示「排队中，前面还有 N 个」。
+      let queued = false;
+      if (store.countActive() < LIMITS.MAX_CONCURRENT_EXTRACTS) {
+        job = launchWorker(job.id);
+      } else {
+        queued = true;
       }
 
-      return {
+      const result = {
         jobId: job.id,
         outputDir: job.outputDir,
         partCount: job.partCount,
       };
+      if (queued) {
+        result.queued = true;
+        result.queueAhead = computeQueueAhead(job);
+      }
+      return result;
     } catch (error) {
       fs.rmSync(outputDir, { recursive: true, force: true });
       if (job) {
@@ -503,11 +643,16 @@ function createServices(options = {}) {
   }
 
   function status(input) {
+    // 高频轮询入口：顺带唤起排队任务（名额释放后 1~3s 内启动）。
+    spawnQueued();
     const job = store.read(input.jobId);
     if (!job) {
       throw new Error("任务不存在或已过期");
     }
-    return toJobView(job);
+    const view = toJobView(job);
+    // queueAhead 不落库（队列随唤起/取消实时变化），每次现算覆盖到视图。
+    view.queueAhead = computeQueueAhead(job);
+    return view;
   }
 
   async function cancel(input) {
@@ -555,6 +700,8 @@ function createServices(options = {}) {
   }
 
   function listJobs() {
+    // 任务中心轮询入口：顺带唤起排队任务。
+    spawnQueued();
     // 历史只保留最近 20 条，超出自动清除最旧（环形覆盖）。
     // listAndTrimHistory 在**一次**目录遍历里同时完成「溢出修剪」与「列出」，
     // 取代原先 removeFinishedOverflow() + list() 各扫一遍目录的做法。
@@ -563,6 +710,7 @@ function createServices(options = {}) {
     const history = [];
     for (const job of jobs) {
       const item = toJobView(job);
+      item.queueAhead = computeQueueAhead(job);
       if (TERMINAL_STATUSES.has(job.status)) {
         history.push(item);
       } else {
@@ -663,14 +811,17 @@ function createServices(options = {}) {
     cancel,
     clearHistory,
     comment,
+    computeQueueAhead,
     createDirectory,
     diagnostics,
     directories,
     extract,
     info,
+    launchWorker,
     listJobs,
     preview,
     previewFile,
+    spawnQueued,
     status,
     store,
     logger,

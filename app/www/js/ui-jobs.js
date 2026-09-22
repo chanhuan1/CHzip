@@ -124,8 +124,18 @@
     // 偶发的单次抖动（弱网）不应打扰用户。
     const POLL_FAIL_ALERT_THRESHOLD = 5;
 
-    function statusLabel(status, phase) {
+    // F7：第三参 job 可选。排队任务读 job.queueAhead 显示位次；缺省/null
+    // 时退化为旧文案，向后兼容。queueAhead===0 单独显示「即将开始」，
+    // 避免对用户说「前面还有 0 个」。
+    function statusLabel(status, phase, job) {
         if (status === "queued") {
+            const ahead = job ? job.queueAhead : null;
+            if (ahead === 0) {
+                return "排队中，即将开始";
+            }
+            if (Number.isInteger(ahead) && ahead > 0) {
+                return `排队中，前面还有 ${ahead} 个`;
+            }
             return "任务已排队";
         }
         if (status === "cancelling") {
@@ -295,7 +305,7 @@
             const eta = computeEta(state, job);
             setJobProgress(
                 job.progress,
-                statusLabel(job.status, job.phase),
+                statusLabel(job.status, job.phase, job),
                 job.currentFile || "",
                 state,
                 job,
@@ -418,6 +428,7 @@
             job.currentFile || "",
             job.error?.message || "",
             job.outputDir || "",
+            job.queueAhead ?? null,
         ]);
         // F2：终态的 flattened/flattenNote/outputDir 也进签名，保证未来
         // 「同一终态下 flatten 字段变化」也能触发重渲（当前在 active→history
@@ -623,9 +634,10 @@
         name.title = job.archivePath || "";
         const status = document.createElement("span");
         status.className = "task-row-status";
-        status.textContent = terminal
-            ? statusLabel(job.status, job.phase)
-            : `${statusLabel(job.status, job.phase)} · ${Math.round(Number(job.progress) || 0)}%`;
+        // F7：排队任务显示位次，不拼「· 0%」尾巴。
+        status.textContent = (terminal || job.status === "queued")
+            ? statusLabel(job.status, job.phase, job)
+            : `${statusLabel(job.status, job.phase, job)} · ${Math.round(Number(job.progress) || 0)}%`;
         head.append(name, status);
         main.append(head);
 
