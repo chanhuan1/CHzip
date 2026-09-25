@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CHzip - 飞牛智能分卷解压</title>
-    <link rel="stylesheet" href="./index.cgi/css/style.css?v=3.6">
+    <link rel="stylesheet" href="./index.cgi/css/style.css?v=3.9">
 </head>
 <body>
     <svg class="icon-defs" aria-hidden="true" focusable="false" width="0" height="0">
@@ -25,12 +25,33 @@
                 <div class="brand">
                     <img class="brand-icon" src="./index.cgi/images/icon_64.png?v=1.0.0" alt="">
                     <div>
-                        <h1>CHzip</h1>
+                        <h1>CHzip<span class="brand-version">v3.7</span></h1>
                         <p>飞牛智能分卷解压</p>
                     </div>
+                    <script>
+                        // 品牌版本号与真实版本实时同步：从 <head> 里 CSS 资源的
+                        // ?v= 缓存键推导（该缓存键随 manifest 版本由打包门禁同步，
+                        // 永远等于当前发行版本），覆盖这里的硬编码占位值。
+                        // 这样今后发版只改 ?v= 一处，顶栏版本号自动跟随，
+                        // 不会再出现「版本号忘了改」的漂移（此 span 曾停在 v3.7）。
+                        (function () {
+                            var link = document.querySelector('link[rel="stylesheet"][href*="?v="]');
+                            var span = document.querySelector(".brand-version");
+                            if (!link || !span) {
+                                return;
+                            }
+                            var match = link.getAttribute("href").match(/[?&]v=([^&"]+)/);
+                            if (match && match[1]) {
+                                span.textContent = "v" + match[1];
+                            }
+                        }());
+                    </script>
                 </div>
                 <div class="header-right">
-                    <button id="historyBtn" class="secondary-button task-center-btn" type="button">历史</button>
+                    <button id="historyBtn" class="secondary-button task-center-btn header-btn" type="button" title="查看任务中心与历史">
+                        <svg class="btn-icon" viewBox="0 0 16 16" focusable="false" aria-hidden="true"><path d="M8 2.5a5.5 5.5 0 1 0 5.5 5.5A5.5 5.5 0 0 0 8 2.5Zm0 1.2a4.3 4.3 0 1 1-4.3 4.3A4.3 4.3 0 0 1 8 3.7Zm-.6 1.8v3.1l2.2 1.3.6-1-1.6-.9V5.5Z" fill="currentColor"/></svg>
+                        <span>历史</span>
+                    </button>
                     <button id="themeToggle" class="theme-toggle" type="button" aria-label="切换主题">
                         <span class="theme-icon" aria-hidden="true">
                             <svg class="theme-icon-moon" viewBox="0 0 16 16" focusable="false"><path d="M12.55 3.2A5.82 5.82 0 1 0 12.55 12.8A4.9 4.9 0 0 1 12.55 3.2Z"/></svg>
@@ -73,7 +94,10 @@
 
             <div class="notice-row">
                 <div id="notice" class="notice" role="status">正在读取压缩包信息...</div>
-                <button id="diagnosticsBtn" class="secondary-button" type="button" hidden>查看诊断</button>
+                <button id="diagnosticsBtn" class="secondary-button icon-text-button" type="button" hidden>
+                    <svg class="btn-icon" viewBox="0 0 16 16" focusable="false" aria-hidden="true"><path d="M13.2 2.8a3.5 3.5 0 0 0-4.4-.3L6.4 4.9 7 7 4.9 6.4 2.5 8.8a3.5 3.5 0 0 0 4.4 4.4l4.5-4.5a3.5 3.5 0 0 0 1.8-5.9Zm-1 4.9-4.8 4.8a2.3 2.3 0 0 1-2.9-2.9l1.8-1.8 1.8.5.5-1.8 1.8-1.8a2.3 2.3 0 0 1 2.9 2.9l-.9.1Z" fill="currentColor"/></svg>
+                    <span>查看诊断</span>
+                </button>
             </div>
 
             <section class="work-grid">
@@ -83,9 +107,9 @@
                             <h3 id="fileTreeTitle">压缩包内容</h3>
                             <p id="selectionSummary">等待预览</p>
                         </div>
-                        <button id="refreshPreviewBtn" class="icon-text-button" type="button">
-                            <span aria-hidden="true">↻</span>
-                            重新预览
+                        <button id="refreshPreviewBtn" class="secondary-button icon-text-button btn-sm" type="button" title="重新扫描并读取压缩包内容">
+                            <svg class="btn-icon" viewBox="0 0 16 16" focusable="false" aria-hidden="true"><path d="M13.6 8A5.6 5.6 0 1 1 8 2.4a5.55 5.55 0 0 1 3.9 1.6L13.5 2v4.5H9l1.9-1.9A4.35 4.35 0 0 0 8 3.6a4.4 4.4 0 1 0 4.4 4.4h1.2Z" fill="currentColor"/></svg>
+                            <span>重新预览</span>
                         </button>
                     </div>
 
@@ -138,8 +162,9 @@
                                     <strong id="passwordManagerStatus">未检测到加密</strong>
                                     <small>选择、修改或保存解压密码</small>
                                 </div>
-                                <button id="openPasswordManagerBtn" class="secondary-button" type="button">
-                                    打开密码管理器
+                                <button id="openPasswordManagerBtn" class="secondary-button icon-text-button btn-sm" type="button">
+                                    <svg class="btn-icon" viewBox="0 0 16 16" focusable="false" aria-hidden="true"><path d="M11 2.5a2.5 2.5 0 0 0-2.3 3.5L3 11.7V13.5h1.8v-1.2h1.2v-1.2h1.2l1.3-1.3A2.5 2.5 0 1 0 11 2.5Zm0 1.2a1.3 1.3 0 1 1-1.3 1.3A1.3 1.3 0 0 1 11 3.7Z" fill="currentColor"/></svg>
+                                    <span>密码管理</span>
                                 </button>
                             </div>
                         </div>
@@ -148,7 +173,10 @@
                             <span>选择解压路径</span>
                             <div class="directory-picker-summary">
                                 <div id="selectedDirectoryPath" title="-">-</div>
-                                <button id="openDirectoryPickerBtn" class="secondary-button" type="button" disabled>选择</button>
+                                <button id="openDirectoryPickerBtn" class="secondary-button icon-text-button btn-sm" type="button" disabled>
+                                    <svg class="btn-icon" viewBox="0 0 16 16" focusable="false" aria-hidden="true"><path d="M2.5 3.5h3.6l1.2 1.5h6.2v7.5h-11Z" fill="currentColor"/></svg>
+                                    <span>浏览...</span>
+                                </button>
                             </div>
                         </div>
 
@@ -167,8 +195,9 @@
                             <span>压缩包注释</span>
                             <div class="comment-summary">
                                 <div id="commentStatus" class="comment-status">无注释</div>
-                                <button id="openCommentBtn" class="secondary-button" type="button">
-                                    查看/编辑
+                                <button id="openCommentBtn" class="secondary-button icon-text-button btn-sm" type="button">
+                                    <svg class="btn-icon" viewBox="0 0 16 16" focusable="false" aria-hidden="true"><path d="M3 3h10v7H5.5L3 12.5V3Z" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linejoin="round"/></svg>
+                                    <span>查看/编辑</span>
                                 </button>
                             </div>
                         </div>
@@ -194,6 +223,11 @@
                                 <option value="keepnew">保留较新文件</option>
                             </select>
                         </label>
+
+                        <label class="check-control delete-source-control" title="解压全部成功后自动清理源压缩包文件（若为分卷则清理全部卷）">
+                            <input id="deleteSourceInput" type="checkbox">
+                            <span>解压成功后删除源压缩包</span>
+                        </label>
                     </div>
                 </aside>
             </section>
@@ -213,9 +247,18 @@
                     <p id="currentFile">选择文件和目标目录后即可开始。</p>
                 </div>
                 <div class="job-actions">
-                    <button id="cancelBtn" class="danger-button" type="button" hidden>停止解压</button>
-                    <button id="testBtn" class="secondary-button" type="button" disabled title="先用 7-Zip 校验压缩包完整性，不写入磁盘">先体检</button>
-                    <button id="extractBtn" class="primary-button" type="button" disabled>开始解压</button>
+                    <button id="cancelBtn" class="danger-button icon-text-button" type="button" disabled>
+                        <svg class="btn-icon" viewBox="0 0 16 16" focusable="false" aria-hidden="true"><rect x="3.5" y="3.5" width="9" height="9" rx="1.5" fill="currentColor"/></svg>
+                        <span>停止解压</span>
+                    </button>
+                    <button id="testBtn" class="secondary-button icon-text-button" type="button" disabled title="先用 7-Zip 校验压缩包完整性，不写入磁盘">
+                        <svg class="btn-icon" viewBox="0 0 16 16" focusable="false" aria-hidden="true"><path d="M13.4 4.2 6.6 11 2.6 7l1-1 3 3 5.8-5.8 1 1Z" fill="currentColor"/></svg>
+                        <span>先体检</span>
+                    </button>
+                    <button id="extractBtn" class="primary-button icon-text-button" type="button" disabled>
+                        <svg class="btn-icon" viewBox="0 0 16 16" focusable="false" aria-hidden="true"><path d="M8 2.5v7m0 0L5 6.5m3 3 3-3M2.5 12h11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+                        <span>开始解压</span>
+                    </button>
                 </div>
             </section>
         </div>
@@ -432,6 +475,26 @@
         </div>
     </div>
 
+    <div id="solidConfirmDialog" class="dialog-backdrop nested-dialog-backdrop" hidden>
+        <div class="dialog solid-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="solidConfirmDialogTitle">
+            <div class="dialog-head">
+                <div>
+                    <h3 id="solidConfirmDialogTitle">固实压缩包提示</h3>
+                    <p>此文件处于固实（Solid）压缩块中。</p>
+                </div>
+                <button id="closeSolidConfirmBtn" class="dialog-close" type="button" aria-label="关闭">×</button>
+            </div>
+            <div class="solid-confirm-body" style="padding: 16px; font-size: 13px; line-height: 1.6; color: var(--ink);">
+                <p style="margin: 0 0 10px 0;">当前压缩包为<strong>固实压缩（Solid Archive）</strong>。从固实包中单独提取预览任意文件，均需顺序解压前面的数据块，<strong>耗时与压缩包整体大小成正比</strong>，且会占用较多 CPU 资源。</p>
+                <p style="margin: 0; color: var(--muted);">若压缩包体积较大，建议取消单文件预览，直接进行<strong>整包解压</strong>。</p>
+            </div>
+            <div class="dialog-actions">
+                <button id="cancelSolidConfirmBtn" class="secondary-button" type="button">取消</button>
+                <button id="proceedSolidConfirmBtn" class="primary-button" type="button">继续预览</button>
+            </div>
+        </div>
+    </div>
+
     <div id="previewDialog" class="preview-backdrop" hidden>
         <div class="preview-dialog" role="dialog" aria-modal="true" aria-labelledby="previewTitle">
             <div class="preview-header">
@@ -512,18 +575,18 @@
         </div>
     </div>
 
-    <script defer src="./index.cgi/js/password-store.js?v=3.6"></script>
-    <script defer src="./index.cgi/js/tree.js?v=3.6"></script>
-    <script defer src="./index.cgi/js/api-client.js?v=3.6"></script>
-    <script defer src="./index.cgi/js/ui-state.js?v=3.6"></script>
-    <script defer src="./index.cgi/js/ui-tree.js?v=3.6"></script>
-    <script defer src="./index.cgi/js/ui-dialogs.js?v=3.6"></script>
-    <script defer src="./index.cgi/js/ui-jobs.js?v=3.6"></script>
-    <script defer src="./index.cgi/js/ui-passwords.js?v=3.6"></script>
-    <script defer src="./index.cgi/js/ui-preview.js?v=3.6"></script>
-    <script defer src="./index.cgi/js/ui-thumbs.js?v=3.6"></script>
-    <script defer src="./index.cgi/js/ui-theme.js?v=3.6"></script>
-    <script defer src="./index.cgi/js/ui-comment.js?v=3.6"></script>
-    <script defer src="./index.cgi/js/app.js?v=3.6"></script>
+    <script defer src="./index.cgi/js/password-store.js?v=3.9"></script>
+    <script defer src="./index.cgi/js/tree.js?v=3.9"></script>
+    <script defer src="./index.cgi/js/api-client.js?v=3.9"></script>
+    <script defer src="./index.cgi/js/ui-state.js?v=3.9"></script>
+    <script defer src="./index.cgi/js/ui-tree.js?v=3.9"></script>
+    <script defer src="./index.cgi/js/ui-dialogs.js?v=3.9"></script>
+    <script defer src="./index.cgi/js/ui-jobs.js?v=3.9"></script>
+    <script defer src="./index.cgi/js/ui-passwords.js?v=3.9"></script>
+    <script defer src="./index.cgi/js/ui-preview.js?v=3.9"></script>
+    <script defer src="./index.cgi/js/ui-thumbs.js?v=3.9"></script>
+    <script defer src="./index.cgi/js/ui-theme.js?v=3.9"></script>
+    <script defer src="./index.cgi/js/ui-comment.js?v=3.9"></script>
+    <script defer src="./index.cgi/js/app.js?v=3.9"></script>
 </body>
 </html>

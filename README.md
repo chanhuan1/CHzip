@@ -6,7 +6,7 @@
 
 面向 **fnOS（飞牛私有云）文件管理器右键场景**的专业压缩包处理工具 —— 解压 · 分卷 · 选择性解压 · 文件预览 · 密码管理，一键完成。
 
-[![版本](https://img.shields.io/badge/版本-v3.6-2786dc?style=flat-square)](https://github.com/chanhuan1/CHzip/releases)
+[![版本](https://img.shields.io/badge/版本-v3.9-2786dc?style=flat-square)](https://github.com/chanhuan1/CHzip/releases)
 [![平台](https://img.shields.io/badge/平台-fnOS%20(x86_64%20·%20arm64)-2786dc?style=flat-square)]()
 [![Stars](https://img.shields.io/github/stars/chanhuan1/CHzip?style=flat-square&label=Stars&color=2786dc)](https://github.com/chanhuan1/CHzip/stargazers)
 [![Forks](https://img.shields.io/github/forks/chanhuan1/CHzip?style=flat-square&label=Forks&color=2786dc)](https://github.com/chanhuan1/CHzip/forks)
@@ -30,7 +30,7 @@
 ## ✨ 功能特性
 
 **格式与分卷**
-- 主流格式全覆盖：`7Z` `ZIP` `RAR` `TAR` `GZ` `BZ2` `XZ` `ZST` `CAB` `ISO` `ARJ` `LZH` 等；`tar.gz`/`tar.bz2`/`tar.xz`/`tar.zst` 等单文件压缩自动识别。
+- 主流格式全覆盖：`7Z` `ZIP` `RAR` `TAR` `GZ` `BZ2` `XZ` `ZST` `CAB` `ISO` `ARJ` `LZH` `CBZ` `CBR` `EPUB` `WIM` `DMG` 等；`tar.gz`/`tar.bz2`/`tar.xz`/`tar.zst` 等单文件压缩自动识别。
 - **分卷原生支持**：`.7z.001`、`.zip.001`、通用 `.001`、zip 传统分卷 `.z01`、RAR 新式 `.part1.rar` 与旧式 `.r00` **自动合并**，缺卷即时提示。
 
 **易用体验**
@@ -52,7 +52,7 @@
 
 ## 🚀 快速开始
 
-1. 在飞牛应用中心手动安装 `CHzip_3.6_search-fixed_<架构>.fpk`（x86_64 / arm64）。
+1. 在飞牛应用中心手动安装 `CHzip_3.9_<架构>.fpk`（x86_64 / arm64）。
 2. 文件管理器右键压缩包（分卷选中首卷即可）→「使用 CHzip 打开」。
 3. 预览目录 → 选择目标路径 → 点「开始解压」。
 
@@ -96,6 +96,42 @@ CHzip/
 ```
 
 ## 🕒 更新日志
+
+### v3.9（2026-09-25）
+- **修复：文件树实时高亮在真机上完全不亮**。三个真机根因逐一排查定位（靠新增的
+  `?debugHighlight=1` 调试开关在飞牛上抓日志）：
+  1. 解压 `.gz` 等单文件流时，7-Zip `-bsp1` 输出的「当前文件」是 `1`、`2`… 这样的
+     **已处理文件计数**而非文件名，`engine.js` 原样传给前端，文件树拿 `"1"/"2"` 匹配
+     路径（永远 NONE）。已过滤纯数字序号。
+  2. 真机 7-Zip 用 `\b`（退格符）+ 空格做原地刷新，文件名前带一串 `\b` 与 `- ` 动作
+     标记（如 `\b\b\b- dir/x.mp4`），前端未剥导致匹配失败。后端 `extractProgressName`
+     与前端 `normalizeHighlightPath` 现都剥除控制字符与动作前缀。
+  3. 文件树是分批异步渲染、且展开/折叠/搜索会 `replaceChildren()` 重建，高亮一旦随
+     DOM 消失便不再恢复。`renderTree` 末尾现按记住的当前文件补挂高亮。
+- **体验：顶栏版本号与真实版本实时同步**。原硬编码 `v3.7` 漂移（`?v=3.8` 资源在跑、
+  顶栏仍显示 v3.7）。现从 CSS 资源 `?v=` 缓存键（打包门禁保证其随 manifest 更新）
+  实时推导，今后发版只改 `?v=` 一处，顶栏自动跟随。
+- **变更：移除解压「续跑」功能**（前端续跑按钮 + 后端 `resume()` 服务，后端路由本未
+  注册）。用户取消解压后**保留已解压文件**，前端提示「已解压的文件已保留」；想继续
+  可重新解压并选「跳过已存在文件」冲突策略达到同等效果。
+- **变更：高亮样式沿用整行发光**（背景呼吸 + 左侧蓝竖条 + 文件名加粗），曾短暂改为
+  文件名后小蓝点，按反馈回退。
+- 测试：413。版本号升至 3.9。
+
+### v3.8（2026-09-24）
+- **修复：解压冲突策略四选一**（重命名/覆盖/跳过/保留较新，F1）。
+- **新增：解压完成智能拍平同名一层目录**（F2）。
+- **新增：完整性体检（7z t）异步任务 + 坏文件归因**（F6）。
+- **新增：失败保留部分成果 + 续跑重试**（F8，续跑后于 v3.9 移除）。
+- **新增：并发上限从硬拒绝 429 改排队等待**（F7）。
+- **新增：文件树展示压缩率 + 加密锁标**（F13）。
+- **新增：乱码检测一键换代码页 + 分卷缺失引导卡**（F12）。
+- **新增：包内图片缩略图墙 + PDF 免解压预览**（F11）。
+
+### v3.7（2026-09-23）
+- **修复：若干解压稳定性与界面一致性问题**（详见提交历史）。
+- **工程：版本号五处同步门禁**（manifest / package.json / index.html `?v=` /
+  README 徽章与安装命令），漏改任意一处 `npm test` 即红。
 
 ### v3.6（2026-09-19）
 - **修复：密码库写失败被吞**（`password-store` 的 `save()` 对 Promise 判非未 `await`），

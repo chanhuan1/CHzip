@@ -146,15 +146,10 @@ function auditPackage(config) {
   assert.match(css, /@font-face/);
   assert.match(css, /font-family:\s*"Inter Variable"/);
   assert.match(css, /InterVariable\.woff2\?v=4\.1/);
-  if (config.variant === "search-fixed") {
-    assert.match(html, /id="treeSearchInput"/);
-    assert.match(treeJs, /createSearchScheduler/);
-    assert.match(treeJs, /renderBatches/);
-    assert.match(appJs, /createSearchScheduler\(\{\s*delay:\s*180/);
-  } else {
-    assert.doesNotMatch(html, /id="treeSearchInput"/);
-    assert.match(html, /class="tree-toolbar is-search-disabled"/);
-  }
+  assert.match(html, /id="treeSearchInput"/);
+  assert.match(treeJs, /createSearchScheduler/);
+  assert.match(treeJs, /renderBatches/);
+  assert.match(appJs, /createSearchScheduler\(\{\s*delay:\s*180/);
   assert.equal(sevenZip.subarray(0, 4).toString("hex"), "7f454c46");
   assert.equal(sevenZip.readUInt16LE(18), config.machine);
 

@@ -117,8 +117,10 @@ class JobStore {
       // 智能拍平（F2）：成功收尾时若上移了内容，置 true 并记 flattenNote。
       flattened: false,
       flattenNote: "",
-      // 续跑重试（F8）：由哪个 failed job 续跑而来，空串=全新任务。
-      retryOf: input.retryOf || "",
+      // 解压成功后自动删除源压缩包
+      deleteSource: Boolean(input.deleteSource),
+      deletedSourceCount: 0,
+      deleteSourceNote: "",
       selection: input.selection || null,
       sevenZipPath: input.sevenZipPath || "",
       sevenZipSource: input.sevenZipSource || "",

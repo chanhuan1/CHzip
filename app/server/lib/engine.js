@@ -162,7 +162,21 @@ function extractProgressName(line) {
   }
   const segment = stripped.split(/\s{2,}/).filter(Boolean).at(-1) || "";
   const separator = segment.lastIndexOf(" - ");
-  return (separator >= 0 ? segment.slice(separator + 3) : segment).trim();
+  const name = (separator >= 0 ? segment.slice(separator + 3) : segment).trim()
+    // 7-Zip 用 \b（退格）+ 空格做原地覆盖刷新，文件名前会带一串 \b；
+    // 真机日志实测："\b\b\b\b\b\b- JD633/x.mp4"。这类控制字符（含 \r\n）
+    // 不是文件名的一部分，剥掉——否则前端文件树匹配路径必然 NONE。
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u001f\u007f]+/g, "")
+    .trim();
+  // 单文件流式格式（.gz/.bz2/.xz 等）的 -bsp1 进度是「  1」「  2」…这样的
+  // 已处理文件计数，7-Zip 不输出文件名。若把这个序号当 currentFile 传下去，
+  // 前端文件树会拿 "1"/"2" 去匹配路径（永远 NONE），实时高亮失效、进度条
+  // 下方还会显示一个莫名其妙的数字。纯数字序号不是文件名，丢弃。
+  if (/^\d+$/.test(name)) {
+    return "";
+  }
+  return name;
 }
 
 // 7-Zip 的进度用回车符 \r 原地覆盖（不换行），因此要按行分段并取

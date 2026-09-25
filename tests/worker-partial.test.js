@@ -1,6 +1,6 @@
 "use strict";
 
-// F8 失败保留部分成果：PARTIAL_KEEP_CODES 集合内错误码（FILE_NAME_TOO_LONG /
+// 失败时保留部分成果：PARTIAL_KEEP_CODES 集合内错误码（FILE_NAME_TOO_LONG /
 // DAMAGED / MISSING_VOLUME / PERMISSION / ENGINE_INTERRUPTED）必须保留
 // outputDir 并在终态写 partialSuccess=true；取消永不保留；test kind 不进入此逻辑。
 
@@ -93,7 +93,7 @@ for (const code of [
   "PERMISSION",
   "ENGINE_INTERRUPTED",
 ]) {
-  test(`F8 ${code} keeps outputDir and writes partialSuccess=true`, async () => {
+test(`partial keep: ${code} keeps outputDir and writes partialSuccess=true`, async () => {
     const { result, outputDir } = await runWithError(code);
     assert.equal(result.status, "failed");
     assert.equal(
@@ -108,14 +108,14 @@ for (const code of [
   });
 }
 
-test("F8 generic ENGINE error still cleans outputDir (no partialSuccess)", async () => {
+test("generic ENGINE error still cleans outputDir (no partialSuccess)", async () => {
   const { result, outputDir } = await runWithError("ENGINE");
   assert.equal(result.status, "failed");
   assert.equal(result.partialSuccess, false);
   assert.ok(!fs.existsSync(outputDir), "非保留类错误仍应 cleanupOutput");
 });
 
-test("F8 cancellation never preserves partial output", async () => {
+test("cancellation preserves partial output and marks partialSuccess", async () => {
   const runtimeRoot = makeRuntime();
   const outputDir = path.join(runtimeRoot, "out");
   fs.mkdirSync(outputDir, { recursive: true });
@@ -133,11 +133,12 @@ test("F8 cancellation never preserves partial output", async () => {
     runPhase: async () => ({ exitCode: 0, log: "" }),
   });
   assert.equal(result.status, "cancelled");
-  assert.equal(result.partialSuccess, false, "取消不应标记部分成果");
-  assert.ok(!fs.existsSync(outputDir), "取消仍应 cleanupOutput");
+  assert.equal(result.partialSuccess, true, "主动停止解压应标记部分成果");
+  assert.ok(fs.existsSync(outputDir), "主动停止解压应保留已解压的文件");
+  assert.ok(fs.existsSync(path.join(outputDir, "partial.txt")), "已解压文件应完整保留");
 });
 
-test("F8 test kind never sets partialSuccess even for DAMAGED", async () => {
+test("test kind never sets partialSuccess even for DAMAGED", async () => {
   const runtimeRoot = makeRuntime();
   const store = createMemoryStore({
     kind: "test",
@@ -157,7 +158,7 @@ test("F8 test kind never sets partialSuccess even for DAMAGED", async () => {
   assert.equal(result.partialSuccess, false, "test kind 不进入 partialSuccess 逻辑");
 });
 
-test("F8 success terminal does not write partialSuccess", async () => {
+test("success terminal does not write partialSuccess", async () => {
   // 防御：success 终态不得带 partialSuccess=true。
   const runtimeRoot = makeRuntime();
   const outputDir = path.join(runtimeRoot, "out");

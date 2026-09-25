@@ -41,9 +41,10 @@ const {
 const PROGRESS_THROTTLE_MS = 200;
 const PROGRESS_PERCENT_STEP = 1;
 
-// F8 失败保留部分成果：这些错误码都属于「非源文件问题」（源文件被换 /
+// 失败/取消时保留部分成果：这些错误码都属于「非源文件问题」（源文件被换 /
 // 权限被拒走 SOURCE_* 分支，不在此列），已解压出来的文件仍然有价值，
-// 终态时保留 outputDir 并把 partialSuccess 置 true，供「续跑」入口识别。
+// 终态时保留 outputDir 并把 partialSuccess 置 true，前端据此提示用户
+// 已解压的文件还在。用户主动取消（cancelled）同样保留已解压文件。
 // 仅 extract kind 走此逻辑；test kind 无 outputDir 产出，不在此集合生效。
 const PARTIAL_KEEP_CODES = new Set([
   "FILE_NAME_TOO_LONG",
@@ -546,6 +547,50 @@ function cancellationError() {
 // - 大小写不敏感比较：归档内目录项与文件名主干大小写可能不同，忽略大小写
 //   更贴近用户预期。
 // - fsModule 可注入，便于单测在不真动文件的前提下驱动所有分支。
+// 成功后自动删除源压缩包文件（若用户勾选了 deleteSource）。
+// 支持多分卷一次性完整清理。在独立 try/catch 中执行，绝不让解压成功变失败。
+function removeSourceArchive(job, options = {}) {
+  const fsModule = options.fsModule || fs;
+  const result = { deletedCount: 0, deleteNote: "" };
+  // 防守性拦截：非解压任务（如 test 体检）、或选择性解压（只解压部分文件时），严禁删除源压缩包！
+  const isSelective = Array.isArray(job?.selection)
+    ? job.selection.length > 0
+    : Boolean(job?.selection);
+  if (!job || !job.deleteSource || isSelective || job.kind === "test") {
+    return result;
+  }
+  const targets = new Set();
+  if (Array.isArray(job.sourceFingerprint)) {
+    for (const fp of job.sourceFingerprint) {
+      if (fp && fp.path) {
+        targets.add(fp.path);
+      }
+    }
+  }
+  if (!targets.size && job.archivePath) {
+    targets.add(job.archivePath);
+  }
+
+  let count = 0;
+  for (const filePath of targets) {
+    try {
+      if (fsModule.existsSync(filePath)) {
+        fsModule.rmSync(filePath, { force: true });
+        count += 1;
+      }
+    } catch (err) {
+      // 删除失败静默处理
+    }
+  }
+  if (count > 0) {
+    result.deletedCount = count;
+    result.deleteNote = targets.size > 1
+      ? `已自动清理 ${count} 个源分卷文件`
+      : "已自动清理源压缩包";
+  }
+  return result;
+}
+
 function flattenSingleRootDirectory(job, options = {}) {
   const fsModule = options.fsModule || fs;
   const result = { flattened: false, flattenNote: "" };
@@ -871,6 +916,8 @@ async function runWorker(jobId, options = {}) {
     // flattenNote）并入同一次 store.update。flatten 内部失败已在其自带
     // try/catch 里吞掉，这里拿到的只是 {flattened:false}，不影响终态本身。
     const flattenResult = flattenSingleRootDirectory(job, { fsModule: fs });
+    // 删除源压缩包（如果勾选且解压成功）
+    const deleteSourceResult = removeSourceArchive(job, { fsModule: fs });
     store.update(jobId, (current) => {
       if (current.status === "cancelling" || current.cancelRequestedAt) {
         throw cancellationError();
@@ -886,6 +933,8 @@ async function runWorker(jobId, options = {}) {
         error: null,
         flattened: Boolean(flattenResult.flattened),
         flattenNote: flattenResult.flattenNote || "",
+        deletedSourceCount: deleteSourceResult.deletedCount,
+        deleteSourceNote: deleteSourceResult.deleteNote,
       };
     });
     safeDiagnosticWrite(logger, {
@@ -923,21 +972,19 @@ async function runWorker(jobId, options = {}) {
         // 救援失败按普通失败处理，但仍保留已解压的输出
       }
     }
-    // F8：PARTIAL_KEEP_CODES 全部保留 outputDir（不再只 FILE_NAME_TOO_LONG）。
-    // 限定条件：extract kind（test 无产出）+ 非取消 + 错误码在集合内。
+    // PARTIAL_KEEP_CODES 全部保留 outputDir（不再只 FILE_NAME_TOO_LONG）。
+    // 限定条件：extract kind（test 无产出）+ （用户主动取消 或 错误码在集合内）。
     const isExtractKind = (job.kind || "extract") === "extract";
-    const keepPartial = !cancelled
-      && isExtractKind
-      && PARTIAL_KEEP_CODES.has(error.code);
+    const keepPartial = isExtractKind
+      && (cancelled || PARTIAL_KEEP_CODES.has(error.code));
     if (!keepPartial) {
       cleanupOutput(job);
     }
     const finalOk = Boolean(rescuedNote) && !cancelled;
-    // partialSuccess 仅在「failed 且保留了部分成果」时落 true：
-    // - cancelled 永不保留（用户主动停止，已清干净）；
+    // partialSuccess 在「未完全成功且保留了部分成果」时落 true（主动停止或特定错误）：
     // - finalOk（救援成功→success）不算部分成果，整体已成功；
     // - test kind 不进入此逻辑（isExtractKind 已过滤）。
-    const partialSuccess = !cancelled && !finalOk && keepPartial;
+    const partialSuccess = !finalOk && keepPartial;
     store.update(jobId, (current) => ({
       ...current,
       status: cancelled ? "cancelled" : finalOk ? "success" : "failed",
@@ -987,6 +1034,7 @@ module.exports = {
   defaultValidateListing,
   extractTestFailures,
   flattenSingleRootDirectory,
+  removeSourceArchive,
   markStartupFailure,
   registerProcessGroup,
   runWorker,

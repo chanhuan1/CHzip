@@ -46,7 +46,6 @@ All responses use `Content-Type: application/json; charset=utf-8`.
 | `NOT_FOUND` | 404 | Unknown API endpoint |
 | `INVALID_JSON` | 400 | Request body is not valid JSON |
 | `BODY_TOO_LARGE` | 413 | Request body exceeds 16 MiB |
-| `TOO_MANY_REQUESTS` | 429 | Too many concurrent extractions (limit 3) |
 | `TIMEOUT` | 200 | Reading the request body or handling it timed out |
 | `SOURCE_NOT_FOUND` | 500 | Archive file does not exist |
 | `SOURCE_FILE_DENIED` | 500 | App cannot read the archive |
@@ -88,8 +87,7 @@ All responses use `Content-Type: application/json; charset=utf-8`.
 > fallback used when no more specific classification matched.
 
 > `TIMEOUT` intentionally answers HTTP 200: CGI apps in fnOS deliver errors in
-> the response body, and only `NOT_FOUND` / `INVALID_JSON` / `BODY_TOO_LARGE` /
-> `TOO_MANY_REQUESTS` also set a non-200 status line.
+> the response body, and only `NOT_FOUND` / `INVALID_JSON` / `BODY_TOO_LARGE` also set a non-200 status line (HTTP 429 is no longer used; concurrent requests above limit 3 enter a FIFO queue with `queued` status).
 
 ## Endpoints
 
@@ -250,14 +248,35 @@ Starts an asynchronous extraction job.
 - `path` (string, required): Absolute path to the archive
 - `password` (string, optional): Decryption password
 - `codePage` (string, optional): Filename encoding
+- `conflictPolicy` (string, optional): Overwrite policy (`rename`, `overwrite`, `skip`, `keepnew`, default `rename`)
 - `destinationRoot` (string, required): Output directory root
 - `selectedPaths` (string[], optional): Specific files to extract (null = all)
+- `deleteSource` (boolean, optional): Whether to delete source archive upon successful extraction (default false)
 
 **Response**:
 ```json
 {
   "jobId": "32-char-hex",
   "outputDir": "/vol1/share/file",
+  "partCount": 1
+}
+```
+
+### `test`
+
+Starts an asynchronous archive integrity test (`7z t`). Validates file checksums without writing to disk.
+
+**Parameters** (JSON body):
+- `path` (string, required): Absolute path to the archive
+- `password` (string, optional): Decryption password
+- `codePage` (string, optional): Filename encoding
+
+**Response**:
+```json
+{
+  "jobId": "32-char-hex",
+  "kind": "test",
+  "outputDir": "",
   "partCount": 1
 }
 ```

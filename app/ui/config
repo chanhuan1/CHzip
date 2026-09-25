@@ -27,7 +27,13 @@
                 "iso",
                 "arj",
                 "lzh",
-                "lha"
+                "lha",
+                "cbz",
+                "cbr",
+                "epub",
+                "wim",
+                "swm",
+                "dmg"
             ],
             "noDisplay": false
         }

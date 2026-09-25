@@ -113,6 +113,31 @@ test("parseProgress takes the last percent when updates share one line", () => {
   assert.equal(result.currentFile, "");
 });
 
+// 真机回归（v3.8 调试日志）：解压 .gz 单文件流时，7-Zip 的 -bsp1 输出是
+// 「  1」「  2」…这样的已处理文件计数，不输出文件名。若把序号当 currentFile
+// 传下去，前端文件树拿 "1"/"2" 匹配路径（永远 NONE），实时高亮失效。
+test("parseProgress drops a bare file-count index instead of treating it as a name", () => {
+  for (const log of ["  12% 1\r", "  45% 2\r", "  1\n", "  2\n"]) {
+    const result = parseProgress(log);
+    assert.equal(result.currentFile, "", `${JSON.stringify(log)} 不应把序号当文件名`);
+  }
+  // 序号之间夹着真文件名时，文件名仍然保留（挤压行里带 7z 动作前缀，
+  // 与既有「packed line followed by a name」用例的 "- file.txt" 语义一致）
+  const named = parseProgress("  10% - dir/a.txt\r  20% 1\r");
+  assert.equal(named.currentFile, "- dir/a.txt");
+});
+
+// 真机回归（v3.8 调试日志）：7-Zip 用 \b（退格）+ 空格做原地覆盖刷新，
+// currentFile 前面带一串 \b —— "\b\b\b\b\b\b- JD633/x.mp4"。控制字符不是
+// 文件名的一部分，必须剥掉，否则前端文件树匹配路径必然 NONE。
+test("parseProgress strips backspace/control characters from the file name", () => {
+  const result = parseProgress("  40% \b\b\b\b\b\b- JD633/20260126.mp4\r");
+  assert.equal(result.currentFile, "- JD633/20260126.mp4");
+  // 合法连字符文件名不受控制字符剥除影响
+  const hyphen = parseProgress("  40% - dir/界面-首页.png\r");
+  assert.equal(hyphen.currentFile, "- dir/界面-首页.png");
+});
+
 test("parseProgress keeps the previous file when a packed line has no name", () => {
   const log = "  0% a.txt\r  37% b.txt\r  99% c.txt\r  12%  18%";
   const result = parseProgress(log);

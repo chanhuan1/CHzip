@@ -23,6 +23,11 @@ const SINGLE_FORMATS = [
   { pattern: /\.iso$/i, format: "iso", type: "iso" },
   { pattern: /\.arj$/i, format: "arj", type: "arj" },
   { pattern: /\.(?:lzh|lha)$/i, format: "lzh", type: "lzh" },
+  { pattern: /\.cbz$/i, format: "zip", type: "zip" },
+  { pattern: /\.cbr$/i, format: "rar", type: "rar" },
+  { pattern: /\.epub$/i, format: "zip", type: "zip" },
+  { pattern: /\.(?:wim|swm)$/i, format: "wim", type: "wim" },
+  { pattern: /\.dmg$/i, format: "dmg" },
 ];
 
 function stripKnownExtension(name) {

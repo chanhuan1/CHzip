@@ -384,7 +384,7 @@
 
     let previewContent = "";
 
-    async function previewFile(targetPath) {
+    async function previewFile(targetPath, confirmedSolid = false) {
         const els = state.elements;
         if (!state.filePath || !targetPath) {
             return;
@@ -392,6 +392,15 @@
         const entry = state.entries.find((e) => e.path === targetPath);
         if (!entry || !uiPreview.isPreviewable(entry.name, entry.size)) {
             uiDialogs.setNotice("此文件类型不支持预览或文件过大", "error", state);
+            return;
+        }
+
+        // 针对固实（Solid）包做二次确认引导：避免无意触发耗时顺序解压
+        if (state.previewSolid && !confirmedSolid) {
+            uiDialogs.openSolidConfirmDialog(state, targetPath, () => {
+                uiDialogs.closeSolidConfirmDialog(state);
+                previewFile(targetPath, true);
+            });
             return;
         }
 
@@ -710,10 +719,25 @@
             || state.running
             || state.previewing
         );
-        els.cancelBtn.hidden = !state.running;
+        els.cancelBtn.disabled = !state.running;
         els.refreshPreviewBtn.disabled = state.running || state.previewing || !state.info;
         els.codePageSelect.disabled = state.running || state.previewing;
         els.conflictPolicySelect.disabled = state.running || state.previewing;
+        if (els.deleteSourceInput) {
+            const isPartialSelection = Boolean(
+                state.allFilePaths
+                && state.selectedPaths
+                && state.selectedPaths.size > 0
+                && state.selectedPaths.size < state.allFilePaths.length
+            );
+            els.deleteSourceInput.disabled = state.running || state.previewing || isPartialSelection;
+            if (isPartialSelection) {
+                els.deleteSourceInput.checked = false;
+                els.deleteSourceInput.parentElement?.setAttribute("title", "仅在完整解压全部文件时支持自动删除源文件");
+            } else {
+                els.deleteSourceInput.parentElement?.setAttribute("title", "解压全部成功后自动清理源压缩包文件（若为分卷则清理全部卷）");
+            }
+        }
         els.openPasswordManagerBtn.disabled = state.running || state.previewing || !state.info;
         els.passwordInput.disabled = state.running || state.previewing;
         els.passwordPresetToggleBtn.disabled = state.running || state.previewing;
@@ -927,6 +951,20 @@
             closeDiagnostics();
         }
     });
+    els.closeSolidConfirmBtn?.addEventListener("click", () => uiDialogs.closeSolidConfirmDialog(state));
+    els.cancelSolidConfirmBtn?.addEventListener("click", () => uiDialogs.closeSolidConfirmDialog(state));
+    els.proceedSolidConfirmBtn?.addEventListener("click", () => {
+        if (typeof state.onSolidConfirmProceed === "function") {
+            state.onSolidConfirmProceed();
+        } else {
+            uiDialogs.closeSolidConfirmDialog(state);
+        }
+    });
+    els.solidConfirmDialog?.addEventListener("click", (event) => {
+        if (event.target === els.solidConfirmDialog) {
+            uiDialogs.closeSolidConfirmDialog(state);
+        }
+    });
     els.closeMissingPartsBtn.addEventListener("click", () => uiDialogs.closeMissingPartsDialog(state));
     els.confirmMissingPartsBtn.addEventListener("click", () => uiDialogs.closeMissingPartsDialog(state));
     els.missingPartsDialog.addEventListener("click", (event) => {
@@ -1019,6 +1057,7 @@
     // > 普通(50)，同层按 DOM 顺序后者优先（后开的在上）。
     const dialogClosers = [
         ["previewDialog", () => closePreviewDialog()],
+        ["solidConfirmDialog", () => uiDialogs.closeSolidConfirmDialog(state)],
         ["createDirectoryDialog", () => uiDialogs.closeCreateDirectoryDialog(state)],
         ["passwordRecordDialog", () => passwordManagerApi.closePasswordRecordDialog()],
         ["directoryDialog", () => uiDialogs.closeDirectoryDialog(state)],

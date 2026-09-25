@@ -237,8 +237,13 @@
             const previewBtn = document.createElement("button");
             previewBtn.type = "button";
             previewBtn.className = "tree-preview-btn";
+            if (state.previewSolid) {
+                previewBtn.classList.add("is-solid");
+            }
             previewBtn.innerHTML = PREVIEW_EYE_ICON;
-            previewBtn.title = "预览文件";
+            previewBtn.title = state.previewSolid
+                ? "固实压缩包：单文件预览需解压整包，耗时较长（点击查看提示）"
+                : "预览文件";
             previewBtn.setAttribute("aria-label", `预览 ${node.name}`);
             row.append(previewBtn);
         }
@@ -522,6 +527,18 @@
             },
         });
         updateSelectionSummary(state);
+
+        // 树刚被 replaceChildren 重建、且行还在按帧分批补齐：此时若解压正在
+        // 进行，旧高亮已随 DOM 一起消失。在下一帧按记住的当前文件重新补挂——
+        // 目标行若尚未渲染出来则跳过，由后续 setJobProgress 的轮询 tick 自然
+        // 补上（文件高频切换时每 1s 都有新路径进来，视觉代价可忽略）。
+        if (currentExtractingNormalized) {
+            scheduleFrame(() => {
+                if (activeState === state) {
+                    applyHighlight(els, undefined);
+                }
+            });
+        }
     }
 
     function setPreviewControls(enabled, state) {
@@ -532,8 +549,154 @@
         }
     }
 
+    // 实时高亮正在解压的文件节点（支持递归匹配、折叠目录祖先提示与平滑保持）
+    let currentExtractingNormalized = "";
+
+    // 唯一允许写入高亮 class 的出口。负责在写入前校验归一化路径：
+    // - null：显式退出运行态，彻底清理并复位；
+    // - undefined（或缺省）：按 currentExtractingNormalized 的原值补挂
+    //   （renderTree 重建/分批渲染追加后调用，让已亮行在新 DOM 上恢复）；
+    // - 字符串：新的当前文件，路径变了才重写。
+    //
+    // 归一化必须剥掉 7-Zip -bb1 的动作标记：真实进度里的 currentFile 常带
+    // "- name"（已存在/跳过）、"+ name"（新增解压）等前缀（见 engine.js 的
+    // extractProgressName，该值原样传给前端显示）。文件树的 data-path 是干净
+    // 的相对路径，不剥前缀 findMatchingRow 永远匹配不上，高亮就不会亮。
+    function normalizeHighlightPath(value) {
+        return String(value || "")
+            // 先剥掉 7-Zip 原地刷新的控制字符（\b 退格等）：真机进度里的
+            // currentFile 可能带 "\b\b\b- name"。后端已剥，这里再拦一道。
+            // eslint-disable-next-line no-control-regex
+            .replace(/[\u0000-\u001f\u007f]+/g, "")
+            .replace(/\\/g, "/")
+            .trim()
+            .replace(/^\.\//, "")
+            .replace(/^\/+/, "")
+            // 7-Zip -bb1 动作标记（"- "/"+" 等）。剥除控制字符后再 trim，
+            // 保证 "\b\b- name" → "name" 而不是 " name"。
+            .replace(/^[-+*=]\s+/, "")
+            .trim();
+    }
+
+    function applyHighlight(els, rawInput) {
+        if (rawInput === null) {
+            currentExtractingNormalized = "";
+            clearAllExtractingHighlights(els.fileTree);
+            return;
+        }
+        if (rawInput !== undefined) {
+            const normalized = normalizeHighlightPath(rawInput);
+            // 关键点：若当前帧 7-Zip 仅输出了进度百分比（未附带新文件名），
+            // 保持现有高亮，避免闪烁清空
+            if (!normalized || normalized === currentExtractingNormalized) {
+                return;
+            }
+            currentExtractingNormalized = normalized;
+        }
+        if (!currentExtractingNormalized) {
+            return;
+        }
+        clearAllExtractingHighlights(els.fileTree);
+        const normalized = currentExtractingNormalized;
+
+        // 1. 在当前已渲染的行中匹配目标文件行
+        let targetRow = findMatchingRow(els.fileTree, normalized, false);
+        let matchedVia = targetRow ? "file" : "";
+
+        // 2. 若目标文件所在目录处于折叠状态（未展开），向上溯源高亮最近的可见父目录
+        if (!targetRow) {
+            let parent = normalized;
+            while (parent.includes("/")) {
+                parent = parent.slice(0, parent.lastIndexOf("/"));
+                targetRow = findMatchingRow(els.fileTree, parent, true);
+                if (targetRow) {
+                    targetRow.classList.add("is-extracting-dir");
+                    matchedVia = "dir";
+                    break;
+                }
+            }
+        } else {
+            targetRow.classList.add("is-extracting");
+        }
+
+        // 调试：?debugHighlight=1 时打印匹配结果与树上已有的 data-path，
+        // 一次就能看出是「路径对不上」还是「行还没渲染出来」。
+        if (typeof window !== "undefined"
+            && /[?&]debugHighlight=1/.test(window.location?.search || "")) {
+            const paths = [];
+            const kids = els.fileTree?.children || [];
+            for (let i = 0; i < kids.length && i < 30; i += 1) {
+                if (kids[i].dataset?.path) {
+                    paths.push(kids[i].dataset.path);
+                }
+            }
+            // eslint-disable-next-line no-console
+            console.log("[CHzip-HL] match", {
+                normalized,
+                matched: matchedVia || "NONE",
+                rowPath: targetRow?.dataset?.path || "",
+                treePaths: paths,
+            });
+        }
+    }
+
+    function highlightExtractingFile(currentFile, state) {
+        const els = state?.elements;
+        if (!els?.fileTree) {
+            return;
+        }
+        // 显式传 null 清场；undefined 等价于"无新文件名"，保持现状（applyHighlight
+        // 内部对空归一化路径同样保持不清除）。
+        applyHighlight(els, currentFile === null ? null : currentFile);
+    }
+
+    function clearAllExtractingHighlights(container) {
+        const activeRows = container.querySelectorAll?.(".is-extracting, .is-extracting-dir");
+        if (activeRows && activeRows.length !== undefined) {
+            for (let i = 0; i < activeRows.length; i++) {
+                activeRows[i].classList.remove("is-extracting", "is-extracting-dir");
+            }
+        } else if (container.children) {
+            for (let i = 0; i < container.children.length; i++) {
+                container.children[i].classList?.remove("is-extracting", "is-extracting-dir");
+            }
+        }
+    }
+
+    function findMatchingRow(container, targetPath, directoryOnly = false) {
+        const allRows = container.children;
+        if (!allRows) return null;
+        const norm = targetPath.toLowerCase();
+
+        // 优先精确比对完整相对路径
+        for (let i = 0; i < allRows.length; i++) {
+            const row = allRows[i];
+            const p = row.dataset?.path;
+            if (!p) continue;
+            const pNorm = p.replace(/\\/g, "/").replace(/^\.\//, "").replace(/^\/+/, "").toLowerCase();
+            if (pNorm === norm) {
+                return row;
+            }
+        }
+
+        // 备选比对：支持尾部相对匹配（应对 7-Zip 前缀差异）
+        if (!directoryOnly) {
+            for (let i = 0; i < allRows.length; i++) {
+                const row = allRows[i];
+                const p = row.dataset?.path;
+                if (!p) continue;
+                const pNorm = p.replace(/\\/g, "/").replace(/^\.\//, "").replace(/^\/+/, "").toLowerCase();
+                if (pNorm.endsWith("/" + norm) || norm.endsWith("/" + pNorm)) {
+                    return row;
+                }
+            }
+        }
+        return null;
+    }
+
     root.CHzipUiTree = {
         formatSize,
+        highlightExtractingFile,
         renderTree,
         setPreviewControls,
         updateSelectionSummary,

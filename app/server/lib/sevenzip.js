@@ -20,10 +20,10 @@ function normalizeCodePage(value = "auto") {
 // 解压冲突策略：覆盖已存在文件时的行为。键一律小写（normalize 里会 toLowerCase）。
 //   rename    —— 自动重命名新文件为 "name (2).ext"（-aou，默认，保持现状）
 //   overwrite —— 无条件覆盖（-aoa）
-//   skip      —— 跳过已存在文件（-aos，供「失败续跑」复用）
+//   skip      —— 跳过已存在文件（-aos）
 //   keepnew   —— 保留较新：新文件占原名、旧文件改名（-aot）
 // 与 normalizeCodePage 同款白名单：CGI 参数直通 spawn，未知值立刻 throw，
-// 不给命令注入留缝。F8（失败续跑）复用 skip，不要再造第二个 overwriteMode。
+// 不给命令注入留缝。策略仅此一处定义，不要再造第二个 overwriteMode。
 const CONFLICT_POLICIES = Object.freeze({
   rename: Object.freeze({ flag: "-aou", label: "自动重命名" }),
   overwrite: Object.freeze({ flag: "-aoa", label: "覆盖已存在文件" }),
@@ -137,7 +137,7 @@ function buildReadCommentArgs(selection, options) {
 // -bsp1 让进度行与解压同构，前端轮询同一套解析即可复用。
 // 密码与代码页走与 list/extract 相同的 appendArchiveOptions（含 -p 临时文件语义
 // 由调用方保证；这里只拼参数）。
-function buildTestArgs(selection, options) {
+function buildTestArgs(selection, options = {}) {
   const args = ["t", "-y", "-bsp1", "-bb1", "-sccUTF-8"];
   appendArchiveOptions(args, selection, options);
   args.push(options.archivePath);

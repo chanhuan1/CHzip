@@ -213,9 +213,27 @@ dd {
 }
 
 .brand h1 {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 8px;
     font-size: 22px;
     font-weight: 600;
     line-height: 1.1;
+}
+
+.brand-version {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    padding: 2px 7px;
+    border-radius: var(--radius-pill);
+    background: var(--accent-soft);
+    color: var(--accent);
+    border: 1px solid rgba(39, 134, 220, 0.28);
+    line-height: 1.2;
+    vertical-align: middle;
+    user-select: none;
 }
 
 .brand p {
@@ -472,11 +490,10 @@ dd {
 }
 
 .tree-toolbar {
-    display: grid;
-    grid-template-columns: auto minmax(180px, 280px);
-    gap: 14px;
+    display: flex;
     align-items: center;
-    padding: 11px 16px;
+    gap: 12px;
+    padding: 6px 14px;
     border-bottom: 1px solid var(--line);
     background: var(--surface-soft);
 }
@@ -505,8 +522,15 @@ dd {
     padding: 0 10px;
 }
 
+.search-field {
+    margin-left: auto;
+    width: clamp(140px, 26vw, 240px);
+}
+
 .search-field input {
-    min-height: 36px;
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 30px;
 }
 
 .search-field input:focus,
@@ -539,6 +563,53 @@ dd {
     min-height: 34px;
     padding: 2px 7px 2px calc(7px + var(--tree-depth, 0) * 18px);
     border-radius: var(--radius-sm);
+    position: relative;
+    transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* 解压实时推进高亮指示（正在解压的具体文件行） */
+.tree-row.is-extracting {
+    background-color: var(--accent-soft) !important;
+    box-shadow: inset 4px 0 0 var(--accent);
+    animation: extracting-glow 1.6s ease-in-out infinite alternate;
+}
+
+@keyframes extracting-glow {
+    0% {
+        background-color: var(--accent-soft);
+    }
+    100% {
+        background-color: rgba(39, 134, 220, 0.28);
+    }
+}
+
+.tree-row.is-extracting .tree-label {
+    color: var(--accent);
+    font-weight: 700;
+}
+
+.tree-row.is-extracting .tree-icon {
+    transform: scale(1.15);
+    transition: transform 0.15s ease;
+}
+
+.tree-row.is-extracting .tree-icon-file-body {
+    fill: var(--accent);
+}
+
+/* 解压实时推进高亮指示（当具体文件位于折叠目录内时，高亮可见的父级目录） */
+.tree-row.is-extracting-dir {
+    background-color: rgba(39, 134, 220, 0.12) !important;
+    box-shadow: inset 3px 0 0 rgba(39, 134, 220, 0.7);
+}
+
+.tree-row.is-extracting-dir .tree-label {
+    color: var(--accent);
+    font-weight: 600;
+}
+
+.tree-row.is-extracting-dir .tree-icon {
+    color: var(--accent);
 }
 
 .tree-row:hover {
@@ -1724,7 +1795,7 @@ dd {
     }
 
     .tree-toolbar {
-        grid-template-columns: 1fr;
+        flex-wrap: wrap;
     }
 
     .tree-row {
@@ -2043,7 +2114,7 @@ dd {
 .view-switch {
     display: inline-flex;
     gap: 4px;
-    margin-left: auto;
+    flex-shrink: 0;
 }
 
 .view-switch-btn {
@@ -2262,6 +2333,14 @@ dd {
     box-shadow: 0 0 0 2px var(--accent-soft);
 }
 
+.tree-preview-btn.is-solid {
+    color: #e09e28;
+}
+.tree-preview-btn.is-solid:hover {
+    color: #f5b041;
+}
+
+
 /* ===== Comment Dialog ===== */
 .comment-body {
     padding: 16px;
@@ -2326,4 +2405,125 @@ dd {
 
 .comment-status.has-comment {
     color: var(--ink);
+}
+
+
+/* ------------------------------------------------------------------ */
+/* 精细化视觉增强与微交互                                             */
+/* ------------------------------------------------------------------ */
+
+.btn-icon {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    vertical-align: middle;
+    flex-shrink: 0;
+}
+
+.icon-text-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+}
+
+.btn-sm {
+    min-height: 32px;
+    padding: 0 11px;
+    font-size: 12px;
+}
+
+.header-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* 危险按钮（停止解压）禁用态样式增强：明确置灰，不留红框 */
+.danger-button:disabled {
+    border-color: var(--line);
+    color: var(--muted);
+    background: var(--surface-soft);
+    box-shadow: none;
+    cursor: not-allowed;
+}
+
+/* 按钮微交互悬停动效与点击反馈 */
+button:not(:disabled) {
+    transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.08s ease, box-shadow 0.15s ease;
+}
+
+button:not(:disabled):active {
+    transform: scale(0.98);
+}
+
+.primary-button {
+    box-shadow: 0 2px 6px rgba(39, 134, 220, 0.28);
+}
+
+.primary-button:hover:not(:disabled) {
+    box-shadow: 0 4px 12px rgba(39, 134, 220, 0.38);
+}
+
+/* 输入框与选择框细腻 focus 质感 */
+input[type="text"],
+input[type="password"],
+input[type="search"],
+select,
+textarea {
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-md);
+    background: var(--control-bg);
+    color: var(--ink);
+    outline: none;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+input[type="text"]:focus,
+input[type="password"]:focus,
+input[type="search"]:focus,
+select:focus,
+textarea:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* 压缩包摘要头轻微渐变边框质感 */
+.archive-summary {
+    border-left: 4px solid var(--accent);
+}
+
+/* 滚动条平滑精致美化 */
+::-webkit-scrollbar {
+    width: 7px;
+    height: 7px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--line-strong);
+    border-radius: var(--radius-pill);
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--muted);
+}
+
+/* 快捷复选框 hover 标签体验 */
+.delete-source-control {
+    margin-top: 2px;
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    background: var(--surface-soft);
+    border: 1px dashed var(--line);
+    cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.delete-source-control:hover {
+    background: var(--accent-soft);
+    border-color: var(--accent);
 }

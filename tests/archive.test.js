@@ -67,6 +67,12 @@ test("classifyArchive handles additional single formats", () => {
   assert.equal(classifyArchive("/data/file.arj").format, "arj");
   assert.equal(classifyArchive("/data/file.lzh").format, "lzh");
   assert.equal(classifyArchive("/data/file.lha").format, "lzh");
+  assert.equal(classifyArchive("/data/comic.cbz").format, "zip");
+  assert.equal(classifyArchive("/data/comic.cbr").format, "rar");
+  assert.equal(classifyArchive("/data/book.epub").format, "zip");
+  assert.equal(classifyArchive("/data/win.wim").format, "wim");
+  assert.equal(classifyArchive("/data/win.swm").format, "wim");
+  assert.equal(classifyArchive("/data/mac.dmg").format, "dmg");
 });
 
 test("collectVolumeNames finds split volumes", () => {

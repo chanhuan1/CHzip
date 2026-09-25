@@ -260,3 +260,41 @@ test("setJobProgress falls back when there is no file name at all", () => {
 
   assert.equal(state.elements.currentFile.textContent, "正在等待任务状态...");
 });
+
+test("finishPolling disables cancelBtn and notifies availability change", () => {
+  const { finishPolling } = globalThis.CHzipUiJobs;
+  const cancelBtn = { disabled: false };
+  let availabilityCalled = false;
+  const state = {
+    running: true,
+    jobId: "some-job",
+    pollTimer: null,
+    elements: { cancelBtn },
+    onAvailabilityChange: () => { availabilityCalled = true; },
+  };
+
+  finishPolling(state);
+  assert.equal(state.running, false);
+  assert.equal(cancelBtn.disabled, true, "任务结束后 cancelBtn 必须置为禁用");
+  assert.equal(availabilityCalled, true, "应触发 onAvailabilityChange");
+});
+
+test("setJobProgress works with window.CHzipUiTree present without ReferenceError", () => {
+  const originalWindow = globalThis.window;
+  let highlighted = null;
+  globalThis.window = {
+    CHzipUiTree: {
+      highlightExtractingFile: (file) => { highlighted = file; },
+    },
+  };
+  try {
+    const state = { elements: createProgressStub() };
+    setJobProgress(0, "正在创建任务", "正在校验设置...", state);
+    assert.equal(highlighted, null);
+
+    setJobProgress(50, "正在解压", "a.txt", state, { status: "running" });
+    assert.equal(highlighted, "a.txt");
+  } finally {
+    globalThis.window = originalWindow;
+  }
+});

@@ -81,7 +81,7 @@ function normalizeApiName(query, body) {
 
 // 只有用户主动动作的接口才值得顺带做过期清理；status/preview/info 这些
 // 会被高频轮询或反复调用的接口不触发（清理本身要全量扫 jobs 目录）。
-const CLEANUP_APIS = new Set(["extract", "jobs", "clear-history", "resume", "test"]);
+const CLEANUP_APIS = new Set(["extract", "jobs", "clear-history", "test"]);
 
 // 高频轮询接口的成功路径不写诊断日志：status 每秒一次、jobs 弹窗 3s 一次，
 // 成功回包毫无信息量，但每次 appendFileSync + 轮转检查是请求里最贵的部分。
@@ -152,17 +152,8 @@ async function routeRequest(api, request, services) {
       password: request.body.password || "",
       codePage: request.body.codePage || "auto",
       conflictPolicy: request.body.conflictPolicy || "rename",
+      deleteSource: Boolean(request.body.deleteSource),
       destinationRoot: request.body.destinationRoot || "",
-      selectedPaths: request.body.selectedPaths,
-      requestId,
-    });
-  } else if (api === "resume") {
-    // F8 续跑：密码必须由用户当次重新输入（旧密码文件已被销毁），
-    // selectedPaths 可选——不传则整包续跑（skip 跳过已完成文件）。
-    data = await services.resume({
-      jobId: request.body.jobId,
-      password: request.body.password || "",
-      codePage: request.body.codePage || "auto",
       selectedPaths: request.body.selectedPaths,
       requestId,
     });
@@ -282,7 +273,6 @@ async function main() {
       api === "extract"
       || api === "status"
       || api === "jobs"
-      || api === "resume"
       || api === "test"
     ) {
       services.spawnQueued();

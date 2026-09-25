@@ -699,3 +699,110 @@ test("search rows also render ratio cell and lock badge", () => {
   assert.ok(tip.includes("20 B"));
 });
 
+test("highlightExtractingFile adds is-extracting to the matching row and clears previous", () => {
+  const { renderTree, highlightExtractingFile } = globalThis.CHzipUiTree;
+  const state = createState({
+    entries: ENTRIES,
+    tree: buildTree(ENTRIES),
+    allFilePaths: ENTRIES.map((entry) => entry.path),
+    expandedPaths: new Set(["dir1"]),
+  });
+
+  renderTree(state, globalThis.CHzipTree);
+
+  const rows = rowsOf(fileTree);
+  const aRow = rows.find((r) => r.dataset.path === "dir1/a.txt");
+  const bRow = rows.find((r) => r.dataset.path === "dir1/b.txt");
+
+  highlightExtractingFile("dir1/a.txt", state);
+  assert.equal(aRow.classList.contains("is-extracting"), true);
+  assert.equal(bRow.classList.contains("is-extracting"), false);
+
+  highlightExtractingFile("dir1/b.txt", state);
+  assert.equal(aRow.classList.contains("is-extracting"), false);
+  assert.equal(bRow.classList.contains("is-extracting"), true);
+
+  // 纯百分比或空串时不闪退高亮
+  highlightExtractingFile("", state);
+  assert.equal(bRow.classList.contains("is-extracting"), true);
+
+  highlightExtractingFile(null, state);
+  assert.equal(bRow.classList.contains("is-extracting"), false);
+});
+
+test("highlightExtractingFile highlights ancestor directory when target file is collapsed", () => {
+  const { renderTree, highlightExtractingFile } = globalThis.CHzipUiTree;
+  // dir1 不在 expandedPaths 中，处于折叠态
+  const state = createState({
+    entries: ENTRIES,
+    tree: buildTree(ENTRIES),
+    allFilePaths: ENTRIES.map((entry) => entry.path),
+    expandedPaths: new Set(),
+  });
+
+  renderTree(state, globalThis.CHzipTree);
+
+  const rows = rowsOf(fileTree);
+  const dir1Row = rows.find((r) => r.dataset.path === "dir1");
+  assert.ok(dir1Row, "dir1 目录行应在可见节点中");
+
+  // 解压处于折叠目录内的文件
+  highlightExtractingFile("dir1/a.txt", state);
+  assert.equal(dir1Row.classList.contains("is-extracting-dir"), true, "折叠目录应亮起父级目录高亮");
+
+  highlightExtractingFile(null, state);
+  assert.equal(dir1Row.classList.contains("is-extracting-dir"), false);
+});
+
+// 真机回归：7-Zip -bb1 的进度 currentFile 带动作前缀（"- "+ 已存在/跳过、
+// "+" 新增）。不剥前缀 findMatchingRow 永远匹配不上，树高亮不亮。
+test("highlightExtractingFile strips the 7-Zip action marker prefix", () => {
+  const { renderTree, highlightExtractingFile } = globalThis.CHzipUiTree;
+  const state = createState({
+    entries: ENTRIES,
+    tree: buildTree(ENTRIES),
+    allFilePaths: ENTRIES.map((entry) => entry.path),
+    expandedPaths: new Set(["dir1"]),
+  });
+  renderTree(state, globalThis.CHzipTree);
+  const rows = rowsOf(fileTree);
+  const aRow = rows.find((r) => r.dataset.path === "dir1/a.txt");
+
+  highlightExtractingFile("- dir1/a.txt", state);
+  assert.equal(aRow.classList.contains("is-extracting"), true, "应剥掉 '- ' 前缀");
+
+  highlightExtractingFile("+ dir1/b.txt", state);
+  const bRow = rows.find((r) => r.dataset.path === "dir1/b.txt");
+  assert.equal(bRow.classList.contains("is-extracting"), true, "应剥掉 '+ ' 前缀");
+  assert.equal(aRow.classList.contains("is-extracting"), false);
+});
+
+// 真机回归：renderTree 重建 DOM 后（展开/折叠/搜索切换），若解压正在进行，
+// 已亮行会随旧 DOM 消失。renderTree 末尾按记住的当前文件补挂高亮。
+test("renderTree re-applies the in-flight highlight after a rebuild", async () => {
+  const { renderTree, highlightExtractingFile } = globalThis.CHzipUiTree;
+  const state = createState({
+    entries: ENTRIES,
+    tree: buildTree(ENTRIES),
+    allFilePaths: ENTRIES.map((entry) => entry.path),
+    expandedPaths: new Set(["dir1"]),
+  });
+  renderTree(state, globalThis.CHzipTree);
+  highlightExtractingFile("dir1/a.txt", state);
+
+  // 模拟解压中用户又展开了一个目录 → 触发 renderTree 重建（replaceChildren）。
+  state.expandedPaths.add("dir2");
+  renderTree(state, globalThis.CHzipTree);
+
+  // 重挂钩子走 scheduleFrame（requestAnimationFrame 或 setTimeout 兜底），
+  // 等一拍让回调跑完再断言。
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  const rows = rowsOf(fileTree);
+  const aRow = rows.find((r) => r.dataset.path === "dir1/a.txt");
+  assert.ok(aRow, "重建后 dir1/a.txt 行应存在");
+  assert.equal(
+    aRow.classList.contains("is-extracting"),
+    true,
+    "重建后应恢复正在解压的高亮",
+  );
+});

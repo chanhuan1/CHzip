@@ -115,6 +115,29 @@
         els.closeMissingPartsBtn?.focus?.();
     }
 
+    function openSolidConfirmDialog(state, targetPath, onProceed) {
+        const els = state.elements;
+        if (!els.solidConfirmDialog) {
+            if (typeof onProceed === "function") {
+                onProceed();
+            }
+            return;
+        }
+        state.pendingSolidTargetPath = targetPath;
+        state.onSolidConfirmProceed = onProceed;
+        els.solidConfirmDialog.hidden = false;
+        els.proceedSolidConfirmBtn?.focus?.();
+    }
+
+    function closeSolidConfirmDialog(state) {
+        const els = state.elements;
+        if (els.solidConfirmDialog) {
+            els.solidConfirmDialog.hidden = true;
+        }
+        state.pendingSolidTargetPath = null;
+        state.onSolidConfirmProceed = null;
+    }
+
     function isPermissionError(error) {
         return error?.code === "SOURCE_FILE_DENIED"
             || error?.code === "SOURCE_PARENT_DENIED";
@@ -533,6 +556,8 @@
         openDirectoryDialog,
         openMissingPartsDialog,
         openPermissionDialog,
+        openSolidConfirmDialog,
+        closeSolidConfirmDialog,
         recordDiagnosticError,
         refreshDirectoryRoots,
         renderDirectoryTree,

@@ -76,7 +76,7 @@ test("C14 the README badge and install command match the manifest version", () =
   );
   assert.match(
     readme,
-    new RegExp(`CHzip_${v}_search-fixed_<架构>\\.fpk`),
+    new RegExp(`CHzip_${v}_<架构>\\.fpk`),
     "README 安装命令里的包名版本应与 manifest 一致",
   );
 });
@@ -140,11 +140,11 @@ test("C14 audit-fpk derives the version instead of hardcoding it", () => {
 
 test("C14 packageFileName follows the fnOS naming scheme", () => {
   assert.equal(
-    packageFileName("9.9", "search-fixed", "x86"),
-    "CHzip_9.9_search-fixed_x86_64.fpk",
+    packageFileName("9.9", "", "x86"),
+    "CHzip_9.9_x86_64.fpk",
   );
   assert.equal(
-    packageFileName("9.9", "search-fixed", "arm"),
-    "CHzip_9.9_search-fixed_arm64.fpk",
+    packageFileName("9.9", "", "arm"),
+    "CHzip_9.9_arm64.fpk",
   );
 });

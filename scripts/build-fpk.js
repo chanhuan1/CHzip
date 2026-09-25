@@ -24,7 +24,7 @@ const PLATFORM_CONFIG = {
     suffix: "arm64",
   },
 };
-const BUILD_VARIANTS = ["search-fixed"];
+const BUILD_VARIANTS = [""];
 
 function skipUnwanted(source) {
   const base = path.basename(source);
@@ -80,7 +80,7 @@ function prepareStage({
   rootDir,
   buildRoot,
   platform,
-  variant = "search-fixed",
+  variant = "",
 }) {
   const config = PLATFORM_CONFIG[platform];
   if (!config) {
@@ -90,7 +90,7 @@ function prepareStage({
     throw new Error(`Unsupported variant: ${variant}`);
   }
 
-  const stageDir = path.join(buildRoot, `CHzip-${variant}-${platform}`);
+  const stageDir = path.join(buildRoot, variant ? `CHzip-${variant}-${platform}` : `CHzip-${platform}`);
   assertInside(buildRoot, stageDir);
   fs.rmSync(stageDir, { recursive: true, force: true });
   fs.mkdirSync(stageDir, { recursive: true });
@@ -134,7 +134,7 @@ function packageFileName(version, variant, platform) {
   if (!BUILD_VARIANTS.includes(variant)) {
     throw new Error(`Unsupported variant: ${variant}`);
   }
-  return `CHzip_${version}_${variant}_${config.suffix}.fpk`;
+  return variant ? `CHzip_${version}_${variant}_${config.suffix}.fpk` : `CHzip_${version}_${config.suffix}.fpk`;
 }
 
 function buildPlatform({
@@ -142,7 +142,7 @@ function buildPlatform({
   buildRoot,
   distDir,
   platform,
-  variant = "search-fixed",
+  variant = "",
   fnpackPath,
 }) {
   const stageDir = prepareStage({
@@ -181,7 +181,7 @@ function buildPlatform({
 function parseArguments(argv) {
   const options = {
     platforms: ["x86", "arm"],
-    variants: ["search-fixed"],
+    variants: [""],
     stageOnly: false,
     fnpackPath: process.env.FNPACK_PATH || "fnpack",
   };

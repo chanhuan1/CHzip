@@ -190,12 +190,33 @@
             ? ""
             : currentFile;
         els.currentFile.textContent = fileText || "正在等待任务状态...";
+        const running = Boolean(job)
+            && !["success", "failed", "cancelled"].includes(job.status);
+        // 调试：?debugHighlight=1 时在控制台打印高亮链路每一步，便于真机排查
+        // 「进度推进了但树不亮」到底卡在哪一环（仅开发用，不影响生产逻辑）。
+        const DEBUG_HL = typeof window !== "undefined"
+            && /[?&]debugHighlight=1/.test(window.location?.search || "");
+        if (DEBUG_HL && job && job.status === "running") {
+            // eslint-disable-next-line no-console
+            console.log("[CHzip-HL]", {
+                phase: job.phase,
+                status: job.status,
+                running,
+                rawCurrentFile: job.currentFile,
+                fileText,
+            });
+        }
+        if (typeof window !== "undefined" && window.CHzipUiTree?.highlightExtractingFile) {
+            if (running) {
+                window.CHzipUiTree.highlightExtractingFile(fileText || undefined, state);
+            } else {
+                window.CHzipUiTree.highlightExtractingFile(null, state);
+            }
+        }
         if (els.progressEta) {
             els.progressEta.hidden = !eta;
             els.progressEta.textContent = eta ? `剩余约 ${eta}` : "";
         }
-        const running = Boolean(job)
-            && !["success", "failed", "cancelled"].includes(job.status);
         const ok = job?.status === "success";
         const bad = job?.status === "failed" || job?.status === "cancelled";
         const fill = els.progressFill;
@@ -252,6 +273,12 @@
         }
         state.running = false;
         state.jobId = "";
+        if (state.elements?.cancelBtn) {
+            state.elements.cancelBtn.disabled = true;
+        }
+        if (typeof state.onAvailabilityChange === "function") {
+            state.onAvailabilityChange();
+        }
     }
 
     async function startExtract(state, api) {
@@ -260,6 +287,16 @@
             return;
         }
         state.running = true;
+        state.jobId = "";
+        const abortController = new AbortController();
+        state.extractAbortController = abortController;
+
+        if (els.cancelBtn) {
+            els.cancelBtn.disabled = false;
+        }
+        if (typeof state.onAvailabilityChange === "function") {
+            state.onAvailabilityChange();
+        }
         setJobProgress(0, "正在创建任务", "正在校验设置...", state);
         setNotice("解压任务正在启动，请保持页面打开。", "", state);
         try {
@@ -272,8 +309,12 @@
                 password: els.passwordInput.value,
                 codePage: els.codePageSelect.value,
                 conflictPolicy: els.conflictPolicySelect.value,
+                deleteSource: Boolean(els.deleteSourceInput?.checked),
                 destinationRoot: state.selectedDirectory,
                 selectedPaths,
+            }, {
+                timeoutMs: 30000,
+                signal: abortController.signal,
             });
             state.jobId = result.jobId;
             state.etaTracker = null;
@@ -291,7 +332,10 @@
                 state.pollTimer.start();
             }
         } catch (error) {
-            state.running = false;
+            if (error?.name === "AbortError" || state.extractAbortController?.signal?.aborted) {
+                return;
+            }
+            finishPolling(state);
             setJobProgress(0, "启动失败", error.message, state);
             setNotice(error.message, "error", state);
             if (!handlePermissionError(error, state)) {
@@ -330,9 +374,10 @@
                 } else {
                     // F2：拍平过就给用户更明确的提示。
                     const successLabel = job.flattened ? "已拍平到" : "已解压到";
+                    const extraNote = [job.flattenNote, job.deleteSourceNote].filter(Boolean).join("；");
                     setJobProgress(100, "解压完成", `${successLabel}：${job.outputDir}`, state, job);
                     setNotice(
-                        job.flattenNote || "解压任务已完成。",
+                        extraNote || "解压任务已完成。",
                         "success",
                         state,
                     );
@@ -355,10 +400,10 @@
                 finishPolling(state);
                 const stopDetail = job.kind === "test"
                     ? "体检任务已停止。"
-                    : "未完成的任务目录已清理。";
+                    : (job.outputDir ? `已停止，已解压的文件已保留至：${job.outputDir}` : "解压任务已停止。");
                 setJobProgress(job.progress, "已停止", stopDetail, state, job);
                 setNotice(
-                    job.kind === "test" ? "体检任务已停止。" : "解压任务已停止。",
+                    job.kind === "test" ? "体检任务已停止。" : "解压任务已停止，已解压的文件已保留。",
                     "",
                     state,
                 );
@@ -394,6 +439,16 @@
             return;
         }
         state.running = true;
+        state.jobId = "";
+        const abortController = new AbortController();
+        state.extractAbortController = abortController;
+
+        if (els.cancelBtn) {
+            els.cancelBtn.disabled = false;
+        }
+        if (typeof state.onAvailabilityChange === "function") {
+            state.onAvailabilityChange();
+        }
         setJobProgress(0, "正在创建体检任务", "正在校验设置...", state);
         setNotice("完整性体检任务正在启动，请保持页面打开。", "", state);
         try {
@@ -401,6 +456,9 @@
                 path: state.filePath,
                 password: els.passwordInput.value,
                 codePage: els.codePageSelect.value,
+            }, {
+                timeoutMs: 30000,
+                signal: abortController.signal,
             });
             state.jobId = result.jobId;
             state.etaTracker = null;
@@ -417,7 +475,10 @@
                 state.pollTimer.start();
             }
         } catch (error) {
-            state.running = false;
+            if (error?.name === "AbortError" || state.extractAbortController?.signal?.aborted) {
+                return;
+            }
+            finishPolling(state);
             setJobProgress(0, "启动失败", error.message, state);
             setNotice(error.message, "error", state);
             if (!handlePermissionError(error, state)) {
@@ -428,10 +489,23 @@
 
     async function cancelExtract(state, api) {
         const els = state.elements;
-        if (!state.jobId || !state.running) {
+        if (!state.running) {
             return;
         }
-        els.cancelBtn.disabled = true;
+        // 若任务尚未完成创建（正在请求 extract 接口），直接中断在途网络请求
+        if (!state.jobId) {
+            if (state.extractAbortController) {
+                state.extractAbortController.abort();
+                state.extractAbortController = null;
+            }
+            finishPolling(state);
+            setJobProgress(0, "已取消", "任务已在创建阶段终止。", state);
+            setNotice("任务已取消。", "", state);
+            return;
+        }
+        if (els.cancelBtn) {
+            els.cancelBtn.disabled = true;
+        }
         setJobProgress(
             Number.parseInt(els.progressText.textContent, 10) || 0,
             "正在停止",
@@ -445,7 +519,9 @@
             setNotice(`停止任务失败：${error.message}`, "error", state);
             recordDiagnosticError(error, state);
         } finally {
-            els.cancelBtn.disabled = false;
+            if (state.running && els.cancelBtn) {
+                els.cancelBtn.disabled = false;
+            }
         }
     }
 
@@ -499,7 +575,7 @@
         // F2：终态的 flattened/flattenNote/outputDir 也进签名，保证未来
         // 「同一终态下 flatten 字段变化」也能触发重渲（当前在 active→history
         // 迁移时整体签名已变，这里是防御性补齐）。
-        // F8：partialSuccess 进签名，让「同一 failed 任务从未保留 → 已保留」
+        // partialSuccess 进签名，让「同一 failed 任务从未保留 → 已保留」
         // 也能触发重渲。
         const historyPart = history.map((job) => [
             job.id,
@@ -768,7 +844,8 @@
                     "",
                 );
             } else {
-                appendTaskMeta(main, finished, timeTitle, "已停止", "");
+                const stopMsg = job.outputDir ? `已停止（已保留输出）` : "已停止";
+                appendTaskMeta(main, finished, timeTitle, stopMsg, job.outputDir || "");
             }
         }
 
@@ -787,23 +864,6 @@
                 cancelTaskCenter(state, api, job.id);
             });
             actions.append(stop);
-        } else if (job.status === "failed" && job.partialSuccess) {
-            // F8：失败但保留了部分成果 → 给「续跑」入口。
-            // 点击即禁用，防弱网连发；resumeTaskCenter 内部 finally 恢复。
-            const resumeBtn = document.createElement("button");
-            resumeBtn.type = "button";
-            resumeBtn.className = "task-resume-btn";
-            resumeBtn.textContent = "续跑";
-            resumeBtn.title = "保留已解压文件，从中断处继续（已存在文件跳过）";
-            resumeBtn.addEventListener("click", () => {
-                resumeBtn.disabled = true;
-                resumeBtn.textContent = "续跑中…";
-                resumeTaskCenter(state, api, job).finally(() => {
-                    resumeBtn.disabled = false;
-                    resumeBtn.textContent = "续跑";
-                });
-            });
-            actions.append(resumeBtn);
         }
         row.append(main, actions);
         list.append(row);
@@ -862,34 +922,6 @@
             await api.postApi("cancel", { jobId });
         } catch (error) {
             // 下一次轮询会反映真实状态
-        }
-        await pollTaskCenter(state, api);
-    }
-
-    // F8 续跑：复用旧 outputDir + conflictPolicy=skip。
-    // 密码必须由用户当次重新输入（旧密码文件已被 worker 启动时物理销毁，
-    // 服务端无从恢复）；未加密的包直接留空确定即可。
-    async function resumeTaskCenter(state, api, job) {
-        if (!job || !job.id) {
-            return;
-        }
-        let password = "";
-        if (typeof window !== "undefined" && typeof window.prompt === "function") {
-            password = window.prompt(
-                `续跑「${job.archiveName || "压缩包"}」：若该包加密，请重新输入密码；未加密直接确定。`,
-                "",
-            ) || "";
-        }
-        try {
-            await api.postApi("resume", {
-                jobId: job.id,
-                password,
-                codePage: state?.elements?.codePageSelect?.value || "auto",
-            });
-            setNotice("续跑任务已创建，已存在的文件将被跳过。", "success", state);
-        } catch (error) {
-            setNotice(`续跑失败：${error.message}`, "error", state);
-            recordDiagnosticError(error, state);
         }
         await pollTaskCenter(state, api);
     }
@@ -1068,6 +1100,7 @@
         computeEta,
         createPoller,
         ensureMiniPoll,
+        finishPolling,
         formatTaskDateTime,
         openHistory,
         openTaskCenter,
@@ -1077,7 +1110,6 @@
         pollTaskMini,
         resetClearHistoryConfirm,
         resumePollers,
-        resumeTaskCenter,
         setJobProgress,
         startExtract,
         startTaskWatch,
