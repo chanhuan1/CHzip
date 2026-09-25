@@ -55,3 +55,9 @@ test("every app.js uiJobs.* call resolves to an exported function", () => {
 test("every app.js uiPreview.* call resolves to an exported function", () => {
   assertExportedCallsResolve("app.js", "uiPreview", globalThis.CHzipPreview);
 });
+
+require("../app/www/js/ui-tree");
+
+test("every app.js uiTree.* call resolves to an exported function", () => {
+  assertExportedCallsResolve("app.js", "uiTree", globalThis.CHzipUiTree);
+});

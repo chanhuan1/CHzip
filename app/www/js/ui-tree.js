@@ -19,6 +19,8 @@
     // 用内联 SVG 代替原先 CSS 画的圆角方框：文件夹与文件都是实心双色调，
     // 主体用竖向渐变（渐变为 index.html 中的 #chzipFolderBody / #chzipFileBody），
     // 顶部平涂部分分别为页签与折角。
+    // 多类型文件图标体系：根据扩展名语义化分类（代码、图片、音频、视频、压缩包、文档、表格、安装包等），
+    // 并支持展开文件夹 (folderOpen) 状态反馈。
     const TREE_ICONS = {
         folder: '<svg viewBox="0 0 16 16" focusable="false" aria-hidden="true">'
             + '<path class="tree-icon-tab" d="M2.5 6V2.42A1.2 1.2 0 0 1 3.7 1.22'
@@ -27,6 +29,12 @@
             + 'V13.18A1.6 1.6 0 0 1 13.4 14.78H2.6A1.6 1.6 0 0 1 1 13.18'
             + 'V6.2A1.6 1.6 0 0 1 2.6 4.6Z"/>'
             + "</svg>",
+        folderOpen: '<svg viewBox="0 0 16 16" focusable="false" aria-hidden="true">'
+            + '<path class="tree-icon-tab" d="M2.5 6V2.42A1.2 1.2 0 0 1 3.7 1.22'
+            + 'H6.8A1.2 1.2 0 0 1 7.9 2.42V4.8Z"/>'
+            + '<path class="tree-icon-folder-body" opacity="0.6" d="M2 5h12v7H2z"/>'
+            + '<path class="tree-icon-folder-body" d="M1.2 14.4l2-8.2c.2-.7.8-1.2 1.5-1.2h10.4c.8 0 1.3.8 1.1 1.5l-2 8.2c-.2.7-.8 1.2-1.5 1.2H2.7c-.8 0-1.4-.7-1.1-1.5z"/>'
+            + "</svg>",
         file: '<svg viewBox="0 0 16 16" focusable="false" aria-hidden="true">'
             + '<path class="tree-icon-file-body" d="M3.9 1.25H9.5L13.5 5.25V13.35'
             + 'A1.4 1.4 0 0 1 12.1 14.75H3.9A1.4 1.4 0 0 1 2.5 13.35'
@@ -34,7 +42,70 @@
             + '<path class="tree-icon-fold" d="M9.5 1.25L13.5 5.25H10.7'
             + 'A1.2 1.2 0 0 1 9.5 4.05Z"/>'
             + "</svg>",
+        code: '<svg viewBox="0 0 16 16" focusable="false" aria-hidden="true">'
+            + '<rect class="icon-shape-code" x="2" y="2" width="12" height="12" rx="2.5"/>'
+            + '<path d="M6 5.5L3.5 8 6 10.5M10 5.5l2.5 2.5-2.5 2.5M8.8 4.5l-1.6 7" stroke="#fff" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>'
+            + "</svg>",
+        image: '<svg viewBox="0 0 16 16" focusable="false" aria-hidden="true">'
+            + '<rect class="icon-shape-image" x="2" y="2" width="12" height="12" rx="2.5"/>'
+            + '<circle cx="5.5" cy="5.5" r="1.2" fill="#fff"/>'
+            + '<path d="M3 12.2l3.2-3.8a1 1 0 0 1 1.5 0l1.1 1.3 1.8-2.2a1 1 0 0 1 1.5 0L13.5 9v3.2a1 1 0 0 1-1 1h-8.5a1 1 0 0 1-1-1z" fill="#fff" opacity="0.9"/>'
+            + "</svg>",
+        video: '<svg viewBox="0 0 16 16" focusable="false" aria-hidden="true">'
+            + '<rect class="icon-shape-video" x="2" y="2" width="12" height="12" rx="2.5"/>'
+            + '<path d="M6.5 5.5v5l4-2.5-4-2.5z" fill="#fff"/>'
+            + "</svg>",
+        audio: '<svg viewBox="0 0 16 16" focusable="false" aria-hidden="true">'
+            + '<rect class="icon-shape-audio" x="2" y="2" width="12" height="12" rx="2.5"/>'
+            + '<path d="M10 4.5v5a1.8 1.8 0 1 1-1.2-1.7V5.8L6.5 6.4v4.3A1.8 1.8 0 1 1 5.3 9V5.2a.8.8 0 0 1 .6-.8l3.5-.8a.8.8 0 0 1 .6.9z" fill="#fff"/>'
+            + "</svg>",
+        archive: '<svg viewBox="0 0 16 16" focusable="false" aria-hidden="true">'
+            + '<rect class="icon-shape-archive" x="2" y="2" width="12" height="12" rx="2.5"/>'
+            + '<path d="M7 4h2v1H7V4zm0 2h2v1H7V6zm0 2h2v1H7V8zm-1 3.5a1.5 1.5 0 0 1 3 0v1a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1-.5-.5v-1z" fill="#fff"/>'
+            + "</svg>",
+        doc: '<svg viewBox="0 0 16 16" focusable="false" aria-hidden="true">'
+            + '<path class="icon-shape-doc" d="M3.5 1.5h6l3.5 3.5v9.5a1 1 0 0 1-1 1h-8.5a1 1 0 0 1-1-1V2.5a1 1 0 0 1 1-1z"/>'
+            + '<path d="M9.5 1.5v3.5h3.5" fill="none" stroke="#fff" stroke-width="1.2" opacity="0.8"/>'
+            + '<path d="M5.5 7h5M5.5 9.5h5M5.5 12h3" stroke="#fff" stroke-width="1.3" stroke-linecap="round" fill="none"/>'
+            + "</svg>",
+        pdf: '<svg viewBox="0 0 16 16" focusable="false" aria-hidden="true">'
+            + '<rect class="icon-shape-pdf" x="2" y="2" width="12" height="12" rx="2.5"/>'
+            + '<path d="M4.5 9.5V6.8h1.8c.8 0 1.2.4 1.2 1.1s-.4 1.1-1.2 1.1H5.4v1.5H4.5zm.9-2.1v1.1h.8c.4 0 .6-.2.6-.55s-.2-.55-.6-.55h-.8zM8.2 9.5V6.8h1.5c1.2 0 1.8.8 1.8 1.8s-.6 1.9-1.8 1.9H8.2zm.9-2.1v1.8h.6c.7 0 1-.4 1-1s-.3-.8-1-.8h-.6z" fill="#fff"/>'
+            + "</svg>",
     };
+
+    function getFileCategory(filename) {
+        const lastDot = String(filename || "").lastIndexOf(".");
+        if (lastDot < 0) {
+            return "file";
+        }
+        const ext = filename.slice(lastDot).toLowerCase();
+        if ([".js", ".ts", ".jsx", ".tsx", ".mjs", ".cjs", ".json", ".html", ".htm", ".css", ".scss", ".less",
+            ".py", ".java", ".c", ".h", ".cpp", ".hpp", ".cc", ".cs", ".go", ".rs", ".php", ".rb", ".sh",
+            ".bash", ".zsh", ".sql", ".xml", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".conf", ".lua", ".vim",
+            ".dockerfile", ".makefile", ".cmake"].includes(ext)) {
+            return "code";
+        }
+        if ([".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".svg", ".ico", ".tiff", ".tif"].includes(ext)) {
+            return "image";
+        }
+        if ([".mp4", ".mkv", ".avi", ".mov", ".flv", ".wmv", ".webm", ".m4v", ".rmvb"].includes(ext)) {
+            return "video";
+        }
+        if ([".mp3", ".flac", ".wav", ".aac", ".ogg", ".m4a", ".wma", ".ape"].includes(ext)) {
+            return "audio";
+        }
+        if ([".zip", ".7z", ".rar", ".tar", ".gz", ".bz2", ".xz", ".zst", ".cab", ".iso", ".dmg", ".wim", ".001", ".z01", ".r00"].includes(ext)) {
+            return "archive";
+        }
+        if (ext === ".pdf") {
+            return "pdf";
+        }
+        if ([".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".txt", ".md", ".markdown", ".rtf", ".csv", ".tsv"].includes(ext)) {
+            return "doc";
+        }
+        return "file";
+    }
 
     // 预览按钮的“眼睛”图标：不用 emoji（各平台字形/配色不一致，Linux 上
     // 还可能落到替代字体），改为矢量图标，与树图标同一套 currentColor 方案。
@@ -114,11 +185,18 @@
     let activeCounts = new Map();
     const delegatedContainers = new WeakSet();
 
-    function createTreeIcon(isDirectory) {
+    function createTreeIcon(isDirectory, filename = "", isOpen = false) {
         const icon = document.createElement("span");
-        icon.className = `tree-icon ${isDirectory ? "folder" : "file"}`;
+        if (isDirectory) {
+            icon.className = "tree-icon folder";
+            icon.setAttribute("aria-hidden", "true");
+            icon.innerHTML = isOpen ? TREE_ICONS.folderOpen : TREE_ICONS.folder;
+            return icon;
+        }
+        const category = getFileCategory(filename);
+        icon.className = `tree-icon file file-${category}`;
         icon.setAttribute("aria-hidden", "true");
-        icon.innerHTML = isDirectory ? TREE_ICONS.folder : TREE_ICONS.file;
+        icon.innerHTML = TREE_ICONS[category] || TREE_ICONS.file;
         return icon;
     }
 
@@ -145,7 +223,7 @@
         checkbox.setAttribute("aria-label", `选择 ${entry.path}`);
         checkboxIndex.set(entry.path, checkbox);
 
-        const icon = createTreeIcon(false);
+        const icon = createTreeIcon(false, entry.path);
 
         // 加密锁标：始终占位（非加密留空），保证 grid 列对齐；
         // 空元素通过 CSS .tree-lock:empty { display:none } 折叠，
@@ -205,7 +283,9 @@
         checkbox.setAttribute("aria-label", `选择 ${node.path}`);
         checkboxIndex.set(node.path, checkbox);
 
-        const icon = createTreeIcon(node.type === "directory");
+        const isDir = node.type === "directory";
+        const isExpanded = isDir && state.expandedPaths.has(node.path);
+        const icon = createTreeIcon(isDir, node.name, isExpanded);
 
         // 加密锁标：仅文件可能加密；目录行也占位（空），保证 grid 列对齐。
         const lock = document.createElement("span");
@@ -388,18 +468,55 @@
                 return;
             }
             const togglePath = rowPathFromEvent(event, ".tree-toggle");
-            if (togglePath === null) {
+            if (togglePath !== null) {
+                const node = nodeIndex.get(togglePath);
+                if (!node || node.type !== "directory"
+                    || !(node.children && node.children.length)) {
+                    return;
+                }
+                if (state.expandedPaths.has(togglePath)) {
+                    state.expandedPaths.delete(togglePath);
+                } else {
+                    state.expandedPaths.add(togglePath);
+                }
+                renderTree(state, treeApi);
                 return;
             }
-            const node = nodeIndex.get(togglePath);
+
+            // 单击行：高亮为当前选定行（.is-active-row）
+            const row = event.target?.closest?.(".tree-row");
+            if (row && (!event.target.classList || !event.target.classList.contains("tree-checkbox"))) {
+                const prev = container.querySelector?.(".tree-row.is-active-row");
+                if (prev && prev !== row) {
+                    prev.classList?.remove("is-active-row");
+                }
+                row.classList?.add("is-active-row");
+            }
+        });
+
+        // 双击目录行：快速展开/收起目录
+        container.addEventListener("dblclick", (event) => {
+            const state = activeState;
+            const treeApi = activeTreeApi;
+            if (!state || !treeApi) {
+                return;
+            }
+            if (event.target?.closest?.(".tree-checkbox, .tree-preview-btn, .tree-toggle")) {
+                return;
+            }
+            const path = rowPathFromEvent(event, ".tree-row");
+            if (path === null) {
+                return;
+            }
+            const node = nodeIndex.get(path);
             if (!node || node.type !== "directory"
                 || !(node.children && node.children.length)) {
                 return;
             }
-            if (state.expandedPaths.has(togglePath)) {
-                state.expandedPaths.delete(togglePath);
+            if (state.expandedPaths.has(path)) {
+                state.expandedPaths.delete(path);
             } else {
-                state.expandedPaths.add(togglePath);
+                state.expandedPaths.add(path);
             }
             renderTree(state, treeApi);
         });
@@ -547,6 +664,35 @@
         if (els.treeSearchInput) {
             els.treeSearchInput.disabled = !enabled;
         }
+        if (els.expandAllBtn) {
+            els.expandAllBtn.disabled = !enabled;
+        }
+        if (els.collapseAllBtn) {
+            els.collapseAllBtn.disabled = !enabled;
+        }
+    }
+
+    function expandAll(state, treeApi) {
+        if (!state.previewReady || state.previewLimited || !state.tree) {
+            return;
+        }
+        const queue = [...state.tree];
+        while (queue.length) {
+            const node = queue.shift();
+            if (node.type === "directory" && node.children && node.children.length) {
+                state.expandedPaths.add(node.path);
+                queue.push(...node.children);
+            }
+        }
+        renderTree(state, treeApi);
+    }
+
+    function collapseAll(state, treeApi) {
+        if (!state.previewReady || state.previewLimited) {
+            return;
+        }
+        state.expandedPaths.clear();
+        renderTree(state, treeApi);
     }
 
     // 实时高亮正在解压的文件节点（支持递归匹配、折叠目录祖先提示与平滑保持）
@@ -695,6 +841,8 @@
     }
 
     root.CHzipUiTree = {
+        collapseAll,
+        expandAll,
         formatSize,
         highlightExtractingFile,
         renderTree,

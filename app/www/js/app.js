@@ -786,6 +786,8 @@
     }
     els.viewListBtn.addEventListener("click", () => setFileViewMode("list"));
     els.viewThumbsBtn.addEventListener("click", () => setFileViewMode("thumbs"));
+    els.expandAllBtn?.addEventListener("click", () => uiTree.expandAll(state, treeApi));
+    els.collapseAllBtn?.addEventListener("click", () => uiTree.collapseAll(state, treeApi));
 
     els.refreshPreviewBtn.addEventListener("click", loadPreview);
     els.codePageSelect.addEventListener("change", loadPreview);

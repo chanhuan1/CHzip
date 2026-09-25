@@ -6,7 +6,7 @@
 
 面向 **fnOS（飞牛私有云）文件管理器右键场景**的专业压缩包处理工具 —— 解压 · 分卷 · 选择性解压 · 文件预览 · 密码管理，一键完成。
 
-[![版本](https://img.shields.io/badge/版本-v3.9-2786dc?style=flat-square)](https://github.com/chanhuan1/CHzip/releases)
+[![版本](https://img.shields.io/badge/版本-v4.0-2786dc?style=flat-square)](https://github.com/chanhuan1/CHzip/releases)
 [![平台](https://img.shields.io/badge/平台-fnOS%20(x86_64%20·%20arm64)-2786dc?style=flat-square)]()
 [![Stars](https://img.shields.io/github/stars/chanhuan1/CHzip?style=flat-square&label=Stars&color=2786dc)](https://github.com/chanhuan1/CHzip/stargazers)
 [![Forks](https://img.shields.io/github/forks/chanhuan1/CHzip?style=flat-square&label=Forks&color=2786dc)](https://github.com/chanhuan1/CHzip/forks)
@@ -23,9 +23,10 @@
 
 ## 📸 界面截图
 
-| 界面截图 ① | 界面截图 ② |
+| 深色主题 | 浅色主题 |
 | :-: | :-: |
-| ![CHzip 界面截图 1](docs/images/1.png) | ![CHzip 界面截图 2](docs/images/2.png) |
+| ![CHzip 深色主题](docs/images/1.png) | ![CHzip 浅色主题](docs/images/2.png) |
+| ![CHzip 功能设置区 ①](docs/images/3.png) | ![CHzip 功能设置区 ②](docs/images/4.png) |
 
 ## ✨ 功能特性
 
@@ -52,7 +53,7 @@
 
 ## 🚀 快速开始
 
-1. 在飞牛应用中心手动安装 `CHzip_3.9_<架构>.fpk`（x86_64 / arm64）。
+1. 在飞牛应用中心手动安装 `CHzip_4.0_<架构>.fpk`（x86_64 / arm64）。
 2. 文件管理器右键压缩包（分卷选中首卷即可）→「使用 CHzip 打开」。
 3. 预览目录 → 选择目标路径 → 点「开始解压」。
 
@@ -96,6 +97,17 @@ CHzip/
 ```
 
 ## 🕒 更新日志
+
+### v4.0（2026-09-25）
+- **品牌图标全套更换**：全新设计（极光暗夜深蓝渐变底 + 智能归档文件夹 +
+  水晶毛玻璃 + 露出提取文件 + 金色拉链），覆盖根目录与 fnOS 桌面/应用中心
+  全部 10 个尺寸档位；品牌图标缓存键纳入版本同步门禁（不再固定 1.0.0）。
+- **目录树体验优化**：多类型文件专属彩色图标（代码/图片/视频/音频/压缩包/
+  文档/PDF）；层级缩进对齐虚线；双击目录行展开/折叠；单击行高亮；新增
+  「全部展开/折叠」快捷按钮；展开的文件夹切换为打开态图标。
+- **顶栏控件对齐**：历史/主题切换/状态徽章统一 34px 高度、13px 字号与
+  胶囊圆角，hover 蓝底高光。
+- 测试：413 → 416。版本号升至 4.0。
 
 ### v3.9（2026-09-25）
 - **修复：文件树实时高亮在真机上完全不亮**。三个真机根因逐一排查定位（靠新增的

@@ -806,3 +806,60 @@ test("renderTree re-applies the in-flight highlight after a rebuild", async () =
     "重建后应恢复正在解压的高亮",
   );
 });
+
+test("expandAll and collapseAll correctly update expandedPaths and view", () => {
+  const { renderTree, expandAll, collapseAll } = globalThis.CHzipUiTree;
+  const treeApi = globalThis.CHzipTree;
+  const state = createState({
+    entries: ENTRIES,
+    tree: buildTree(ENTRIES),
+    allFilePaths: ENTRIES.map((entry) => entry.path),
+    expandedPaths: new Set(),
+  });
+
+  renderTree(state, treeApi);
+  assert.equal(rowsOf(fileTree).length, 2, "初始全部折叠只有 dir1 和 dir2");
+
+  expandAll(state, treeApi);
+  assert.ok(state.expandedPaths.has("dir1"));
+  assert.ok(state.expandedPaths.has("dir2"));
+  assert.ok(state.expandedPaths.has("dir2/sub"));
+  assert.equal(rowsOf(fileTree).length, 6, "展开后可见所有 6 个节点（dir1, dir1/a, dir1/b, dir2, dir2/sub, dir2/sub/c）");
+
+  collapseAll(state, treeApi);
+  assert.equal(state.expandedPaths.size, 0);
+  assert.equal(rowsOf(fileTree).length, 2, "折叠后仅显示顶层 2 个节点");
+});
+
+test("semantic file icon classes are rendered based on file extensions", () => {
+  const { renderTree } = globalThis.CHzipUiTree;
+  const testEntries = [
+    { path: "test.js", type: "file", size: 10 },
+    { path: "test.png", type: "file", size: 10 },
+    { path: "test.mp4", type: "file", size: 10 },
+    { path: "test.mp3", type: "file", size: 10 },
+    { path: "test.zip", type: "file", size: 10 },
+    { path: "test.pdf", type: "file", size: 10 },
+    { path: "test.docx", type: "file", size: 10 },
+    { path: "test.unknown", type: "file", size: 10 },
+  ];
+  const state = createState({
+    entries: testEntries,
+    tree: buildTree(testEntries),
+    allFilePaths: testEntries.map((e) => e.path),
+    expandedPaths: new Set(),
+  });
+
+  renderTree(state, globalThis.CHzipTree);
+  const rows = rowsOf(fileTree);
+  const iconOf = (path) => rows.find((r) => r.dataset.path === path).children.find((c) => c.classList.contains("tree-icon"));
+
+  assert.ok(iconOf("test.js").classList.contains("file-code"));
+  assert.ok(iconOf("test.png").classList.contains("file-image"));
+  assert.ok(iconOf("test.mp4").classList.contains("file-video"));
+  assert.ok(iconOf("test.mp3").classList.contains("file-audio"));
+  assert.ok(iconOf("test.zip").classList.contains("file-archive"));
+  assert.ok(iconOf("test.pdf").classList.contains("file-pdf"));
+  assert.ok(iconOf("test.docx").classList.contains("file-doc"));
+  assert.ok(iconOf("test.unknown").classList.contains("file-file"));
+});

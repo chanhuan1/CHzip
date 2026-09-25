@@ -245,12 +245,17 @@ dd {
 .header-right {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
 }
 
 .status-badge {
     min-width: 116px;
-    padding: 8px 12px;
+    min-height: 34px;
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 14px;
     border: 1px solid var(--line);
     border-radius: var(--radius-pill);
     color: var(--muted);
@@ -506,6 +511,49 @@ dd {
     font-weight: 600;
 }
 
+.tree-tools {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.tree-tool-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 28px;
+    padding: 0 8px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-xs);
+    background: var(--control-bg);
+    color: var(--ink);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.tree-tool-btn svg {
+    width: 13px;
+    height: 13px;
+    display: block;
+    color: var(--muted);
+}
+
+.tree-tool-btn:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-soft);
+}
+
+.tree-tool-btn:hover:not(:disabled) svg {
+    color: var(--accent);
+}
+
+.tree-tool-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
 .check-control input,
 .tree-checkbox {
     width: 16px;
@@ -515,10 +563,7 @@ dd {
 
 .search-field input,
 .field select,
-.field input,
-.search-field input,
-.field input,
-.field select {
+.field input {
     padding: 0 10px;
 }
 
@@ -558,13 +603,55 @@ dd {
 .tree-row {
     display: grid;
     grid-template-columns: 26px 20px 20px auto minmax(0, 1fr) auto auto;
-    gap: 5px;
+    gap: 6px;
     align-items: center;
-    min-height: 34px;
-    padding: 2px 7px 2px calc(7px + var(--tree-depth, 0) * 18px);
+    min-height: 32px;
+    padding: 2px 8px 2px calc(8px + var(--tree-depth, 0) * 18px);
     border-radius: var(--radius-sm);
     position: relative;
-    transition: background-color 0.2s ease, box-shadow 0.2s ease;
+    user-select: none;
+    transition: background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+/* 层级对齐引导虚线（当 depth > 0 时生成缩进参考线） */
+.tree-row::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 8px;
+    width: calc(var(--tree-depth, 0) * 18px);
+    pointer-events: none;
+    background-image: repeating-linear-gradient(
+        to right,
+        transparent,
+        transparent 17px,
+        rgba(0, 0, 0, 0.08) 17px,
+        rgba(0, 0, 0, 0.08) 18px
+    );
+}
+
+[data-theme="dark"] .tree-row::before {
+    background-image: repeating-linear-gradient(
+        to right,
+        transparent,
+        transparent 17px,
+        rgba(255, 255, 255, 0.09) 17px,
+        rgba(255, 255, 255, 0.09) 18px
+    );
+}
+
+/* 单击当前选中行与悬停效果 */
+.tree-row:hover {
+    background: var(--surface-soft);
+}
+
+.tree-row.is-active-row {
+    background: rgba(39, 134, 220, 0.08);
+}
+
+[data-theme="dark"] .tree-row.is-active-row {
+    background: rgba(77, 163, 255, 0.12);
 }
 
 /* 解压实时推进高亮指示（正在解压的具体文件行） */
@@ -696,6 +783,39 @@ dd {
     /* 末尾的 var(--folder-tab) 是兜底：万一渐变引用无法解析，退化成平涂琥珀色，
        而不是按 fill:none 渲染成“看不见的文件夹”。 */
     fill: url(#chzipFolderBody) var(--folder-tab);
+}
+
+/* 多类型文件专属图标颜色与图形 */
+.icon-shape-code {
+    fill: #10b981;
+}
+
+.icon-shape-image {
+    fill: #8b5cf6;
+}
+
+.icon-shape-video {
+    fill: #f43f5e;
+}
+
+.icon-shape-audio {
+    fill: #ec4899;
+}
+
+.icon-shape-archive {
+    fill: #f59e0b;
+}
+
+.icon-shape-doc {
+    fill: #3b82f6;
+}
+
+.icon-shape-pdf {
+    fill: #ef4444;
+}
+
+.tree-row:has(.tree-toggle.is-open) .tree-label {
+    font-weight: 600;
 }
 
 .tree-label {
@@ -1104,10 +1224,17 @@ dd {
 }
 
 .task-center-btn {
-    min-height: 30px;
-    padding: 0 16px;
-    font-size: 12px;
+    min-height: 34px;
+    padding: 0 14px;
+    font-size: 13px;
+    font-weight: 500;
     border-radius: var(--radius-pill);
+    gap: 7px;
+}
+
+.task-center-btn:hover:not(:disabled) {
+    border-color: var(--accent);
+    background: var(--accent-soft);
 }
 
 .task-center-dialog {
@@ -1862,15 +1989,19 @@ dd {
 
 /* ===== Theme Toggle ===== */
 .theme-toggle {
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    gap: 8px;
-    padding: 6px 12px;
+    justify-content: center;
+    min-height: 34px;
+    box-sizing: border-box;
+    gap: 7px;
+    padding: 0 13px;
     background: var(--surface-soft);
     border: 1px solid var(--line);
     border-radius: var(--radius-pill);
     color: var(--ink);
     font-size: 13px;
+    font-weight: 500;
     transition: all 0.2s ease;
 }
 

@@ -116,6 +116,8 @@
             directoryTree: $("directoryTree"),
             directoryUpBtn: $("directoryUpBtn"),
             downloadDiagnosticsBtn: $("downloadDiagnosticsBtn"),
+            expandAllBtn: $("expandAllBtn"),
+            collapseAllBtn: $("collapseAllBtn"),
             extractBtn: $("extractBtn"),
             fileCount: $("fileCount"),
             filePath: $("filePath"),

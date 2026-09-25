@@ -44,12 +44,10 @@ test("C14 every asset cache-busting key matches the manifest version", () => {
     entries.push({ url: match[1], version: match[2] });
   }
 
-  // 品牌图标刻意保持 ?v=1.0.0：图标文件没改则缓存键无需变，不要「顺手统一」。
-  const assets = entries.filter((entry) => !entry.url.endsWith("icon_64.png"));
-  // 1 个 CSS + 13 个 JS（v3.7 起新增 ui-thumbs.js 缩略图墙模块）。
-  assert.equal(assets.length, 14, "应为 1 个 CSS + 13 个 JS");
+  // 1 个 CSS + 13 个 JS + 1 个品牌图标，共 15 处资产版本缓存键全部与当前版本同步。
+  assert.equal(entries.length, 15, "应为 1 个 CSS + 13 个 JS + 1 个品牌图标，共 15 处");
 
-  for (const asset of assets) {
+  for (const asset of entries) {
     assert.equal(
       asset.version,
       version,
@@ -58,9 +56,10 @@ test("C14 every asset cache-busting key matches the manifest version", () => {
   }
 });
 
-test("C14 the brand icon keeps its own cache key", () => {
+test("C14 the brand icon cache key matches the manifest version", () => {
   const html = fs.readFileSync(indexPath, "utf8");
-  assert.match(html, /icon_64\.png\?v=1\.0\.0/);
+  const v = escapeRegExp(version);
+  assert.match(html, new RegExp(`icon_64\\.png\\?v=${v}`));
 });
 
 // README 的徽章与安装命令曾经两次落后于实际版本（v3.0 徽章配 3.1 版本、
