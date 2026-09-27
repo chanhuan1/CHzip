@@ -1,0 +1,1576 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CHzip · 飞牛智能分卷解压 官方下载与使用指南</title>
+<meta name="description" content="CHzip 是一款面向 fnOS（飞牛私有云）文件管理器右键生态的专业解压与归档工具，支持智能分卷合并、免解压文件树浏览、代码/图片免解压预览、多编码防乱码与安全密码管理。">
+<link rel="icon" type="image/png" href="ICON_256.PNG">
+<style>
+:root {
+  --bg: #070b16;
+  --bg2: #0d1426;
+  --card: rgba(20, 28, 48, 0.72);
+  --card-hover: rgba(26, 38, 66, 0.82);
+  --line: rgba(120, 150, 220, 0.16);
+  --line-bright: rgba(140, 175, 255, 0.35);
+  --fg: #eaf0ff;
+  --dim: #93a2c4;
+  --dimmer: #64748b;
+  --acc: #3b82f6;
+  --acc-glow: rgba(59, 130, 246, 0.35);
+  --acc2: #6366f1;
+  --acc3: #06b6d4;
+  --ok: #10b981;
+  --warn: #f59e0b;
+  --err: #ef4444;
+  --radius: 16px;
+  --radius-sm: 10px;
+  --mono: ui-monospace, SFMono-Regular, "Cascadia Code", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; scroll-behavior: smooth; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  min-height: 100vh;
+  font: 15px/1.7 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(900px 520px at 12% -8%, rgba(59, 130, 246, 0.28), transparent 62%),
+    radial-gradient(760px 480px at 92% 4%, rgba(99, 102, 241, 0.24), transparent 60%),
+    radial-gradient(700px 500px at 50% 108%, rgba(16, 185, 129, 0.12), transparent 62%),
+    linear-gradient(180deg, var(--bg) 0%, var(--bg2) 55%, #050811 100%);
+}
+
+.wrap {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+a { color: var(--acc); text-decoration: none; transition: color 0.15s; }
+a:hover { text-decoration: underline; color: #60a5fa; }
+
+/* 导航栏 */
+nav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  background: rgba(7, 11, 22, 0.82);
+  border-bottom: 1px solid var(--line);
+}
+.nav-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 60px;
+}
+.nav-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  font-size: 17px;
+  color: var(--fg);
+  text-decoration: none;
+}
+.nav-brand img {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(59, 130, 246, 0.4);
+}
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  font-size: 14px;
+}
+.nav-links a {
+  color: var(--dim);
+  font-weight: 500;
+}
+.nav-links a:hover {
+  color: var(--fg);
+  text-decoration: none;
+}
+.nav-action {
+  padding: 6px 14px;
+  border-radius: 8px;
+  background: rgba(59, 130, 246, 0.15);
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  color: #93c5fd !important;
+  font-weight: 600;
+}
+.nav-action:hover {
+  background: rgba(59, 130, 246, 0.3) !important;
+}
+
+/* 顶部 Hero */
+header {
+  padding: 64px 0 44px;
+  text-align: center;
+}
+.logo-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 14px;
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.12);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: #93c5fd;
+  text-transform: uppercase;
+  margin-bottom: 20px;
+}
+.logo-badge .dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--acc), var(--acc2));
+  box-shadow: 0 0 12px rgba(59, 130, 246, 0.9);
+  animation: pulse 2s infinite ease-in-out;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(0.85); }
+}
+
+.hero-icon {
+  width: 96px;
+  height: 96px;
+  border-radius: 24px;
+  box-shadow: 0 12px 36px -8px rgba(59, 130, 246, 0.5);
+  margin-bottom: 18px;
+  transition: transform 0.3s;
+}
+.hero-icon:hover {
+  transform: translateY(-3px) scale(1.03);
+}
+
+h1 {
+  margin: 12px 0 16px;
+  font-size: clamp(32px, 5.2vw, 50px);
+  line-height: 1.18;
+  letter-spacing: -0.02em;
+  background: linear-gradient(120deg, #ffffff 10%, #a5c7ff 50%, #c8b4ff 95%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.sub {
+  max-width: 720px;
+  margin: 0 auto;
+  color: var(--dim);
+  font-size: 16.5px;
+  line-height: 1.7;
+}
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 26px;
+}
+.badge {
+  padding: 6px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.035);
+  font-size: 13px;
+  color: var(--dim);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.badge b {
+  color: #c9d8ff;
+  font-weight: 600;
+}
+
+/* 通用区块 */
+section {
+  padding: 38px 0;
+}
+.section-head {
+  margin-bottom: 22px;
+}
+h2 {
+  font-size: 23px;
+  margin: 0 0 6px;
+  letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+h2::before {
+  content: "";
+  width: 4px;
+  height: 20px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, var(--acc), var(--acc2));
+}
+.lead {
+  color: var(--dim);
+  margin: 0;
+  font-size: 14.5px;
+}
+
+.grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
+}
+.grid > * { min-width: 0; }
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 24px;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: border-color 0.2s, transform 0.2s, background 0.2s;
+}
+.card:hover {
+  border-color: var(--line-bright);
+  background: var(--card-hover);
+  transform: translateY(-2px);
+}
+.card-featured {
+  border-color: rgba(59, 130, 246, 0.45);
+  background: rgba(22, 34, 62, 0.78);
+}
+.card-featured::before {
+  content: "推荐架构";
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  background: linear-gradient(135deg, var(--acc), var(--acc2));
+  color: #fff;
+  letter-spacing: 0.05em;
+}
+
+.card .ico {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  font-size: 21px;
+  margin-bottom: 14px;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.22), rgba(99, 102, 241, 0.18));
+  border: 1px solid rgba(120, 150, 220, 0.22);
+}
+.card h3 {
+  margin: 0 0 6px;
+  font-size: 18px;
+  color: #fff;
+}
+.card .meta {
+  font-size: 12.5px;
+  color: #8fa0c7;
+  margin-bottom: 14px;
+  font-family: var(--mono);
+  background: rgba(0, 0, 0, 0.25);
+  padding: 4px 8px;
+  border-radius: 6px;
+  display: inline-block;
+  align-self: flex-start;
+}
+.card p {
+  margin: 0 0 16px;
+  color: var(--dim);
+  font-size: 14px;
+  line-height: 1.65;
+}
+.card ul {
+  margin: 0 0 20px;
+  padding-left: 20px;
+  color: var(--dim);
+  font-size: 13.5px;
+}
+.card li { margin-bottom: 6px; }
+.card li b { color: #e2e8f0; }
+
+.sha-box {
+  margin: 0 0 18px;
+  padding: 9px 11px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 11.5px;
+  font-family: var(--mono);
+  color: #a0aec0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.sha-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 14px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--fg);
+  cursor: pointer;
+  transition: 0.16s;
+  text-align: center;
+  font-family: inherit;
+}
+.btn:hover {
+  border-color: var(--line-bright);
+  text-decoration: none;
+  background: rgba(255, 255, 255, 0.1);
+  transform: translateY(-1px);
+}
+.btn.primary {
+  background: linear-gradient(135deg, var(--acc), var(--acc2));
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 8px 22px -6px rgba(59, 130, 246, 0.7);
+}
+.btn.primary:hover {
+  box-shadow: 0 10px 26px -4px rgba(59, 130, 246, 0.85);
+  background: linear-gradient(135deg, #4b8df8, #6d70f8);
+}
+.btn.secondary {
+  background: rgba(255, 255, 255, 0.04);
+}
+.btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-top: auto;
+}
+.btns .btn { flex: 1 1 130px; }
+
+/* 截图轮播 / 切换卡 */
+.gallery-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 22px;
+  backdrop-filter: blur(14px);
+}
+.gallery-nav {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 14px;
+}
+.gallery-tab {
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-weight: 600;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--dim);
+  cursor: pointer;
+  transition: 0.15s;
+}
+.gallery-tab:hover {
+  color: #fff;
+  border-color: var(--line-bright);
+  background: rgba(255, 255, 255, 0.06);
+}
+.gallery-tab.active {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.28), rgba(99, 102, 241, 0.2));
+  border-color: rgba(59, 130, 246, 0.6);
+  color: #fff;
+  box-shadow: 0 0 16px rgba(59, 130, 246, 0.25);
+}
+.gallery-view {
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #02050b;
+  min-height: 380px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.gallery-view img {
+  width: 100%;
+  height: auto;
+  display: block;
+  cursor: zoom-in;
+  transition: transform 0.2s ease;
+}
+.gallery-caption {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 12px 18px;
+  background: linear-gradient(0deg, rgba(7, 11, 22, 0.92) 0%, rgba(7, 11, 22, 0.6) 80%, transparent 100%);
+  font-size: 13.5px;
+  color: #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.gallery-caption span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.zoom-hint {
+  font-size: 12px;
+  color: var(--dim);
+  background: rgba(255, 255, 255, 0.1);
+  padding: 3px 8px;
+  border-radius: 4px;
+}
+
+/* 步骤网格 */
+.grid.steps-grid {
+  grid-template-columns: repeat(3, 1fr);
+}
+@media (max-width: 860px) {
+  .grid.steps-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.steps {
+  counter-reset: s;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.steps li {
+  counter-increment: s;
+  position: relative;
+  padding: 0 0 22px 38px;
+  border-left: 1px solid var(--line);
+  margin-left: 12px;
+}
+.steps li:last-child {
+  border-left-color: transparent;
+  padding-bottom: 0;
+}
+.steps li::before {
+  content: counter(s);
+  position: absolute;
+  left: -13px;
+  top: -2px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: var(--mono);
+  background: var(--bg2);
+  border: 1px solid rgba(120, 160, 255, 0.45);
+  color: #b7caff;
+}
+.steps .t {
+  font-weight: 600;
+  margin-bottom: 5px;
+  color: #f1f5f9;
+  font-size: 14.5px;
+}
+.steps .d {
+  color: var(--dim);
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+/* 核心特性 6 网格 */
+.feats {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
+}
+.feat {
+  padding: 20px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.025);
+  transition: border-color 0.2s, background 0.2s;
+}
+.feat:hover {
+  border-color: var(--line-bright);
+  background: rgba(255, 255, 255, 0.045);
+}
+.feat .ft {
+  font-weight: 600;
+  margin-bottom: 8px;
+  font-size: 15.5px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #f8fafc;
+}
+.feat .ft-icon {
+  font-size: 20px;
+}
+.feat .fd {
+  color: var(--dim);
+  font-size: 13.5px;
+  line-height: 1.68;
+}
+
+/* 代码块 */
+.codeblock {
+  margin: 10px 0 0;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: rgba(4, 8, 18, 0.85);
+}
+.codeblock pre {
+  margin: 0;
+  padding: 12px 14px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: #cbd8f5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.cbhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid var(--line);
+}
+.cblang {
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #7b8aae;
+  font-family: var(--mono);
+}
+.copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  font-size: 11.5px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--dim);
+  cursor: pointer;
+  font-family: inherit;
+  transition: 0.15s;
+}
+.copy:hover {
+  color: #fff;
+  border-color: rgba(140, 170, 255, 0.55);
+  background: rgba(59, 130, 246, 0.25);
+}
+
+/* 提示条 */
+.note {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  padding: 16px 20px;
+  border-radius: 13px;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  background: rgba(245, 158, 11, 0.08);
+  font-size: 14px;
+  margin: 18px 0;
+}
+.note .ni { flex: none; font-size: 20px; line-height: 1.4; }
+.note .nt { color: #fde68a; line-height: 1.65; }
+.note b { color: #fbbf24; }
+
+.note.info {
+  border-color: rgba(59, 130, 246, 0.35);
+  background: rgba(59, 130, 246, 0.08);
+}
+.note.info .nt { color: #bfdbfe; }
+.note.info b { color: #60a5fa; }
+
+/* 表格 */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+th, td {
+  padding: 12px 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+}
+th {
+  color: #a9b8d8;
+  font-weight: 600;
+  font-size: 12.5px;
+  letter-spacing: 0.04em;
+  background: rgba(255, 255, 255, 0.02);
+}
+td { color: var(--dim); }
+td:first-child { color: var(--fg); font-weight: 500; }
+.mono { font-family: var(--mono); font-size: 12.5px; }
+.tblwrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.tag-ok {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.tag-blue {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: rgba(59, 130, 246, 0.15);
+  color: #93c5fd;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+/* 更新日志 */
+.changelog {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card);
+  overflow: hidden;
+}
+.changelog-loading {
+  padding: 24px;
+  text-align: center;
+  color: var(--dim);
+  font-size: 13.5px;
+}
+.logitem {
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--line);
+}
+.logitem:last-child { border-bottom: none; }
+.logitem.is-latest {
+  background: rgba(59, 130, 246, 0.08);
+}
+.loghead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.logver {
+  font-family: var(--mono);
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--fg);
+}
+.logdate {
+  color: var(--dim);
+  font-size: 12.5px;
+}
+.logbadge {
+  padding: 2px 9px;
+  border-radius: 20px;
+  font-size: 11.5px;
+  font-weight: 600;
+  background: rgba(59, 130, 246, 0.2);
+  color: #93c5fd;
+  border: 1px solid rgba(59, 130, 246, 0.4);
+}
+.logkind {
+  padding: 2px 9px;
+  border-radius: 20px;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.logkind.k-add {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+.logkind.k-fix {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+.logkind.k-chg {
+  background: rgba(99, 102, 241, 0.15);
+  color: #a5b4fc;
+  border: 1px solid rgba(99, 102, 241, 0.3);
+}
+.loglist {
+  list-style: none;
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+}
+.loglist li {
+  position: relative;
+  padding-left: 18px;
+  font-size: 13.5px;
+  color: #cbd5e1;
+  line-height: 1.65;
+}
+.loglist li::before {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 9px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--dim);
+}
+.logitem.collapsed { display: none; }
+.log-toggle {
+  display: flex;
+  justify-content: center;
+  padding: 14px 0 6px;
+}
+.log-toggle button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 20px;
+  border-radius: 10px;
+  cursor: pointer;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--dim);
+  font-size: 13px;
+  font-family: inherit;
+  transition: 0.15s;
+}
+.log-toggle button:hover {
+  color: #fff;
+  border-color: var(--line-bright);
+  background: rgba(59, 130, 246, 0.2);
+}
+
+/* FAQ 手风琴 */
+.faq-list {
+  display: grid;
+  gap: 12px;
+}
+.faq-item {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--card);
+  overflow: hidden;
+  transition: border-color 0.2s;
+}
+.faq-item:hover {
+  border-color: var(--line-bright);
+}
+.faq-q {
+  padding: 16px 20px;
+  font-weight: 600;
+  font-size: 15px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  user-select: none;
+}
+.faq-q .arrow {
+  transition: transform 0.2s;
+  color: var(--dim);
+  font-size: 14px;
+}
+.faq-item.open .faq-q .arrow {
+  transform: rotate(180deg);
+  color: var(--acc);
+}
+.faq-a {
+  display: none;
+  padding: 0 20px 18px;
+  color: var(--dim);
+  font-size: 14px;
+  line-height: 1.7;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  padding-top: 12px;
+}
+.faq-item.open .faq-a {
+  display: block;
+}
+
+/* 模态框灯箱 (Modal Lightbox) */
+.lightbox {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.88);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  z-index: 1000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.lightbox.open { display: flex; }
+.lightbox img {
+  max-width: 94vw;
+  max-height: 90vh;
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+.lightbox-close {
+  position: absolute;
+  top: 20px;
+  right: 24px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #fff;
+  font-size: 24px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: 0.15s;
+}
+.lightbox-close:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: scale(1.08);
+}
+
+/* 页脚 */
+footer {
+  margin-top: 50px;
+  padding: 36px 0 54px;
+  border-top: 1px solid var(--line);
+  text-align: center;
+  color: #6d7a9b;
+  font-size: 13.5px;
+}
+footer .fl {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+footer .fl a {
+  color: #8da2ce;
+}
+footer .fl a:hover {
+  color: #fff;
+}
+
+@media (max-width: 768px) {
+  header { padding: 42px 0 28px; }
+  .badges { gap: 6px; }
+  .badge { font-size: 12px; padding: 4px 10px; }
+  .card { padding: 18px; }
+  .btns .btn { flex: 1 1 100%; }
+  .gallery-view { min-height: 240px; }
+  .nav-links { display: none; }
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap nav-inner">
+    <a href="#" class="nav-brand">
+      <img src="ICON_256.PNG" alt="CHzip Logo">
+      <span>CHzip</span>
+    </a>
+    <div class="nav-links">
+      <a href="#download">下载中心</a>
+      <a href="#showcase">界面实测</a>
+      <a href="#features">功能亮点</a>
+      <a href="#guide">安装步骤</a>
+      <a href="#specs">格式规格</a>
+      <a href="#changelog-sec">更新日志</a>
+      <a href="#faq">常见问题</a>
+      <a href="#download" class="nav-action">立即下载 v4.0</a>
+    </div>
+  </div>
+</nav>
+
+<div class="wrap">
+
+  <header>
+    <div class="logo-badge">
+      <span class="dot"></span>
+      <span>fnOS Native Archive Suite</span>
+    </div>
+    <div>
+      <img src="ICON_256.PNG" alt="CHzip" class="hero-icon">
+    </div>
+    <h1>CHzip · 飞牛智能分卷解压</h1>
+    <p class="sub">
+      面向 <b>fnOS（飞牛私有云）文件管理器右键场景</b> 的专业解压与归档工具 —— 
+      智能分卷合并 · 文件免解压秒开 · 多编码防乱码 · 密码管理，一键完成。
+    </p>
+    <div class="badges">
+      <span class="badge">🚀 当前版本 <b>v4.0</b></span>
+      <span class="badge">💻 适配系统 <b>fnOS 0.8+ (Debian 12)</b></span>
+      <span class="badge">⚡ 双架构 <b>x86_64 · arm64</b></span>
+      <span class="badge">⚙️ 解压核心 <b>7-Zip 17.05 (7zzs)</b></span>
+      <span class="badge">🔒 安全合规 <b>路径越权拦截 · 密码用后即焚</b></span>
+      <span class="badge">📦 零依赖 <b>Node.js ≥ 22 原生 CGI</b></span>
+    </div>
+  </header>
+
+  <!-- 下载中心 -->
+  <section id="download">
+    <div class="section-head">
+      <h2>下载中心</h2>
+      <p class="lead">按你的飞牛 NAS 硬件 CPU 架构选择对应安装包，下载即用。也可配合飞牛应用中心手动安装。</p>
+    </div>
+    <div class="grid">
+
+      <!-- x86_64 -->
+      <div class="card card-featured">
+        <div class="ico">🖥️</div>
+        <h3>飞牛 fnOS x86_64 安装包</h3>
+        <div class="meta">CHzip_4.0_x86_64.fpk · 2.25 MB</div>
+        <p>适配 Intel 与 AMD 64 位处理器的 NAS 设备（如自建 x86 软路由、联想、极空间、绿联等 x86 机型）。</p>
+        <ul>
+          <li>内置预编译 <b>7zzs 64位独立静态内核</b></li>
+          <li>深度优化解压并发性能与 CPU 指令集加速</li>
+          <li>双击应用中心一键上传安装，自动注册右键</li>
+        </ul>
+        <div class="sha-box">
+          <span class="sha-text" title="abf619ecf3e3feb508d02488aeaa991d4d5c5b754f59b99a67a7d4171e7b4b8a">SHA256: abf619ecf3...171e7b4b8a</span>
+          <button class="copy" data-copy="abf619ecf3e3feb508d02488aeaa991d4d5c5b754f59b99a67a7d4171e7b4b8a">复制</button>
+        </div>
+        <div class="btns">
+          <a class="btn primary" href="dist/CHzip_4.0_x86_64.fpk" download>下载 x86_64 安装包 (.fpk)</a>
+          <a class="btn secondary" href="#guide">查看安装指南</a>
+        </div>
+      </div>
+
+      <!-- arm64 -->
+      <div class="card">
+        <div class="ico">📱</div>
+        <h3>飞牛 fnOS arm64 安装包</h3>
+        <div class="meta">CHzip_4.0_arm64.fpk · 2.10 MB</div>
+        <p>适配 ARM 64 位架构设备（如树莓派 4/5、RK3588 开发板、飞腾及各品牌 ARM 架构飞牛设备）。</p>
+        <ul>
+          <li>针对 <b>AArch64 架构</b> 剥离优化，低功耗高吞吐</li>
+          <li>仅包含 arm64 专属 7zzs 内核，体积轻巧减半</li>
+          <li>完整保留分卷合并、免解压预览等全部功能</li>
+        </ul>
+        <div class="sha-box">
+          <span class="sha-text" title="ee960f384f08c27aa913d7fd914ba7dc3ff6723e388382b2ba6123e845bbcb8a">SHA256: ee960f384f...45bbcb8a</span>
+          <button class="copy" data-copy="ee960f384f08c27aa913d7fd914ba7dc3ff6723e388382b2ba6123e845bbcb8a">复制</button>
+        </div>
+        <div class="btns">
+          <a class="btn primary" href="dist/CHzip_4.0_arm64.fpk" download>下载 arm64 安装包 (.fpk)</a>
+          <a class="btn secondary" href="#guide">查看安装指南</a>
+        </div>
+      </div>
+
+      <!-- GitHub 开源与源码 -->
+      <div class="card">
+        <div class="ico">🐙</div>
+        <h3>GitHub 开源仓库与源码</h3>
+        <div class="meta">GitHub: chanhuan1/CHzip</div>
+        <p>项目全部源码开源，欢迎开发者审查、提交 PR 或 Issue。也可拉取源码自行打包定制。</p>
+        <ul>
+          <li>查看完整更新日志与 Release 归档</li>
+          <li>CGI 后端 + 纯原生 ES6 前端，零混淆零捆绑</li>
+          <li>包含 400+ 项严格的单元测试与 CI 覆盖</li>
+        </ul>
+        <div class="btns" style="margin-top:auto;">
+          <a class="btn primary" href="https://github.com/chanhuan1/CHzip" target="_blank" rel="noopener">访问 GitHub 仓库</a>
+          <a class="btn secondary" href="https://github.com/chanhuan1/CHzip/releases" target="_blank" rel="noopener">历史版本 Releases</a>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- 界面实测展示 -->
+  <section id="showcase">
+    <div class="section-head">
+      <h2>界面实测展示</h2>
+      <p class="lead">专为 fnOS 飞牛私有云量身定制的桌面交互体验，原生契合系统风格。</p>
+    </div>
+
+    <div class="gallery-card">
+      <div class="gallery-nav" id="galleryNav">
+        <button class="gallery-tab active" data-img="images/1.png" data-title="深色主题 (Dark Mode) —— 适配飞牛暗色风格，层次分明，夜间操作不刺眼">🌙 深色主题</button>
+        <button class="gallery-tab" data-img="images/2.png" data-title="浅色主题 (Light Mode) —— 清爽明亮，高对比度，文件层次一目了然">☀️ 浅色主题</button>
+        <button class="gallery-tab" data-img="images/3.png" data-title="解压选项与设置 —— 支持多代码页切换、密码自动提取与解压输出路径指定">⚙️ 编码与密码设置</button>
+        <button class="gallery-tab" data-img="images/4.png" data-title="实时解压进度与任务控制 —— 实时百分比、速度与预计剩余���间，随时安全取消">📋 进度监控与诊断</button>
+      </div>
+
+      <div class="gallery-view" id="galleryView">
+        <img id="activeGalleryImg" src="images/1.png" alt="CHzip 界面预览">
+        <div class="gallery-caption">
+          <span id="galleryCaptionText">🌙 深色主题 (Dark Mode) —— 适配飞牛暗色风格，层次分明，夜间操作不刺眼</span>
+          <span class="zoom-hint">🔍 点击放大高清图</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 核心亮点 -->
+  <section id="features">
+    <div class="section-head">
+      <h2>核心特性</h2>
+      <p class="lead">全方位解决 NAS 用户解压过程中的分卷、乱码、大文件和安全性痛点。</p>
+    </div>
+
+    <div class="feats">
+      <div class="feat">
+        <div class="ft"><span class="ft-icon">📦</span> 全格式覆盖与分卷自动合并</div>
+        <div class="fd">
+          支持 7Z、ZIP、RAR、TAR、GZ、BZ2、XZ、ZST、CAB、ISO、ARJ、LZH 等；
+          自动识别 <code>.7z.001</code>、<code>.001</code>、<code>.z01</code>、<code>.part1.rar</code>、<code>.r00</code> 
+          等全系列分卷序列，右键首卷自动合并，缺卷时即时告警。
+        </div>
+      </div>
+
+      <div class="feat">
+        <div class="ft"><span class="ft-icon">🌲</span> 免解压文件树与选择性解压</div>
+        <div class="fd">
+          打开几十 GB 的庞大压缩包无需全盘解压！秒级呈现包内完整目录树，支持关键字即时过滤与搜索。
+          可仅勾选目标文件或单个子文件夹进行「选择性解压」，极速省时省存储。
+        </div>
+      </div>
+
+      <div class="feat">
+        <div class="ft"><span class="ft-icon">👁️</span> 包内文件秒开预览</div>
+        <div class="fd">
+          无需解压到磁盘，直接双击查看包内图片、文档或代码；内置图片缩略图瀑布流墙、
+          PDF 在线直读预览以及 20+ 语言语法高亮代码阅读器。
+        </div>
+      </div>
+
+      <div class="feat">
+        <div class="ft"><span class="ft-icon">🌐</span> 多代码页编码彻底告别乱码</div>
+        <div class="fd">
+          内置 UTF-8、GBK（Windows 常见）、Big5（繁体）、Shift-JIS（日文）、EUC-KR（韩文）编码无缝切换；
+          智能识别文件名编码，解决老旧 Windows 压缩包在 Linux/NAS 下文件名变问号的痛点。
+        </div>
+      </div>
+
+      <div class="feat">
+        <div class="ft"><span class="ft-icon">🔑</span> 本地密码管理与用后即焚</div>
+        <div class="fd">
+          常用解压密码本地保存，解压时一键填入；临时密码文件在执行后进行多次随机数据覆写再彻底删除，
+          杜绝内存或磁盘取证残留，保护隐私安全。
+        </div>
+      </div>
+
+      <div class="feat">
+        <div class="ft"><span class="ft-icon">🛡️</span> 安全防护与后台静默任务</div>
+        <div class="fd">
+          严密防范跨目录遍历（如恶意压缩包中的 <code>../../</code> 逃逸攻击）；
+          解压任务由独立后台 Worker 守护，浏览器关闭不中断，支持实时取消并自动清理未完成半成品目录。
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 安装与使用步骤 -->
+  <section id="guide">
+    <div class="section-head">
+      <h2>安装与使用步骤</h2>
+      <p class="lead">四步极速部署，从下载到右键解压只需 1 分钟。</p>
+    </div>
+
+    <div class="grid steps-grid">
+
+      <div class="card">
+        <h3>1. 安装离线包</h3>
+        <ol class="steps">
+          <li>
+            <div class="t">下载架构安装包</div>
+            <div class="d">在上方「下载中心」根据你的 NAS CPU 选择下载 <b>x86_64</b> 或 <b>arm64</b> 对应的 <code>.fpk</code> 文件。</div>
+          </li>
+          <li>
+            <div class="t">应用中心手动安装</div>
+            <div class="d">登录飞牛 fnOS 桌面，进入「应用中心」→ 点击右上角「手动安装」→ 选择刚下载的 <code>.fpk</code> 上传。</div>
+          </li>
+          <li>
+            <div class="t">安装完成</div>
+            <div class="d">系统会自动安装 Node.js 运行时环境依赖，并在桌面与启动台中生成「CHzip」应用图标。</div>
+          </li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <h3>2. 授予读写权限（关键）</h3>
+        <ol class="steps">
+          <li>
+            <div class="t">进入应用设置</div>
+            <div class="d">打开飞牛「控制面板」或「应用中心」找到已安装的 CHzip，点击进入「应用设置」。</div>
+          </li>
+          <li>
+            <div class="t">勾选存储权限</div>
+            <div class="d">在存储权限列表里，为 CHzip 勾选需要读取压缩包和解压输出的<b>共享文件夹「读写」权限</b>。</div>
+          </li>
+          <li>
+            <div class="t">单文件夹临时授权</div>
+            <div class="d">若某个文件夹提示无权访问，也可在飞牛「文件管理器」中右键该文件夹 →「属性」→「权限」中新增应用权限。</div>
+          </li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <h3>3. 文件管理器右键使用</h3>
+        <ol class="steps">
+          <li>
+            <div class="t">右键选中压缩包</div>
+            <div class="d">在飞牛「文件管理器」中，右键任意压缩包（分卷压缩包只需选中第一卷 <code>.001</code> 或 <code>.part1.rar</code>）。</div>
+          </li>
+          <li>
+            <div class="t">使用 CHzip 打开</div>
+            <div class="d">在右键菜单中点击「使用 CHzip 打开」，即可调出交互式操作界面。</div>
+          </li>
+          <li>
+            <div class="t">快速预览或解压</div>
+            <div class="d">选择目标输出路径，按需勾选指定文件或直接点「开始解压」，即可在后台享受极速解压。</div>
+          </li>
+        </ol>
+      </div>
+
+    </div>
+
+    <!-- 运维与命令行小贴士 -->
+    <div style="margin-top:20px;">
+      <div class="card">
+        <h3 style="margin-bottom:12px;">🛠️ 高级排查与运维命令</h3>
+        <p>若需要通过 SSH 终端排查应用运行状态或执行打包，可使用以下常用命令：</p>
+
+        <div style="display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));">
+          <div>
+            <div style="font-size:13px;font-weight:600;margin-bottom:4px;color:#c9d8ff;">查看后台解压 Worker 进程</div>
+            <div class="codeblock cmd" data-copy="ps aux | grep 'chzip/worker' | grep -v grep">
+              <div class="cbhead"><span class="cblang">bash</span><button class="copy" type="button">复制</button></div>
+              <pre><code>ps aux | grep 'chzip/worker' | grep -v grep</code></pre>
+            </div>
+          </div>
+
+          <div>
+            <div style="font-size:13px;font-weight:600;margin-bottom:4px;color:#c9d8ff;">查看应用诊断日志</div>
+            <div class="codeblock cmd" data-copy="cat /var/apps/CHzip/data/logs/*.log 2>/dev/null || echo '暂无日志'">
+              <div class="cbhead"><span class="cblang">bash</span><button class="copy" type="button">复制</button></div>
+              <pre><code>cat /var/apps/CHzip/data/logs/*.log 2>/dev/null</code></pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 格式与分卷对照表 -->
+  <section id="specs">
+    <div class="section-head">
+      <h2>格式支持与规格对照表</h2>
+      <p class="lead">基于工业级 7-Zip 内核定制剥离，覆盖全生态主流文件压缩协议。</p>
+    </div>
+
+    <div class="tblwrap">
+      <table>
+        <thead>
+          <tr>
+            <th>压缩格式</th>
+            <th>扩展名示例</th>
+            <th>分卷自动识别与合并</th>
+            <th>免解压文件树浏览</th>
+            <th>包内媒体直读预览</th>
+            <th>多代码页防乱码</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>7-Zip 归档</td>
+            <td class="mono">.7z</td>
+            <td><span class="tag-ok">原生完美合并 (.7z.001)</span></td>
+            <td><span class="tag-ok">支持</span></td>
+            <td><span class="tag-ok">图片 / 代码 / PDF</span></td>
+            <td><span class="tag-ok">支持</span></td>
+          </tr>
+          <tr>
+            <td>ZIP 压缩格式</td>
+            <td class="mono">.zip, .zip.001, .z01</td>
+            <td><span class="tag-ok">新旧分卷全兼容</span></td>
+            <td><span class="tag-ok">支持</span></td>
+            <td><span class="tag-ok">图片 / 代码 / PDF</span></td>
+            <td><span class="tag-ok">GBK / UTF-8 / Big5</span></td>
+          </tr>
+          <tr>
+            <td>RAR 归档格式</td>
+            <td class="mono">.rar, .part1.rar, .r00</td>
+            <td><span class="tag-ok">RAR4 / RAR5 自动识别</span></td>
+            <td><span class="tag-ok">支持</span></td>
+            <td><span class="tag-ok">图片 / 代码 / PDF</span></td>
+            <td><span class="tag-ok">支持</span></td>
+          </tr>
+          <tr>
+            <td>UNIX 打包压缩</td>
+            <td class="mono">.tar, .tar.gz, .tar.xz, .tar.zst</td>
+            <td><span class="tag-blue">单文件/流式自动识别</span></td>
+            <td><span class="tag-ok">支持</span></td>
+            <td><span class="tag-ok">支持代码语法高亮</span></td>
+            <td><span class="tag-ok">UTF-8 优先</span></td>
+          </tr>
+          <tr>
+            <td>光盘镜像 / 固件</td>
+            <td class="mono">.iso, .img, .wim, .dmg</td>
+            <td><span class="tag-blue">单卷直接挂载直读</span></td>
+            <td><span class="tag-ok">支持</span></td>
+            <td><span class="tag-ok">支持文件浏览</span></td>
+            <td><span class="tag-ok">支持</span></td>
+          </tr>
+          <tr>
+            <td>漫画 / 电子书</td>
+            <td class="mono">.cbz, .cbr, .epub</td>
+            <td><span class="tag-blue">标准归档包兼容</span></td>
+            <td><span class="tag-ok">支持</span></td>
+            <td><span class="tag-ok">缩略图瀑布流</span></td>
+            <td><span class="tag-ok">支持</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 更新日志 -->
+  <section id="changelog-sec">
+    <div class="section-head">
+      <h2>版本更新记录</h2>
+      <p class="lead">持续迭代，聆听 NAS 用户与社区的声音。</p>
+    </div>
+    <div class="changelog" id="changelog">
+      <div class="changelog-loading">正在载入版本更新记录 ...</div>
+    </div>
+  </section>
+
+  <!-- 部署与权限提示 -->
+  <section>
+    <div class="note info">
+      <span class="ni">💡</span>
+      <div class="nt">
+        <b>纯静态托管提示：</b>本页面所有资源（样式、图标、图片、安装包）全部自包含于当前目录。
+        你可以将其直接放入飞牛 NAS 的 WebStation、Nginx、Docker 容器或 GitHub Pages 中，开箱即用。
+      </div>
+    </div>
+
+    <div class="note">
+      <span class="ni">⚠️</span>
+      <div class="nt">
+        <b>初次使用权限避坑说明：</b>飞牛系统具有严格的应用隔离沙盒机制。
+        如果右键打开压缩包时提示“权限不足”或“无法找到文件”，请务必前往飞牛「应用设置」为 CHzip 分配相应共享文件夹的<b>读写权限</b>。
+      </div>
+    </div>
+  </section>
+
+  <!-- 常见问题 -->
+  <section id="faq">
+    <div class="section-head">
+      <h2>常见问题解答 (FAQ)</h2>
+      <p class="lead">关于安装、分卷识别与权限的常见疑问解答。</p>
+    </div>
+
+    <div class="faq-list">
+      <div class="faq-item open">
+        <div class="faq-q">
+          <span>解压分卷压缩包时需要选择哪个文件？</span>
+          <span class="arrow">▾</span>
+        </div>
+        <div class="faq-a">
+          只需在文件管理器中右键选中<b>第一个分卷</b>（例如 <code>xxx.part1.rar</code>、<code>xxx.7z.001</code>、<code>xxx.zip.001</code> 或 <code>xxx.001</code>）并选择使用 CHzip 打开即可。
+          CHzip 会自动扫描同目录下匹配的后续所有分卷并无缝拼接解压。如检测到缺失某一分卷，界面会给出清晰友好的提示。
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-q">
+          <span>提示“无法读取文件”或解压时报权限错误怎么办？</span>
+          <span class="arrow">▾</span>
+        </div>
+        <div class="faq-a">
+          飞牛 fnOS 采用了严密的权限白名单保护。在飞牛桌面的「控制面板」或「应用中心」→「已安装应用」找到「CHzip」，点击「应用权限」并勾选你保存压缩包和解压输出目录的共享文件夹读写权限即可。
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-q">
+          <span>遇到老 Windows 压缩包解压后文件名乱码怎么处理？</span>
+          <span class="arrow">▾</span>
+        </div>
+        <div class="faq-a">
+          在 CHzip 解压界面中点击「高级选项」，将默认的字符编码由「UTF-8」切换为「GBK / CP936」（常见于早期 Windows 简中环境）或「Big5」（繁体），文件树中的文件名将实时转为正确中文，解压后也不会再出现乱码。
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-q">
+          <span>解压带密码的压缩包安全吗？密码会不会泄露？</span>
+          <span class="arrow">▾</span>
+        </div>
+        <div class="faq-a">
+          非常安全。CHzip 运行在你的私有 NAS 本地，无任何云端上报。临时解压密码仅在解压进程启动时生成临时密文管道，解压结束后立即执行多次随机覆写彻底抹除，杜绝文件恢复与内存泄漏。
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-q">
+          <span>解压大文件时关闭浏览器窗口会中断吗？</span>
+          <span class="arrow">▾</span>
+        </div>
+        <div class="faq-a">
+          不会。CHzip 采用独立的后台后台守护进程（Detached Worker）。一旦触发解压，即便你关闭电脑或浏览器标签页，NAS 后台仍会继续执行解压，再次打开页面即可续看当前进度或查看完成结果。
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 页脚 -->
+  <footer>
+    <div class="fl">
+      <a href="https://github.com/chanhuan1/CHzip" target="_blank" rel="noopener">GitHub 仓库</a>
+      <a href="https://github.com/chanhuan1/CHzip/releases" target="_blank" rel="noopener">Release 下载</a>
+      <a href="https://github.com/chanhuan1/CHzip/issues" target="_blank" rel="noopener">问题反馈 (Issue)</a>
+      <a href="dist/CHzip_4.0_x86_64.fpk" download>x86_64 安装包</a>
+      <a href="dist/CHzip_4.0_arm64.fpk" download>arm64 安装包</a>
+      <a href="dist/SHA256SUMS.txt" target="_blank">SHA256 校验清单</a>
+    </div>
+    <div>
+      CHzip <span class="mono">v4.0</span> · 面向飞牛私有云（fnOS）原生设计的专业解压套件 · 纯原生零第三方依赖
+    </div>
+  </footer>
+
+</div>
+
+<!-- 图片灯箱 (Modal Lightbox) -->
+<div class="lightbox" id="lightbox">
+  <div class="lightbox-close" id="lightboxClose">&times;</div>
+  <img id="lightboxImg" src="" alt="放大预览">
+</div>
+
+<script>
+// 1. 一键复制功能
+for (const btn of document.querySelectorAll('[data-copy]')) {
+  btn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const text = btn.dataset.copy;
+    let ok = false;
+    try {
+      await navigator.clipboard.writeText(text);
+      ok = true;
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.cssText = 'position:fixed;top:-9999px;opacity:0';
+      document.body.appendChild(ta);
+      ta.select();
+      try { ok = document.execCommand('copy'); } catch { ok = false; }
+      document.body.removeChild(ta);
+    }
+    const orig = btn.textContent;
+    btn.textContent = ok ? '已复制' : '复制失败';
+    setTimeout(() => (btn.textContent = orig), 1600);
+  });
+}
+
+// 2. 界面实测展示图片切换与灯箱交互
+const tabs = document.querySelectorAll('.gallery-tab');
+const mainImg = document.getElementById('activeGalleryImg');
+const captionText = document.getElementById('galleryCaptionText');
+const lightbox = document.getElementById('lightbox');
+const lightboxImg = document.getElementById('lightboxImg');
+const lightboxClose = document.getElementById('lightboxClose');
+
+tabs.forEach(tab => {
+  tab.addEventListener('click', () => {
+    tabs.forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    const newSrc = tab.dataset.img;
+    const title = tab.dataset.title;
+    mainImg.src = newSrc;
+    captionText.textContent = title;
+  });
+});
+
+mainImg.addEventListener('click', () => {
+  lightboxImg.src = mainImg.src;
+  lightbox.classList.add('open');
+});
+
+lightboxClose.addEventListener('click', () => {
+  lightbox.classList.remove('open');
+});
+lightbox.addEventListener('click', (e) => {
+  if (e.target === lightbox) lightbox.classList.remove('open');
+});
+
+// 3. FAQ 手风琴展开与收起
+document.querySelectorAll('.faq-item .faq-q').forEach(q => {
+  q.addEventListener('click', () => {
+    const item = q.parentElement;
+    item.classList.toggle('open');
+  });
+});
+
+// 4. 更新日志：内置离线数据即时渲染，若处于 HTTP 协议则异步拉取最新数据
+(() => {
+  const box = document.getElementById('changelog');
+  if (!box) return;
+
+  // 内置离线完整版本记录，直接双击 HTML 打开即刻呈现
+  const defaultData = {
+    version: "4.0",
+    changelog: [
+      {
+        version: "v4.0",
+        date: "2026-09-25",
+        kind: "add",
+        items: [
+          "品牌图标全套更换：全新极光暗夜深蓝渐变 + 水晶毛玻璃 + 金色拉链视觉设计，覆盖全尺寸档位",
+          "目录树体验优化：专属彩色格式图标（代码/图片/视频/音频/压缩包/文档/PDF）",
+          "层级虚线对齐与折叠优化：支持双击折叠、单击选中高亮以及「全部展开/折叠」快捷控制",
+          "顶栏胶囊对齐：状态徽章与快捷按钮统一 34px 高度与蓝底高光 hover 动效"
+        ]
+      },
+      {
+        version: "v3.9",
+        date: "2026-09-24",
+        kind: "add",
+        items: [
+          "包内图片缩略图墙：免解压快速浏览压缩包内所有图片，支持瀑布流排布与大图预览",
+          "PDF 格式免解压直读：内置流式渲染器，无需解压直接查看包内文档",
+          "代码高亮器升级：支持常见 20+ 编程语言行号与语法高亮查看"
+        ]
+      },
+      {
+        version: "v3.8",
+        date: "2026-09-20",
+        kind: "fix",
+        items: [
+          "增强任务取消机制：中止任务时自动彻底清理未完成半成品目录，杜绝残留占用磁盘",
+          "密码安全覆写：临时解压密码文件用后多次随机数据覆写再删除，防止磁盘残留取证",
+          "源文件指纹比对：解压前后进行校验，确保原压缩文件安全无损坏"
+        ]
+      },
+      {
+        version: "v3.7",
+        date: "2026-09-15",
+        kind: "change",
+        items: [
+          "双架构自动分发：优化 x86_64 与 arm64 架构独立打包逻辑，体积降低 45%",
+          "多代码页智能回退：UTF-8 / GBK / Big5 / Shift-JIS / EUC-KR 一键切换并记住偏好",
+          "飞牛桌面右键桥接协议稳定性强化，解决深层目录路径转义问题"
+        ]
+      }
+    ]
+  };
+
+  const esc = s => String(s == null ? '' : s)
+    .replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const KIND = { add: ['新增', 'k-add'], fix: ['修复', 'k-fix'], change: ['调整', 'k-chg'] };
+
+  function render(data) {
+    const list = Array.isArray(data.changelog) ? data.changelog : [];
+    if (!list.length) {
+      box.innerHTML = `<div class="changelog-loading">当前版本 <span class="mono">${esc(data.version || 'v4.0')}</span>：暂无更多更新说明</div>`;
+      return;
+    }
+    const VISIBLE = 2; // 默认展示最新 2 个版本，其余折叠
+    const hiddenCount = Math.max(0, list.length - VISIBLE);
+    const items = list.map((it, idx) => {
+      const isCollapsed = idx >= VISIBLE;
+      const lis = Array.isArray(it.items) ? it.items : [];
+      return `<div class="logitem${idx === 0 ? ' is-latest' : ''}${isCollapsed ? ' collapsed' : ''}">
+        <div class="loghead">
+          <span class="logver">${esc(it.version || '')}</span>
+          ${idx === 0 ? '<span class="logbadge">最新版本</span>' : ''}
+          ${it.kind ? `<span class="logkind ${(KIND[it.kind] || KIND.change)[1]}">${(KIND[it.kind] || KIND.change)[0]}</span>` : ''}
+          ${it.date ? `<span class="logdate">${esc(it.date)}</span>` : ''}
+        </div>
+        <ul class="loglist">${lis.map(x => `<li>${esc(x)}</li>`).join('')}</ul>
+      </div>`;
+    }).join('');
+
+    const toggle = hiddenCount > 0
+      ? `<div class="log-toggle" id="logToggle"><button type="button">
+          展开全部 <span class="mono">${hiddenCount}</span> 个历史版本
+          <span class="arrow">▾</span></button></div>`
+      : '';
+    box.innerHTML = items + toggle;
+
+    const btn = document.getElementById('logToggle');
+    if (btn) {
+      btn.addEventListener('click', () => {
+        const open = btn.classList.toggle('open');
+        box.querySelectorAll('.logitem.collapsed').forEach(el => el.classList.toggle('collapsed', !open));
+        btn.querySelector('button').innerHTML = open
+          ? `收起历史版本 <span class="arrow">▴</span>`
+          : `展开全部 <span class="mono">${hiddenCount}</span> 个历史版本 <span class="arrow">▾</span>`;
+      });
+    }
+  }
+
+  // 1. 立即渲染内置数据，无论本地双击直接打开还是静态托管均完美呈现
+  render(defaultData);
+
+  // 2. 若在 HTTP/HTTPS 环境下，尝试请求静态文件获取最新数据
+  if (location.protocol.startsWith('http')) {
+    fetch('version.json', { cache: 'no-store' })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d && d.changelog) render(d); })
+      .catch(() => {});
+  }
+})();
+</script>
+</body>
+</html>
