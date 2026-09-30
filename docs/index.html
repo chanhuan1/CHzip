@@ -5,6 +5,22 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>CHzip · 飞牛智能分卷解压 官方下载与使用指南</title>
 <meta name="description" content="CHzip 是一款面向 fnOS（飞牛私有云）文件管理器右键生态的专业解压与归档工具，支持智能分卷合并、免解压文件树浏览、代码/图片免解压预览、多编码防乱码与安全密码管理。">
+<meta name="theme-color" content="#070b16">
+<meta name="color-scheme" content="dark">
+<link rel="canonical" href="https://chanhuan.dpdns.org/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="CHzip">
+<meta property="og:title" content="CHzip · 飞牛智能分卷解压 官方下载与使用指南">
+<meta property="og:description" content="面向 fnOS 文件管理器右键场景的专业解压工具：智能分卷合并 · 文件免解压秒开 · 多编码防乱码 · 密码管理，一键完成。">
+<meta property="og:url" content="https://chanhuan.dpdns.org/">
+<meta property="og:image" content="https://chanhuan.dpdns.org/images/1.png">
+<meta property="og:image:width" content="2186">
+<meta property="og:image:height" content="1188">
+<meta property="og:locale" content="zh_CN">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="CHzip · 飞牛智能分卷解压">
+<meta name="twitter:description" content="面向 fnOS 的专业解压工具：智能分卷合并、免解压预览、多编码防乱码。">
+<meta name="twitter:image" content="https://chanhuan.dpdns.org/images/1.png">
 <link rel="icon" type="image/png" href="ICON_256.PNG">
 <style>
 :root {
@@ -31,6 +47,16 @@
 
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; scroll-behavior: smooth; }
+:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+}
+section { scroll-margin-top: 72px; }
+.ico svg, .ft-icon svg, .badge svg, .gallery-tab svg, .note .ni svg { width: 1em; height: 1em; display: inline-block; vertical-align: -0.125em; fill: currentColor; }
+.ico svg { width: 24px; height: 24px; }
+.ft-icon svg { width: 20px; height: 20px; }
+.logo-badge svg { width: 14px; height: 14px; vertical-align: -1px; }
 body {
   background: var(--bg);
   color: var(--fg);
@@ -820,6 +846,12 @@ td:first-child { color: var(--fg); font-weight: 500; }
   justify-content: space-between;
   gap: 12px;
   user-select: none;
+  font-family: inherit;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  color: var(--fg);
 }
 .faq-q .arrow {
   transition: transform 0.2s;
@@ -915,11 +947,53 @@ footer .fl a:hover {
   .card { padding: 18px; }
   .btns .btn { flex: 1 1 100%; }
   .gallery-view { min-height: 240px; }
-  .nav-links { display: none; }
+  /* 移动端导航：不再隐藏，改为品牌行 + 横向可滚动链接行，保留全部入口 */
+  .nav-inner {
+    flex-direction: column;
+    align-items: stretch;
+    height: auto;
+    padding: 8px 0;
+    gap: 4px;
+  }
+  .nav-brand { padding: 0 24px; }
+  .nav-links {
+    display: flex;
+    gap: 4px;
+    overflow-x: auto;
+    padding: 2px 24px 6px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .nav-links::-webkit-scrollbar { display: none; }
+  .nav-links a { white-space: nowrap; flex: none; padding: 6px 10px; border-radius: 8px; }
 }
 </style>
 </head>
 <body>
+
+<!-- 内联 SVG 图标符号表：与主应用同方针（不用 emoji，跨平台字形不一致），16×16 currentColor -->
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+  <symbol id="i-chip" viewBox="0 0 16 16"><rect x="4" y="4" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="6.2" y="6.2" width="3.6" height="3.6" rx="0.8" fill="currentColor"/><path d="M6 4V1.8M10 4V1.8M6 14.2V12M10 14.2V12M4 6H1.8M4 10H1.8M14.2 6H12M14.2 10H12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
+  <symbol id="i-github" viewBox="0 0 16 16"><path fill="currentColor" d="M8 1a7 7 0 0 0-2.21 13.64c.35.06.48-.15.48-.34v-1.2c-1.95.42-2.36-.94-2.36-.94-.32-.81-.78-1.03-.78-1.03-.64-.43.05-.42.05-.42.7.05 1.08.72 1.08.72.63 1.08 1.65.77 2.05.59.06-.46.25-.77.45-.95-1.56-.18-3.2-.78-3.2-3.46 0-.77.27-1.4.72-1.89-.07-.18-.31-.9.07-1.86 0 0 .59-.19 1.92.72a6.7 6.7 0 0 1 3.5 0c1.33-.91 1.92-.72 1.92-.72.38.96.14 1.68.07 1.86.45.5.72 1.12.72 1.89 0 2.69-1.64 3.28-3.2 3.46.25.22.47.64.47 1.29v1.91c0 .19.13.4.48.34A7 7 0 0 0 8 1Z"/></symbol>
+  <symbol id="i-package" viewBox="0 0 16 16"><path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" d="M8 1.6 14 4.6v6.8l-6 3-6-3V4.6Z"/><path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" d="M2.2 4.7 8 7.6l5.8-2.9M8 7.6v6.6"/></symbol>
+  <symbol id="i-tree" viewBox="0 0 16 16"><path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" d="M5.5 4.5h9M5.5 11.5h9M2.5 4.5h.01M2.5 11.5h.01"/><circle cx="2.6" cy="4.5" r="1.1" fill="currentColor"/><circle cx="2.6" cy="11.5" r="1.1" fill="currentColor"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 16 16"><path fill="none" stroke="currentColor" stroke-width="1.4" d="M1.6 8C3.1 5.3 5.4 3.6 8 3.6S12.9 5.3 14.4 8C12.9 10.7 10.6 12.4 8 12.4S3.1 10.7 1.6 8Z"/><circle cx="8" cy="8" r="2" fill="currentColor"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.4" fill="none" stroke="currentColor" stroke-width="1.3"/><ellipse cx="8" cy="8" rx="2.9" ry="6.4" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M1.8 8h12.4M2.7 4.7h10.6M2.7 11.3h10.6" stroke="currentColor" stroke-width="1.3" fill="none"/></symbol>
+  <symbol id="i-key" viewBox="0 0 16 16"><circle cx="5" cy="11" r="3.2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="m7.4 8.6 5.8-5.8M11 5l2 2M13 3l1.8 1.8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 16 16"><path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" d="M8 1.5 13.5 3.6v4.2c0 3.4-2.3 5.7-5.5 6.7-3.2-1-5.5-3.3-5.5-6.7V3.6Z"/><path d="m5.6 8 1.7 1.7 3.1-3.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 16 16"><path fill="currentColor" d="M13.5 9.9A6 6 0 0 1 6.1 2.5 6 6 0 1 0 13.5 9.9Z"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 16 16"><circle cx="8" cy="8" r="3" fill="currentColor"/><path d="M8 1.2v1.8M8 13v1.8M14.8 8H13M3 8H1.2M12.9 3.1l-1.3 1.3M4.4 11.6l-1.3 1.3M12.9 12.9l-1.3-1.3M4.4 4.4 3.1 3.1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 1.5v2M8 12.5v2M14.5 8h-2M3.5 8h-2M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4M12.6 12.6l-1.4-1.4M4.8 4.8 3.4 3.4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
+  <symbol id="i-clipboard" viewBox="0 0 16 16"><rect x="3" y="2.5" width="10" height="12" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="5.5" y="1" width="5" height="3" rx="1" fill="currentColor"/><path d="M5.5 7h5M5.5 9.5h5M5.5 12h3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></symbol>
+  <symbol id="i-bulb" viewBox="0 0 16 16"><path d="M8 1.5a4.7 4.7 0 0 0-2.6 8.6c.5.4.9 1 .9 1.6h3.4c0-.6.4-1.2.9-1.6A4.7 4.7 0 0 0 8 1.5Z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M6.4 13.6h3.2M7 15h2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
+  <symbol id="i-warn" viewBox="0 0 16 16"><path d="M8 2 14.5 13.5h-13Z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M8 6.5v3.2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="8" cy="11.7" r="0.9" fill="currentColor"/></symbol>
+  <symbol id="i-rocket" viewBox="0 0 16 16"><path d="M9.5 2.5c2.4-.8 4-.4 4-.4s.4 1.6-.4 4c-.7 2.1-2.4 3.7-4.4 4.9L6.6 9.4C7.8 7.4 7.4 3.2 9.5 2.5Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><circle cx="10" cy="6" r="1" fill="currentColor"/><path d="M6.2 9.8 4 10.4l-.6 2.2 2.2-.6.6-2.2ZM4.5 12.5 2.8 14.2" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-zap" viewBox="0 0 16 16"><path d="M9 1.5 3.5 9H7l-1 5.5L11.5 7H8Z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 16 16"><rect x="3.5" y="7" width="9" height="6.5" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5 7V5a3 3 0 0 1 6 0v2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
+  <symbol id="i-wrench" viewBox="0 0 16 16"><path d="M13.8 4.2a4 4 0 0 1-5.2 5.2L4 14a1.6 1.6 0 0 1-2.1-2.1l4.6-4.6a4 4 0 0 1 5.2-5.2L9.4 4.4l2.2 2.2Z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></symbol>
+  <symbol id="i-stethoscope" viewBox="0 0 16 16"><path d="M4 2v4a3.5 3.5 0 0 0 7 0V2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M7.5 9.5v2a3 3 0 0 0 6 0v-1" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="13.5" cy="8.5" r="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/></symbol>
+  <symbol id="i-note" viewBox="0 0 16 16"><path d="M3 2.5A1.5 1.5 0 0 1 4.5 1h7A1.5 1.5 0 0 1 13 2.5v11a1.5 1.5 0 0 1-1.5 1.5h-7A1.5 1.5 0 0 1 3 13.5Z" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5.5 4.5h5M5.5 7h5M5.5 9.5h3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></symbol>
+</svg>
 
 <nav>
   <div class="wrap nav-inner">
@@ -935,7 +1009,7 @@ footer .fl a:hover {
       <a href="#specs">格式规格</a>
       <a href="#changelog-sec">更新日志</a>
       <a href="#faq">常见问题</a>
-      <a href="#download" class="nav-action">立即下载 v4.0</a>
+      <a href="#download" class="nav-action">立即下载 <span data-ver>4.0</span></a>
     </div>
   </div>
 </nav>
@@ -956,12 +1030,12 @@ footer .fl a:hover {
       智能分卷合并 · 文件免解压秒开 · 多编码防乱码 · 密码管理，一键完成。
     </p>
     <div class="badges">
-      <span class="badge">🚀 当前版本 <b>v4.0</b></span>
-      <span class="badge">💻 适配系统 <b>fnOS 0.8+ (Debian 12)</b></span>
-      <span class="badge">⚡ 双架构 <b>x86_64 · arm64</b></span>
-      <span class="badge">⚙️ 解压核心 <b>7-Zip 17.05 (7zzs)</b></span>
-      <span class="badge">🔒 安全合规 <b>路径越权拦截 · 密码用后即焚</b></span>
-      <span class="badge">📦 零依赖 <b>Node.js ≥ 22 原生 CGI</b></span>
+      <span class="badge"><svg><use href="#i-rocket"/></svg> 当前版本 <b>v<span data-ver>4.0</span></b></span>
+      <span class="badge"><svg><use href="#i-chip"/></svg> 适配系统 <b>fnOS 0.8+ (Debian 12)</b></span>
+      <span class="badge"><svg><use href="#i-zap"/></svg> 双架构 <b>x86_64 · arm64</b></span>
+      <span class="badge"><svg><use href="#i-gear"/></svg> 解压核心 <b>7-Zip 26.02 (7zzs)</b></span>
+      <span class="badge"><svg><use href="#i-lock"/></svg> 安全合规 <b>路径越权拦截 · 密码用后即焚</b></span>
+      <span class="badge"><svg><use href="#i-package"/></svg> 零依赖 <b>Node.js ≥ 22 原生 CGI</b></span>
     </div>
   </header>
 
@@ -971,11 +1045,18 @@ footer .fl a:hover {
       <h2>下载中心</h2>
       <p class="lead">按你的飞牛 NAS 硬件 CPU 架构选择对应安装包，下载即用。也可配合飞牛应用中心手动安装。</p>
     </div>
+    <div class="note info">
+      <span class="ni"><svg><use href="#i-bulb"/></svg></span>
+      <div class="nt">
+        <b>不确定选哪个架构？</b>登录飞牛 fnOS 桌面 →「控制面板」→「系统信息」查看处理器：
+        Intel / AMD（Celeron、N100、i3/i5/i7 等）→ 选 <b>x86_64</b>；树莓派 4/5、RK3588、飞腾等 ARM 芯片 → 选 <b>arm64</b>。
+      </div>
+    </div>
     <div class="grid">
 
       <!-- x86_64 -->
       <div class="card card-featured">
-        <div class="ico">🖥️</div>
+        <div class="ico"><svg><use href="#i-chip"/></svg></div>
         <h3>飞牛 fnOS x86_64 安装包</h3>
         <div class="meta">CHzip_4.0_x86_64.fpk · 2.25 MB</div>
         <p>适配 Intel 与 AMD 64 位处理器的 NAS 设备（如自建 x86 软路由、联想、极空间、绿联等 x86 机型）。</p>
@@ -990,19 +1071,20 @@ footer .fl a:hover {
         </div>
         <div class="btns">
           <a class="btn primary" href="dist/CHzip_4.0_x86_64.fpk" download>下载 x86_64 安装包 (.fpk)</a>
+          <a class="btn secondary" href="https://github.com/chanhuan1/CHzip/releases/download/v4.0/CHzip_4.0_x86_64.fpk" target="_blank" rel="noopener">GitHub Release 直链</a>
           <a class="btn secondary" href="#guide">查看安装指南</a>
         </div>
       </div>
 
       <!-- arm64 -->
       <div class="card">
-        <div class="ico">📱</div>
+        <div class="ico"><svg><use href="#i-chip"/></svg></div>
         <h3>飞牛 fnOS arm64 安装包</h3>
         <div class="meta">CHzip_4.0_arm64.fpk · 2.10 MB</div>
         <p>适配 ARM 64 位架构设备（如树莓派 4/5、RK3588 开发板、飞腾及各品牌 ARM 架构飞牛设备）。</p>
         <ul>
           <li>针对 <b>AArch64 架构</b> 剥离优化，低功耗高吞吐</li>
-          <li>仅包含 arm64 专属 7zzs 内核，体积轻巧减半</li>
+          <li>不含 x86 内核，仅打包 arm64 专属 7zzs，包体更轻</li>
           <li>完整保留分卷合并、免解压预览等全部功能</li>
         </ul>
         <div class="sha-box">
@@ -1011,20 +1093,22 @@ footer .fl a:hover {
         </div>
         <div class="btns">
           <a class="btn primary" href="dist/CHzip_4.0_arm64.fpk" download>下载 arm64 安装包 (.fpk)</a>
+          <a class="btn secondary" href="https://github.com/chanhuan1/CHzip/releases/download/v4.0/CHzip_4.0_arm64.fpk" target="_blank" rel="noopener">GitHub Release 直链</a>
           <a class="btn secondary" href="#guide">查看安装指南</a>
         </div>
       </div>
 
       <!-- GitHub 开源与源码 -->
       <div class="card">
-        <div class="ico">🐙</div>
+        <div class="ico"><svg><use href="#i-github"/></svg></div>
         <h3>GitHub 开源仓库与源码</h3>
-        <div class="meta">GitHub: chanhuan1/CHzip</div>
+        <div class="meta">GPL-3.0 · GitHub: chanhuan1/CHzip</div>
         <p>项目全部源码开源，欢迎开发者审查、提交 PR 或 Issue。也可拉取源码自行打包定制。</p>
         <ul>
           <li>查看完整更新日志与 Release 归档</li>
           <li>CGI 后端 + 纯原生 ES6 前端，零混淆零捆绑</li>
           <li>包含 400+ 项严格的单元测试与 CI 覆盖</li>
+          <li>觉得好用请给个 <b>Star</b>，让更多飞牛用户看到</li>
         </ul>
         <div class="btns" style="margin-top:auto;">
           <a class="btn primary" href="https://github.com/chanhuan1/CHzip" target="_blank" rel="noopener">访问 GitHub 仓库</a>
@@ -1043,18 +1127,21 @@ footer .fl a:hover {
     </div>
 
     <div class="gallery-card">
-      <div class="gallery-nav" id="galleryNav">
-        <button class="gallery-tab active" data-img="images/1.png" data-title="深色主题 (Dark Mode) —— 适配飞牛暗色风格，层次分明，夜间操作不刺眼">🌙 深色主题</button>
-        <button class="gallery-tab" data-img="images/2.png" data-title="浅色主题 (Light Mode) —— 清爽明亮，高对比度，文件层次一目了然">☀️ 浅色主题</button>
-        <button class="gallery-tab" data-img="images/3.png" data-title="解压选项与设置 —— 支持多代码页切换、密码自动提取与解压输出路径指定">⚙️ 编码与密码设置</button>
-        <button class="gallery-tab" data-img="images/4.png" data-title="实时解压进度与任务控制 —— 实时百分比、速度与预计剩余���间，随时安全取消">📋 进度监控与诊断</button>
+      <div class="gallery-nav" id="galleryNav" role="tablist" aria-label="界面截图切换">
+        <button class="gallery-tab active" role="tab" aria-selected="true" aria-controls="galleryView" id="tab-dark" tabindex="0" data-img="images/1.webp" data-img-fallback="images/1.png" data-title="深色主题 (Dark Mode) —— 适配飞牛暗色风格，层次分明，夜间操作不刺眼"><svg><use href="#i-moon"/></svg> 深色主题</button>
+        <button class="gallery-tab" role="tab" aria-selected="false" aria-controls="galleryView" id="tab-light" tabindex="-1" data-img="images/2.webp" data-img-fallback="images/2.png" data-title="浅色主题 (Light Mode) —— 清爽明亮，高对比度，文件层次一目了然"><svg><use href="#i-sun"/></svg> 浅色主题</button>
+        <button class="gallery-tab" role="tab" aria-selected="false" aria-controls="galleryView" id="tab-settings" tabindex="-1" data-img="images/3.webp" data-img-fallback="images/3.png" data-title="解压选项与设置 —— 支持多代码页切换、密码自动提取与解压输出路径指定"><svg><use href="#i-gear"/></svg> 编码与密码设置</button>
+        <button class="gallery-tab" role="tab" aria-selected="false" aria-controls="galleryView" id="tab-progress" tabindex="-1" data-img="images/4.webp" data-img-fallback="images/4.png" data-title="实时解压进度与任务控制 —— 实时百分比、剩余时间与当前文件，随时安全取消"><svg><use href="#i-clipboard"/></svg> 进度监控与诊断</button>
       </div>
 
-      <div class="gallery-view" id="galleryView">
-        <img id="activeGalleryImg" src="images/1.png" alt="CHzip 界面预览">
+      <div class="gallery-view" id="galleryView" role="tabpanel" aria-label="CHzip 界面截图预览">
+        <picture id="galleryPicture">
+          <source id="gallerySource" type="image/webp" srcset="images/1.webp">
+          <img id="activeGalleryImg" src="images/1.png" alt="CHzip 深色主题界面：文件树浏览压缩包内容，顶部为任务与历史控制区" width="1600" height="869" tabindex="0" role="button" aria-label="放大查看截图">
+        </picture>
         <div class="gallery-caption">
-          <span id="galleryCaptionText">🌙 深色主题 (Dark Mode) —— 适配飞牛暗色风格，层次分明，夜间操作不刺眼</span>
-          <span class="zoom-hint">🔍 点击放大高清图</span>
+          <span id="galleryCaptionText">深色主题 (Dark Mode) —— 适配飞牛暗色风格，层次分明，夜间操作不刺眼</span>
+          <span class="zoom-hint">点击放大高清图</span>
         </div>
       </div>
     </div>
@@ -1069,7 +1156,7 @@ footer .fl a:hover {
 
     <div class="feats">
       <div class="feat">
-        <div class="ft"><span class="ft-icon">📦</span> 全格式覆盖与分卷自动合并</div>
+        <div class="ft"><span class="ft-icon"><svg><use href="#i-package"/></svg></span> 全格式覆盖与分卷自动合并</div>
         <div class="fd">
           支持 7Z、ZIP、RAR、TAR、GZ、BZ2、XZ、ZST、CAB、ISO、ARJ、LZH 等；
           自动识别 <code>.7z.001</code>、<code>.001</code>、<code>.z01</code>、<code>.part1.rar</code>、<code>.r00</code> 
@@ -1078,7 +1165,7 @@ footer .fl a:hover {
       </div>
 
       <div class="feat">
-        <div class="ft"><span class="ft-icon">🌲</span> 免解压文件树与选择性解压</div>
+        <div class="ft"><span class="ft-icon"><svg><use href="#i-tree"/></svg></span> 免解压文件树与选择性解压</div>
         <div class="fd">
           打开几十 GB 的庞大压缩包无需全盘解压！秒级呈现包内完整目录树，支持关键字即时过滤与搜索。
           可仅勾选目标文件或单个子文件夹进行「选择性解压」，极速省时省存储。
@@ -1086,7 +1173,7 @@ footer .fl a:hover {
       </div>
 
       <div class="feat">
-        <div class="ft"><span class="ft-icon">👁️</span> 包内文件秒开预览</div>
+        <div class="ft"><span class="ft-icon"><svg><use href="#i-eye"/></svg></span> 包内文件秒开预览</div>
         <div class="fd">
           无需解压到磁盘，直接双击查看包内图片、文档或代码；内置图片缩略图瀑布流墙、
           PDF 在线直读预览以及 20+ 语言语法高亮代码阅读器。
@@ -1094,7 +1181,7 @@ footer .fl a:hover {
       </div>
 
       <div class="feat">
-        <div class="ft"><span class="ft-icon">🌐</span> 多代码页编码彻底告别乱码</div>
+        <div class="ft"><span class="ft-icon"><svg><use href="#i-globe"/></svg></span> 多代码页编码彻底告别乱码</div>
         <div class="fd">
           内置 UTF-8、GBK（Windows 常见）、Big5（繁体）、Shift-JIS（日文）、EUC-KR（韩文）编码无缝切换；
           智能识别文件名编码，解决老旧 Windows 压缩包在 Linux/NAS 下文件名变问号的痛点。
@@ -1102,7 +1189,7 @@ footer .fl a:hover {
       </div>
 
       <div class="feat">
-        <div class="ft"><span class="ft-icon">🔑</span> 本地密码管理与用后即焚</div>
+        <div class="ft"><span class="ft-icon"><svg><use href="#i-key"/></svg></span> 本地密码管理与用后即焚</div>
         <div class="fd">
           常用解压密码本地保存，解压时一键填入；临时密码文件在执行后进行多次随机数据覆写再彻底删除，
           杜绝内存或磁盘取证残留，保护隐私安全。
@@ -1110,10 +1197,34 @@ footer .fl a:hover {
       </div>
 
       <div class="feat">
-        <div class="ft"><span class="ft-icon">🛡️</span> 安全防护与后台静默任务</div>
+        <div class="ft"><span class="ft-icon"><svg><use href="#i-shield"/></svg></span> 安全防护与后台静默任务</div>
         <div class="fd">
           严密防范跨目录遍历（如恶意压缩包中的 <code>../../</code> 逃逸攻击）；
           解压任务由独立后台 Worker 守护，浏览器关闭不中断，支持实时取消并自动清理未完成半成品目录。
+        </div>
+      </div>
+
+      <div class="feat">
+        <div class="ft"><span class="ft-icon"><svg><use href="#i-stethoscope"/></svg></span> 完整性体检与坏文件归因</div>
+        <div class="fd">
+          一键对压缩包做流式 CRC 体检（<code>7z t</code>），不写盘即可确认数据完好；
+          校验失败时列出<b>疑似损坏的具体文件</b>清单，多分卷包损坏不再靠猜，重新下载有依据。
+        </div>
+      </div>
+
+      <div class="feat">
+        <div class="ft"><span class="ft-icon"><svg><use href="#i-note"/></svg></span> 压缩包注释查看与编辑</div>
+        <div class="fd">
+          直接查看 ZIP / 7Z 包内注释（打包者留言、解压说明等），支持在应用内编辑回写，
+          无需借助其它工具。
+        </div>
+      </div>
+
+      <div class="feat">
+        <div class="ft"><span class="ft-icon"><svg><use href="#i-clipboard"/></svg></span> 任务中心与智能收尾</div>
+        <div class="fd">
+          实时进度 + 预计剩余时间 + 最近 20 条历史记录；解压成功自动「拍平」同名外壳目录；
+          同名冲突 4 种策略（自动重命名 / 覆盖 / 跳过 / 保留较新）；权限异常可一键生成<b>脱敏诊断报告</b>。
         </div>
       </div>
     </div>
@@ -1187,23 +1298,23 @@ footer .fl a:hover {
     <!-- 运维与命令行小贴士 -->
     <div style="margin-top:20px;">
       <div class="card">
-        <h3 style="margin-bottom:12px;">🛠️ 高级排查与运维命令</h3>
+        <h3 style="margin-bottom:12px;"><svg style="width:18px;height:18px;vertical-align:-3px;"><use href="#i-wrench"/></svg> 高级排查与运维命令</h3>
         <p>若需要通过 SSH 终端排查应用运行状态或执行打包，可使用以下常用命令：</p>
 
         <div style="display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));">
           <div>
             <div style="font-size:13px;font-weight:600;margin-bottom:4px;color:#c9d8ff;">查看后台解压 Worker 进程</div>
-            <div class="codeblock cmd" data-copy="ps aux | grep 'chzip/worker' | grep -v grep">
-              <div class="cbhead"><span class="cblang">bash</span><button class="copy" type="button">复制</button></div>
-              <pre><code>ps aux | grep 'chzip/worker' | grep -v grep</code></pre>
+            <div class="codeblock cmd">
+              <div class="cbhead"><span class="cblang">bash</span><button class="copy" type="button" data-copy="ps aux | grep 'api.js --worker' | grep -v grep">复制</button></div>
+              <pre><code>ps aux | grep 'api.js --worker' | grep -v grep</code></pre>
             </div>
           </div>
 
           <div>
             <div style="font-size:13px;font-weight:600;margin-bottom:4px;color:#c9d8ff;">查看应用诊断日志</div>
-            <div class="codeblock cmd" data-copy="cat /var/apps/CHzip/data/logs/*.log 2>/dev/null || echo '暂无日志'">
-              <div class="cbhead"><span class="cblang">bash</span><button class="copy" type="button">复制</button></div>
-              <pre><code>cat /var/apps/CHzip/data/logs/*.log 2>/dev/null</code></pre>
+            <div class="codeblock cmd">
+              <div class="cbhead"><span class="cblang">bash</span><button class="copy" type="button" data-copy="tail -100 /var/apps/CHzip/data/logs/chzip.log 2>/dev/null">复制</button></div>
+              <pre><code>tail -100 /var/apps/CHzip/data/logs/chzip.log 2>/dev/null</code></pre>
             </div>
           </div>
         </div>
@@ -1298,7 +1409,7 @@ footer .fl a:hover {
   <!-- 部署与权限提示 -->
   <section>
     <div class="note info">
-      <span class="ni">💡</span>
+      <span class="ni"><svg><use href="#i-bulb"/></svg></span>
       <div class="nt">
         <b>纯静态托管提示：</b>本页面所有资源（样式、图标、图片、安装包）全部自包含于当前目录。
         你可以将其直接放入飞牛 NAS 的 WebStation、Nginx、Docker 容器或 GitHub Pages 中，开箱即用。
@@ -1306,7 +1417,7 @@ footer .fl a:hover {
     </div>
 
     <div class="note">
-      <span class="ni">⚠️</span>
+      <span class="ni"><svg><use href="#i-warn"/></svg></span>
       <div class="nt">
         <b>初次使用权限避坑说明：</b>飞牛系统具有严格的应用隔离沙盒机制。
         如果右键打开压缩包时提示“权限不足”或“无法找到文件”，请务必前往飞牛「应用设置」为 CHzip 分配相应共享文件夹的<b>读写权限</b>。
@@ -1323,53 +1434,38 @@ footer .fl a:hover {
 
     <div class="faq-list">
       <div class="faq-item open">
-        <div class="faq-q">
-          <span>解压分卷压缩包时需要选择哪个文件？</span>
-          <span class="arrow">▾</span>
-        </div>
-        <div class="faq-a">
+        <button type="button" class="faq-q" id="faq-q-1" aria-expanded="true" aria-controls="faq-a-1"><span>解压分卷压缩包时需要选择哪个文件？</span><span class="arrow" aria-hidden="true">▾</span></button>
+        <div class="faq-a" id="faq-a-1">
           只需在文件管理器中右键选中<b>第一个分卷</b>（例如 <code>xxx.part1.rar</code>、<code>xxx.7z.001</code>、<code>xxx.zip.001</code> 或 <code>xxx.001</code>）并选择使用 CHzip 打开即可。
           CHzip 会自动扫描同目录下匹配的后续所有分卷并无缝拼接解压。如检测到缺失某一分卷，界面会给出清晰友好的提示。
         </div>
       </div>
 
       <div class="faq-item">
-        <div class="faq-q">
-          <span>提示“无法读取文件”或解压时报权限错误怎么办？</span>
-          <span class="arrow">▾</span>
-        </div>
-        <div class="faq-a">
+        <button type="button" class="faq-q" id="faq-q-2" aria-expanded="false" aria-controls="faq-a-2"><span>提示“无法读取文件”或解压时报权限错误怎么办？</span><span class="arrow" aria-hidden="true">▾</span></button>
+        <div class="faq-a" id="faq-a-2">
           飞牛 fnOS 采用了严密的权限白名单保护。在飞牛桌面的「控制面板」或「应用中心」→「已安装应用」找到「CHzip」，点击「应用权限」并勾选你保存压缩包和解压输出目录的共享文件夹读写权限即可。
         </div>
       </div>
 
       <div class="faq-item">
-        <div class="faq-q">
-          <span>遇到老 Windows 压缩包解压后文件名乱码怎么处理？</span>
-          <span class="arrow">▾</span>
-        </div>
-        <div class="faq-a">
-          在 CHzip 解压界面中点击「高级选项」，将默认的字符编码由「UTF-8」切换为「GBK / CP936」（常见于早期 Windows 简中环境）或「Big5」（繁体），文件树中的文件名将实时转为正确中文，解压后也不会再出现乱码。
+        <button type="button" class="faq-q" id="faq-q-3" aria-expanded="false" aria-controls="faq-a-3"><span>遇到老 Windows 压缩包解压后文件名乱码怎么处理？</span><span class="arrow" aria-hidden="true">▾</span></button>
+        <div class="faq-a" id="faq-a-3">
+          在 CHzip 解压界面中找到「代码页」下拉框，将默认的「UTF-8 / 自动」切换为「简体中文 GBK」（常见于早期 Windows 简中环境）或「繁体中文 Big5」，文件树中的文件名将实时转为正确中文，解压后也不会再出现乱码。界面检测到疑似乱码文件名时还会自动弹出切换建议横幅，一键即可换码页。
         </div>
       </div>
 
       <div class="faq-item">
-        <div class="faq-q">
-          <span>解压带密码的压缩包安全吗？密码会不会泄露？</span>
-          <span class="arrow">▾</span>
-        </div>
-        <div class="faq-a">
+        <button type="button" class="faq-q" id="faq-q-4" aria-expanded="false" aria-controls="faq-a-4"><span>解压带密码的压缩包安全吗？密码会不会泄露？</span><span class="arrow" aria-hidden="true">▾</span></button>
+        <div class="faq-a" id="faq-a-4">
           非常安全。CHzip 运行在你的私有 NAS 本地，无任何云端上报。临时解压密码仅在解压进程启动时生成临时密文管道，解压结束后立即执行多次随机覆写彻底抹除，杜绝文件恢复与内存泄漏。
         </div>
       </div>
 
       <div class="faq-item">
-        <div class="faq-q">
-          <span>解压大文件时关闭浏览器窗口会中断吗？</span>
-          <span class="arrow">▾</span>
-        </div>
-        <div class="faq-a">
-          不会。CHzip 采用独立的后台后台守护进程（Detached Worker）。一旦触发解压，即便你关闭电脑或浏览器标签页，NAS 后台仍会继续执行解压，再次打开页面即可续看当前进度或查看完成结果。
+        <button type="button" class="faq-q" id="faq-q-5" aria-expanded="false" aria-controls="faq-a-5"><span>解压大文件时关闭浏览器窗口会中断吗？</span><span class="arrow" aria-hidden="true">▾</span></button>
+        <div class="faq-a" id="faq-a-5">
+          不会。CHzip 采用独立的后台守护进程（Detached Worker）。一旦触发解压，即便你关闭电脑或浏览器标签页，NAS 后台仍会继续执行解压，再次打开页面即可续看当前进度或查看完成结果。
         </div>
       </div>
     </div>
@@ -1381,20 +1477,21 @@ footer .fl a:hover {
       <a href="https://github.com/chanhuan1/CHzip" target="_blank" rel="noopener">GitHub 仓库</a>
       <a href="https://github.com/chanhuan1/CHzip/releases" target="_blank" rel="noopener">Release 下载</a>
       <a href="https://github.com/chanhuan1/CHzip/issues" target="_blank" rel="noopener">问题反馈 (Issue)</a>
+      <a href="https://github.com/chanhuan1/CHzip/blob/main/LICENSE" target="_blank" rel="noopener">GPL-3.0 许可</a>
       <a href="dist/CHzip_4.0_x86_64.fpk" download>x86_64 安装包</a>
       <a href="dist/CHzip_4.0_arm64.fpk" download>arm64 安装包</a>
       <a href="dist/SHA256SUMS.txt" target="_blank">SHA256 校验清单</a>
     </div>
     <div>
-      CHzip <span class="mono">v4.0</span> · 面向飞牛私有云（fnOS）原生设计的专业解压套件 · 纯原生零第三方依赖
+      CHzip <span class="mono">v<span data-ver>4.0</span></span> · 面向飞牛私有云（fnOS）原生设计的专业解压套件 · 纯原生零第三方依赖
     </div>
   </footer>
 
 </div>
 
 <!-- 图片灯箱 (Modal Lightbox) -->
-<div class="lightbox" id="lightbox">
-  <div class="lightbox-close" id="lightboxClose">&times;</div>
+<div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="图片预览">
+  <button type="button" class="lightbox-close" id="lightboxClose" aria-label="关闭预览">&times;</button>
   <img id="lightboxImg" src="" alt="放大预览">
 </div>
 
@@ -1423,42 +1520,121 @@ for (const btn of document.querySelectorAll('[data-copy]')) {
   });
 }
 
-// 2. 界面实测展示图片切换与灯箱交互
-const tabs = document.querySelectorAll('.gallery-tab');
+// 1.5 版本号统一填充：升版本时只改 changelog 的 version 字段（或 version.json），
+// 页面所有 data-ver 占位由 JS 从同一来源回填，避免 12 处硬编码漂移。
+(() => {
+  const VERSION = '4.0'; // 与 manifest 同步；发版时改这一处 + 下载链接文件名
+  document.querySelectorAll('[data-ver]').forEach((el) => (el.textContent = VERSION));
+})();
+
+// 2. 界面实测展示图片切换、WebP 回退、预加载与灯箱交互
+const tabs = Array.from(document.querySelectorAll('.gallery-tab'));
 const mainImg = document.getElementById('activeGalleryImg');
+const gallerySource = document.getElementById('gallerySource');
 const captionText = document.getElementById('galleryCaptionText');
 const lightbox = document.getElementById('lightbox');
 const lightboxImg = document.getElementById('lightboxImg');
 const lightboxClose = document.getElementById('lightboxClose');
+let lightboxLastFocus = null;
 
-tabs.forEach(tab => {
-  tab.addEventListener('click', () => {
-    tabs.forEach(t => t.classList.remove('active'));
-    tab.classList.add('active');
-    const newSrc = tab.dataset.img;
-    const title = tab.dataset.title;
-    mainImg.src = newSrc;
-    captionText.textContent = title;
+function supportsWebp() {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 1;
+  return canvas.toDataURL('image/webp').startsWith('data:image/webp');
+}
+const WEBP_OK = supportsWebp();
+
+// 相邻 tab 的图提前拉取，切换时不再白屏等待。
+const preloaded = new Set();
+function preloadTab(tab) {
+  const src = WEBP_OK ? tab.dataset.img : tab.dataset.imgFallback;
+  if (!src || preloaded.has(src)) return;
+  preloaded.add(src);
+  const im = new Image();
+  im.src = src;
+}
+
+function activateTab(tab, focus = false) {
+  tabs.forEach((t) => {
+    const active = t === tab;
+    t.classList.toggle('active', active);
+    t.setAttribute('aria-selected', String(active));
+    t.tabIndex = active ? 0 : -1;
+  });
+  const newSrc = WEBP_OK ? tab.dataset.img : tab.dataset.imgFallback;
+  const title = tab.dataset.title;
+  if (WEBP_OK && gallerySource) {
+    gallerySource.srcset = newSrc;
+  } else if (gallerySource) {
+    // 不支持 WebP 时移除 source，让 <img src>（PNG 回退）生效。
+    gallerySource.remove();
+  }
+  mainImg.src = newSrc;
+  mainImg.alt = `CHzip 界面截图：${title.split(' —— ')[0]}`;
+  captionText.textContent = title;
+  if (focus) tab.focus();
+  // 预加载左右邻居
+  const idx = tabs.indexOf(tab);
+  preloadTab(tabs[(idx + 1) % tabs.length]);
+  preloadTab(tabs[(idx - 1 + tabs.length) % tabs.length]);
+}
+
+tabs.forEach((tab, idx) => {
+  tab.addEventListener('click', () => activateTab(tab));
+  tab.addEventListener('keydown', (e) => {
+    let target = null;
+    if (e.key === 'ArrowRight') target = tabs[(idx + 1) % tabs.length];
+    if (e.key === 'ArrowLeft') target = tabs[(idx - 1 + tabs.length) % tabs.length];
+    if (e.key === 'Home') target = tabs[0];
+    if (e.key === 'End') target = tabs[tabs.length - 1];
+    if (target) {
+      e.preventDefault();
+      activateTab(target, true);
+    }
   });
 });
+// 初始：预加载第 2 张
+if (tabs.length > 1) preloadTab(tabs[1]);
 
-mainImg.addEventListener('click', () => {
-  lightboxImg.src = mainImg.src;
+function openLightbox() {
+  lightboxImg.src = mainImg.currentSrc || mainImg.src;
+  lightboxImg.alt = mainImg.alt;
   lightbox.classList.add('open');
-});
+  lightboxLastFocus = document.activeElement;
+  lightboxClose.focus();
+}
 
-lightboxClose.addEventListener('click', () => {
+function closeLightbox() {
   lightbox.classList.remove('open');
-});
-lightbox.addEventListener('click', (e) => {
-  if (e.target === lightbox) lightbox.classList.remove('open');
+  if (lightboxLastFocus && typeof lightboxLastFocus.focus === 'function') {
+    lightboxLastFocus.focus();
+  }
+}
+
+mainImg.addEventListener('click', openLightbox);
+mainImg.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault();
+    openLightbox();
+  }
 });
 
-// 3. FAQ 手风琴展开与收起
-document.querySelectorAll('.faq-item .faq-q').forEach(q => {
+lightboxClose.addEventListener('click', closeLightbox);
+lightbox.addEventListener('click', (e) => {
+  if (e.target === lightbox) closeLightbox();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && lightbox.classList.contains('open')) {
+    closeLightbox();
+  }
+});
+
+// 3. FAQ 手风琴展开与收起（button + aria-expanded）
+document.querySelectorAll('.faq-q').forEach((q) => {
   q.addEventListener('click', () => {
-    const item = q.parentElement;
-    item.classList.toggle('open');
+    const item = q.closest('.faq-item');
+    const open = item.classList.toggle('open');
+    q.setAttribute('aria-expanded', String(open));
   });
 });
 
@@ -1485,7 +1661,7 @@ document.querySelectorAll('.faq-item .faq-q').forEach(q => {
       {
         version: "v3.9",
         date: "2026-09-24",
-        kind: "add",
+        kind: "fix",
         items: [
           "包内图片缩略图墙：免解压快速浏览压缩包内所有图片，支持瀑布流排布与大图预览",
           "PDF 格式免解压直读：内置流式渲染器，无需解压直接查看包内文档",
@@ -1562,12 +1738,19 @@ document.querySelectorAll('.faq-item .faq-q').forEach(q => {
 
   // 1. 立即渲染内置数据，无论本地双击直接打开还是静态托管均完美呈现
   render(defaultData);
+  // 同步 data-ver 版本号来源
+  document.querySelectorAll('[data-ver]').forEach((el) => (el.textContent = defaultData.version));
 
   // 2. 若在 HTTP/HTTPS 环境下，尝试请求静态文件获取最新数据
   if (location.protocol.startsWith('http')) {
     fetch('version.json', { cache: 'no-store' })
       .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d && d.changelog) render(d); })
+      .then(d => {
+        if (d && d.changelog) {
+          render(d);
+          document.querySelectorAll('[data-ver]').forEach((el) => (el.textContent = d.version));
+        }
+      })
       .catch(() => {});
   }
 })();
