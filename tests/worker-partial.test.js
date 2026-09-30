@@ -10,7 +10,10 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 
-const { runWorker } = require("../app/server/lib/worker");
+const {
+  runWorker,
+  uniqueRescuePath,
+} = require("../app/server/lib/worker");
 
 const JOB_ID = "p".repeat(32);
 const DATA_DIR = "/nonexistent/jobs/p.d";
@@ -173,3 +176,22 @@ test("success terminal does not write partialSuccess", async () => {
   assert.equal(result.status, "success");
   assert.equal(result.partialSuccess, false, "success 终态不得有 partialSuccess=true");
 });
+
+test("uniqueRescuePath confines rescued file inside outputDir", () => {
+  const runtimeRoot = makeRuntime();
+  const outputDir = path.join(runtimeRoot, "out");
+  fs.mkdirSync(outputDir, { recursive: true });
+
+  const safePath = uniqueRescuePath(outputDir, "sub/normal.txt");
+  assert.ok(safePath.startsWith(outputDir), "正常路径应当位于 outputDir 内");
+
+  assert.throws(
+    () => uniqueRescuePath(outputDir, "../escape.txt"),
+    /救援路径超出目标目录|救援文件超出目标目录/,
+  );
+  assert.throws(
+    () => uniqueRescuePath(outputDir, "sub/../../escape.txt"),
+    /救援路径超出目标目录|救援文件超出目标目录/,
+  );
+});
+

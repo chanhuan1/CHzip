@@ -11,6 +11,7 @@ const {
 } = require("./engine");
 const { LIMITS, PERMISSIONS, TIMEOUTS } = require("./constants");
 const { JobStore } = require("./jobs");
+const { isPathInside } = require("./paths");
 const { createTechnicalListValidator } = require("./preview");
 const {
   buildExtractArgs,
@@ -353,15 +354,24 @@ function internalPathFromTarget(target, outputDir) {
 function uniqueRescuePath(outputDir, internal) {
   const parsed = path.parse(internal);
   const dir = path.join(outputDir, parsed.dir);
+  if (!isPathInside(outputDir, dir)) {
+    throw new Error("救援路径超出目标目录");
+  }
   fs.mkdirSync(dir, { recursive: true, mode: PERMISSIONS.MODE_DIR_OUTPUT });
   let base = truncateUtf8Name(parsed.base, 230);
   let candidate = path.join(dir, base);
+  if (!isPathInside(outputDir, candidate)) {
+    throw new Error("救援文件超出目标目录");
+  }
   let index = 2;
   while (fs.existsSync(candidate)) {
     const dot = base.lastIndexOf(".");
     const stem = dot > 0 ? base.slice(0, dot) : base;
     const ext = dot > 0 ? base.slice(dot) : "";
     candidate = path.join(dir, `${stem} (${index})${ext}`);
+    if (!isPathInside(outputDir, candidate)) {
+      throw new Error("救援文件超出目标目录");
+    }
     index += 1;
   }
   return candidate;
@@ -1034,9 +1044,12 @@ module.exports = {
   defaultValidateListing,
   extractTestFailures,
   flattenSingleRootDirectory,
-  removeSourceArchive,
+  internalPathFromTarget,
   markStartupFailure,
   registerProcessGroup,
+  removeSourceArchive,
+  rescueTooLongNameFiles,
   runWorker,
+  uniqueRescuePath,
   wrapTestError,
 };

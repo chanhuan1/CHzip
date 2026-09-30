@@ -32,6 +32,7 @@ const {
 const {
   detectTechnicalListFormat,
   detectTechnicalListProperties,
+  normalizeEntryPath,
   parseTechnicalList,
 } = require("./preview");
 const {
@@ -838,10 +839,11 @@ function createServices(options = {}) {
 
   async function previewFile(input) {
     const archive = info(input);
-    const targetPath = input.targetPath;
-    if (!targetPath) {
+    const rawTargetPath = input.targetPath;
+    if (!rawTargetPath) {
       throw new Error("未指定预览文件路径");
     }
+    const targetPath = normalizeEntryPath(rawTargetPath);
     const previewDir = fs.mkdtempSync(path.join(runtimeRoot, "preview-"));
     const selectionFile = path.join(previewDir, "selection.txt");
     fs.writeFileSync(selectionFile, targetPath, { encoding: "utf8", mode: 0o600 });

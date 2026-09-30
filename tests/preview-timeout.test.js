@@ -241,3 +241,18 @@ test("runSevenZipSync returns raw bytes when encoding is null", () => {
   // 日志只用于错误分类，必须始终是可读文本，不能跟着变成 Buffer。
   assert.equal(typeof result.log, "string");
 });
+
+test("previewFile rejects unsafe targetPath (path traversal protection)", async () => {
+  const tool = writeFakeTool("echo.sh", "printf 'ok'");
+  const archivePath = writeArchive();
+  const services = createPreviewServices(tool);
+
+  for (const malicious of ["../etc/passwd", "foo/../../etc/passwd", "/etc/shadow", "C:\\Windows\\win.ini", "file\0.txt"]) {
+    await assert.rejects(
+      () => services.previewFile({ path: archivePath, targetPath: malicious }),
+      /不安全/,
+      `应拦截不安全路径: ${malicious}`,
+    );
+  }
+});
+
