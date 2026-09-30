@@ -15,6 +15,10 @@
 
 **⭐ 觉得好用就点个 Star，是对作者最大的支持！**
 
+[![📖 在线图文介绍与下载页](https://img.shields.io/badge/📖_在线图文介绍与下载页-chanhuan.dpdns.org-2786dc?style=for-the-badge)](https://chanhuan.dpdns.org/)
+
+> 💡 **新手推荐**：访问 [**chanhuan.dpdns.org**](https://chanhuan.dpdns.org/) 查看图文版介绍页 —— 界面实测截图、双架构下载中心、安装避坑指南与常见问题，一站式更快上手。
+
 在文件管理器里选中压缩包 → **右键 → 使用 CHzip 打开** → 点「开始解压」。
 
 </div>
@@ -58,6 +62,8 @@
 3. 预览目录 → 选择目标路径 → 点「开始解压」。
 
 > **权限提示**：请在 fnOS「应用设置」给 CHzip 授予源文件与目标共享目录的**读写**权限。
+>
+> 📖 更多图文细节（界面实测、分卷与乱码处理、FAQ）见在线介绍页：[https://chanhuan.dpdns.org/](https://chanhuan.dpdns.org/)
 
 ## ⭐ Star 统计
 
