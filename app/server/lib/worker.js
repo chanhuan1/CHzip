@@ -562,11 +562,19 @@ function cancellationError() {
 function removeSourceArchive(job, options = {}) {
   const fsModule = options.fsModule || fs;
   const result = { deletedCount: 0, deleteNote: "" };
-  // 防守性拦截：非解压任务（如 test 体检）、或选择性解压（只解压部分文件时），严禁删除源压缩包！
-  const isSelective = Array.isArray(job?.selection)
-    ? job.selection.length > 0
-    : Boolean(job?.selection);
-  if (!job || !job.deleteSource || isSelective || job.kind === "test") {
+  // selection 是压缩格式元数据；选择性解压由 selectionFile 表示，也允许用户明确删源。
+  if (!job || !job.deleteSource || (job.kind || "extract") !== "extract") {
+    return result;
+  }
+  // 删除前按路径复核全部源卷，不能仅检查打开的 fd（路径可能已被替换）。
+  if (!Array.isArray(job.sourceFingerprint) || !job.sourceFingerprint.length) {
+    result.deleteNote = "缺少源文件校验信息，未自动删除源压缩包";
+    return result;
+  }
+  try {
+    verifyFingerprints(job.sourceFingerprint, undefined, { fsModule });
+  } catch (error) {
+    result.deleteNote = "源压缩包或分卷已变化或无法访问，未自动删除";
     return result;
   }
   const targets = new Set();
@@ -926,12 +934,12 @@ async function runWorker(jobId, options = {}) {
     // flattenNote）并入同一次 store.update。flatten 内部失败已在其自带
     // try/catch 里吞掉，这里拿到的只是 {flattened:false}，不影响终态本身。
     const flattenResult = flattenSingleRootDirectory(job, { fsModule: fs });
-    // 删除源压缩包（如果勾选且解压成功）
-    const deleteSourceResult = removeSourceArchive(job, { fsModule: fs });
     store.update(jobId, (current) => {
       if (current.status === "cancelling" || current.cancelRequestedAt) {
         throw cancellationError();
       }
+      // 和成功终态共用任务锁，避免取消请求已落盘后仍然删除源文件。
+      const deleteSourceResult = removeSourceArchive(current, { fsModule: fs });
       return {
         ...current,
         status: "success",

@@ -8,7 +8,7 @@ const path = require("node:path");
 
 const { classifyArchive } = require("../app/server/lib/archive");
 const { removeSourceArchive } = require("../app/server/lib/worker");
-const { createServices } = require("../app/server/lib/services");
+const { fingerprintFiles } = require("../app/server/lib/source");
 const { routeRequest } = require("../app/server/api");
 
 // ------------------------------------------------------------ 1. 扩展格式
@@ -29,8 +29,9 @@ test("removeSourceArchive deletes single source file", () => {
 
   const job = {
     deleteSource: true,
+    selection: classifyArchive(archivePath),
     archivePath,
-    sourceFingerprint: [{ path: archivePath }],
+    sourceFingerprint: fingerprintFiles([archivePath]),
   };
   const result = removeSourceArchive(job);
   assert.equal(result.deletedCount, 1);
@@ -48,8 +49,9 @@ test("removeSourceArchive deletes all split volumes", () => {
 
   const job = {
     deleteSource: true,
+    selection: classifyArchive(part1),
     archivePath: part1,
-    sourceFingerprint: [{ path: part1 }, { path: part2 }],
+    sourceFingerprint: fingerprintFiles([part1, part2]),
   };
   const result = removeSourceArchive(job);
   assert.equal(result.deletedCount, 2);
@@ -75,20 +77,21 @@ test("removeSourceArchive is a no-op when deleteSource is false or not set", () 
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
-test("removeSourceArchive refuses to delete source when selective extraction is used", () => {
+test("removeSourceArchive honors explicit deletion for selective extraction", () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "chzip-del-test-"));
   const archivePath = path.join(tmp, "test.zip");
   fs.writeFileSync(archivePath, "fake");
 
   const job = {
     deleteSource: true,
-    selection: ["file1.txt"],
+    selection: classifyArchive(archivePath),
+    selectionFile: path.join(tmp, "selection.txt"),
     archivePath,
-    sourceFingerprint: [{ path: archivePath }],
+    sourceFingerprint: fingerprintFiles([archivePath]),
   };
   const result = removeSourceArchive(job);
-  assert.equal(result.deletedCount, 0);
-  assert.equal(fs.existsSync(archivePath), true, "部分选择性解压时严禁删除源压缩包");
+  assert.equal(result.deletedCount, 1);
+  assert.equal(fs.existsSync(archivePath), false);
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 

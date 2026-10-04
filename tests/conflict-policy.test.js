@@ -301,8 +301,8 @@ test("F1 ui startExtract posts conflictPolicy from the settings select", async (
     pollTimer: null,
     etaTracker: null,
     previewLimited: false,
-    selectedPaths: new Set(),
-    allFilePaths: [],
+    selectedPaths: new Set(["keep.txt"]),
+    allFilePaths: ["keep.txt", "omit.txt"],
     filePath: "/data/a.zip",
     selectedDirectory: "/data",
     elements: {
@@ -310,6 +310,7 @@ test("F1 ui startExtract posts conflictPolicy from the settings select", async (
       passwordInput: { value: "" },
       codePageSelect: { value: "auto" },
       conflictPolicySelect: { value: "skip" },
+      deleteSourceInput: { checked: true },
       outputPreview: { textContent: "" },
       notice: { className: "", textContent: "" },
       progressFill: { style: {}, classList: classList() },
@@ -341,4 +342,6 @@ test("F1 ui startExtract posts conflictPolicy from the settings select", async (
   assert.ok(extractPost, "应发出 extract 请求");
   assert.equal(extractPost.body.conflictPolicy, "skip");
   assert.equal(extractPost.body.codePage, "auto");
+  assert.equal(extractPost.body.deleteSource, true);
+  assert.deepEqual(extractPost.body.selectedPaths, ["keep.txt"]);
 });

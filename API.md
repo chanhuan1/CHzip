@@ -251,7 +251,7 @@ Starts an asynchronous extraction job.
 - `conflictPolicy` (string, optional): Overwrite policy (`rename`, `overwrite`, `skip`, `keepnew`, default `rename`)
 - `destinationRoot` (string, required): Output directory root
 - `selectedPaths` (string[], optional): Specific files to extract (null = all)
-- `deleteSource` (boolean, optional): Whether to delete source archive upon successful extraction (default false)
+- `deleteSource` (boolean, optional): Whether to delete the source archive (all volumes for split archives) after all selected files extract successfully (default false). Also supported with `selectedPaths`; unselected files will not be retained. Failed or cancelled tasks never delete the source.
 
 **Response**:
 ```json

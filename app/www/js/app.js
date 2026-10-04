@@ -730,12 +730,11 @@
                 && state.selectedPaths.size > 0
                 && state.selectedPaths.size < state.allFilePaths.length
             );
-            els.deleteSourceInput.disabled = state.running || state.previewing || isPartialSelection;
+            els.deleteSourceInput.disabled = state.running || state.previewing;
             if (isPartialSelection) {
-                els.deleteSourceInput.checked = false;
-                els.deleteSourceInput.parentElement?.setAttribute("title", "仅在完整解压全部文件时支持自动删除源文件");
+                els.deleteSourceInput.parentElement?.setAttribute("title", "所选文件解压成功后删除整个源压缩包（分卷则删除全部卷）；未勾选文件不会保留");
             } else {
-                els.deleteSourceInput.parentElement?.setAttribute("title", "解压全部成功后自动清理源压缩包文件（若为分卷则清理全部卷）");
+                els.deleteSourceInput.parentElement?.setAttribute("title", "所选文件解压成功后自动清理源压缩包文件（若为分卷则清理全部卷）");
             }
         }
         els.openPasswordManagerBtn.disabled = state.running || state.previewing || !state.info;
