@@ -230,6 +230,36 @@ h1 {
   font-weight: 600;
 }
 
+.download-stats {
+  margin: -14px 0 24px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+  font-size: 13px;
+  color: var(--dim);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 18px;
+}
+.download-stats svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  vertical-align: -2px;
+}
+.download-stats strong {
+  color: #c9d8ff;
+  font-weight: 600;
+}
+.download-stats .stat-sep {
+  color: var(--line-bright);
+}
+.download-stats.is-loading {
+  opacity: 0.75;
+}
+
 /* 通用区块 */
 section {
   padding: 38px 0;
@@ -1052,6 +1082,12 @@ footer .fl a:hover {
         Intel / AMD（Celeron、N100、i3/i5/i7 等）→ 选 <b>x86_64</b>；树莓派 4/5、RK3588、飞腾等 ARM 芯片 → 选 <b>arm64</b>。
       </div>
     </div>
+    <div class="download-stats is-loading" id="downloadStats" role="status" aria-live="polite">
+      <span><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5v8.9M4.6 7.2 8 10.6l3.4-3.4M2.5 12.5h11" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg> <strong data-download-total>--</strong> 次 GitHub Release 下载</span>
+      <span class="stat-sep">·</span>
+      <span>v4.1 x86_64 <strong data-download-x86>--</strong> 次</span>
+      <span>v4.1 arm64 <strong data-download-arm>--</strong> 次</span>
+    </div>
     <div class="grid">
 
       <!-- x86_64 -->
@@ -1517,6 +1553,60 @@ for (const btn of document.querySelectorAll('[data-copy]')) {
 (() => {
   const VERSION = '4.1'; // 与 manifest 同步；发版时改这一处 + 下载链接文件名
   document.querySelectorAll('[data-ver]').forEach((el) => (el.textContent = VERSION));
+})();
+
+// 1.6 下载次数：统计 GitHub Releases 中全部 .fpk 资产的下载量。
+// 页面主下载按钮虽然指向站内静态文件，但 Release 下载量是唯一无需后端、
+// 可公开审计且随版本累计的统计源；显示为“GitHub Release 下载”，避免夸大。
+(() => {
+  const box = document.getElementById('downloadStats');
+  if (!box || !location.protocol.startsWith('http')) return;
+
+  const formatCount = value => Number(value || 0).toLocaleString('zh-CN');
+  const setCounts = (total, x86, arm) => {
+    const totalEl = box.querySelector('[data-download-total]');
+    const x86El = box.querySelector('[data-download-x86]');
+    const armEl = box.querySelector('[data-download-arm]');
+    if (totalEl) totalEl.textContent = formatCount(total);
+    if (x86El) x86El.textContent = formatCount(x86);
+    if (armEl) armEl.textContent = formatCount(arm);
+    box.classList.remove('is-loading');
+  };
+
+  fetch('https://api.github.com/repos/chanhuan1/CHzip/releases?per_page=100', {
+    headers: { Accept: 'application/vnd.github+json' },
+    cache: 'no-store',
+  })
+    .then(response => (response.ok ? response.json() : null))
+    .then(releases => {
+      if (!Array.isArray(releases)) throw new Error('invalid release data');
+      let total = 0;
+      let x86 = 0;
+      let arm = 0;
+      for (const release of releases) {
+        for (const asset of release.assets || []) {
+          if (/\.fpk$/i.test(asset.name || '')) {
+            total += Number(asset.download_count || 0);
+            if (release.tag_name === 'v4.1' && asset.name === 'CHzip_4.1_x86_64.fpk') {
+              x86 += Number(asset.download_count || 0);
+            }
+            if (release.tag_name === 'v4.1' && asset.name === 'CHzip_4.1_arm64.fpk') {
+              arm += Number(asset.download_count || 0);
+            }
+          }
+        }
+      }
+      setCounts(total, x86, arm);
+    })
+    .catch(() => {
+      const totalEl = box.querySelector('[data-download-total]');
+      if (totalEl) totalEl.textContent = '暂不可用';
+      const x86El = box.querySelector('[data-download-x86]');
+      const armEl = box.querySelector('[data-download-arm]');
+      if (x86El) x86El.textContent = '--';
+      if (armEl) armEl.textContent = '--';
+      box.classList.remove('is-loading');
+    });
 })();
 
 // 2. 界面实测展示图片切换、WebP 回退、预加载与灯箱交互
