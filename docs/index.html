@@ -230,36 +230,6 @@ h1 {
   font-weight: 600;
 }
 
-.download-stats {
-  margin: -14px 0 24px;
-  padding: 10px 14px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.035);
-  font-size: 13px;
-  color: var(--dim);
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 18px;
-}
-.download-stats svg {
-  width: 15px;
-  height: 15px;
-  flex: 0 0 auto;
-  vertical-align: -2px;
-}
-.download-stats strong {
-  color: #c9d8ff;
-  font-weight: 600;
-}
-.download-stats .stat-sep {
-  color: var(--line-bright);
-}
-.download-stats.is-loading {
-  opacity: 0.75;
-}
-
 /* 通用区块 */
 section {
   padding: 38px 0;
@@ -969,6 +939,33 @@ footer .fl a {
 footer .fl a:hover {
   color: #fff;
 }
+.footer-stats {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 0 0 18px;
+  font-size: 12.5px;
+  color: #7686ad;
+}
+.footer-stats svg {
+  width: 14px;
+  height: 14px;
+  color: #8da2ce;
+  flex: 0 0 auto;
+}
+.footer-stats strong {
+  color: #a8b9e2;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.footer-stats .stat-sep {
+  color: rgba(120, 150, 220, 0.42);
+}
+.footer-stats.is-loading {
+  opacity: 0.7;
+}
 
 @media (max-width: 768px) {
   header { padding: 42px 0 28px; }
@@ -1081,12 +1078,6 @@ footer .fl a:hover {
         <b>不确定选哪个架构？</b>登录飞牛 fnOS 桌面 →「控制面板」→「系统信息」查看处理器：
         Intel / AMD（Celeron、N100、i3/i5/i7 等）→ 选 <b>x86_64</b>；树莓派 4/5、RK3588、飞腾等 ARM 芯片 → 选 <b>arm64</b>。
       </div>
-    </div>
-    <div class="download-stats is-loading" id="downloadStats" role="status" aria-live="polite">
-      <span><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5v8.9M4.6 7.2 8 10.6l3.4-3.4M2.5 12.5h11" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg> <strong data-download-total>--</strong> 次 GitHub Release 下载</span>
-      <span class="stat-sep">·</span>
-      <span>v4.1 x86_64 <strong data-download-x86>--</strong> 次</span>
-      <span>v4.1 arm64 <strong data-download-arm>--</strong> 次</span>
     </div>
     <div class="grid">
 
@@ -1512,6 +1503,13 @@ footer .fl a:hover {
     </div>
     <div>
       CHzip <span class="mono">v<span data-ver>4.1</span></span> · 面向飞牛私有云（fnOS）原生设计的专业解压套件 · 纯原生零第三方依赖
+    </div>
+    <div class="footer-stats is-loading" id="downloadStats" role="status" aria-live="polite">
+      <span><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5v8.9M4.6 7.2 8 10.6l3.4-3.4M2.5 12.5h11" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg> <strong data-download-total>--</strong> 次 GitHub Release 下载</span>
+      <span class="stat-sep">·</span>
+      <span>v4.1 x86_64 <strong data-download-x86>--</strong> 次</span>
+      <span class="stat-sep">·</span>
+      <span>v4.1 arm64 <strong data-download-arm>--</strong> 次</span>
     </div>
   </footer>
 
