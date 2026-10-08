@@ -1,31 +1,87 @@
 #!/bin/bash
+#
+# CHzip - fnOS 智能分卷解压套件
+#
+# 本文件基于 fnOS 应用生命周期模板编写，由 CHzip 项目修改与维护。
+# 模板骨架的著作权归其原作者所有；本文件的修改部分按 CHzip 项目的
+# 许可证条款分发。
+#
+# 本程序是自由软件：你可以依据自由软件基金会发布的
+# GNU 通用公共许可证第 3 版（或更高版本，由你选择）的条款，
+# 再分发和/或修改本程序。
+#
+# 发布本程序是希望它能有用，但不附带任何担保；
+# 甚至不附带适销性或特定用途适用性的默示担保。
+# 详见 GNU 通用公共许可证（仓库根目录 LICENSE 文件）。
+#
+# ---------------------------------------------------------------------------
+# 授权目录快照函数库：cmd/sync_authorized_paths
+#
+# 本文件不单独执行，由 cmd/main 与 install/upgrade/config 三个 callback
+# 以 source（.）方式载入，然后调用其中唯一的对外函数：
+#
+#     sync_authorized_paths   -> 返回 0 成功 / 1 失败
+#
+# 职责：调用后端 sync-authorized-paths.js，把 fnOS 通过环境变量
+# TRIM_DATA_ACCESSIBLE_PATHS / TRIM_DATA_SHARE_PATHS 授予本应用的目录
+# 快照到 $TRIM_PKGVAR/authorized-paths.json，并收紧其属主与权限。
+# 后端在每个请求里会合并「实时环境变量 + 这份快照 + 压缩包所在目录」，
+# 作为输出目录白名单的候选集。
+# ---------------------------------------------------------------------------
 
+# 找出可用的 node 解释器。
+# 优先 fnOS 官方 nodejs_v22 套件的固定路径；找不到则回退到 PATH 中的 node。
+# 找到就 echo 路径（返回 0），找不到 echo 空串（返回 0，由调用方判空）。
+_chzip_resolve_node_bin() {
+    local candidate="/var/apps/nodejs_v22/target/bin/node"
+    if [ -x "${candidate}" ]; then
+        printf '%s\n' "${candidate}"
+        return 0
+    fi
+    command -v node 2>/dev/null || true
+}
+
+# 生成快照日志的存放目录，并把 node 输出追加写入日志。
+# $1 = 日志目录；失败（目录建不出来）返回 1。
+_chzip_prepare_log_dir() {
+    umask 077
+    mkdir -p "$1" 2>/dev/null
+}
+
+# 快照落盘后收紧属主与权限：仅 chzip 用户可读写（0600）。
+# 属主/权限调整失败不视为致命（首次安装时用户可能尚未就绪），静默忽略。
+_chzip_harden_snapshot_perms() {
+    local snapshot="$1"
+    [ -f "${snapshot}" ] || return 0
+    chown chzip:chzip "${snapshot}" 2>/dev/null || true
+    chmod 600 "${snapshot}" 2>/dev/null || true
+    return 0
+}
+
+# 对外入口：同步一次授权目录快照。
+# 任何一步失败都返回 1，由调用方决定是否 `|| true` 容忍。
 sync_authorized_paths() {
+    # 未注入运行目录（例如本机调试）时无事可做，直接成功返回。
     if [ -z "${TRIM_PKGVAR:-}" ]; then
         return 0
     fi
 
     local app_dest="${TRIM_APPDEST:-/var/apps/CHzip/target}"
     local sync_script="${app_dest}/server/sync-authorized-paths.js"
-    local node_bin="/var/apps/nodejs_v22/target/bin/node"
+    local snapshot_file="${TRIM_PKGVAR}/authorized-paths.json"
     local log_dir="${TRIM_PKGVAR}/logs"
     local log_file="${log_dir}/authorization-sync.log"
+    local node_bin
 
-    if [ ! -x "$node_bin" ]; then
-        node_bin="$(command -v node 2>/dev/null || true)"
-    fi
-    if [ -z "$node_bin" ] || [ ! -f "$sync_script" ]; then
+    node_bin="$(_chzip_resolve_node_bin)"
+    # 没有 node 或没有同步脚本都无法继续——这不是错误，安静跳过。
+    if [ -z "${node_bin}" ] || [ ! -f "${sync_script}" ]; then
         return 0
     fi
 
-    umask 077
-    mkdir -p "$log_dir" 2>/dev/null || return 1
-    "$node_bin" "$sync_script" >>"$log_file" 2>&1 || return 1
+    _chzip_prepare_log_dir "${log_dir}" || return 1
+    "${node_bin}" "${sync_script}" >>"${log_file}" 2>&1 || return 1
 
-    if [ -f "${TRIM_PKGVAR}/authorized-paths.json" ]; then
-        chown chzip:chzip \
-            "${TRIM_PKGVAR}/authorized-paths.json" 2>/dev/null || true
-        chmod 600 "${TRIM_PKGVAR}/authorized-paths.json" 2>/dev/null || true
-    fi
+    _chzip_harden_snapshot_perms "${snapshot_file}"
     return 0
 }

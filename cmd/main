@@ -1,23 +1,71 @@
 #!/bin/bash
+#
+# CHzip - fnOS 智能分卷解压套件
+#
+# 本文件基于 fnOS 应用生命周期模板编写，由 CHzip 项目修改与维护。
+# 模板骨架的著作权归其原作者所有；本文件的修改部分按 CHzip 项目的
+# 许可证条款分发。
+#
+# 本程序是自由软件：你可以依据自由软件基金会发布的
+# GNU 通用公共许可证第 3 版（或更高版本，由你选择）的条款，
+# 再分发和/或修改本程序。
+#
+# 发布本程序是希望它能有用，但不附带任何担保；
+# 甚至不附带适销性或特定用途适用性的默示担保。
+# 详见 GNU 通用公共许可证（仓库根目录 LICENSE 文件）。
+#
+# ---------------------------------------------------------------------------
+# fnOS 生命周期主入口：cmd/main <start|stop|status>
+#
+# CHzip 没有常驻守护进程：每个 HTTP 请求由 fnOS WebStation 以 CGI 方式
+# 拉起独立的 node 进程，解压任务由 detached 子进程异步执行。因此这里的
+# 生命周期只做「授权目录快照」这类轻量维护，不启动/停止任何服务。
+#
+# 退出码契约（fnOS 平台约定）：
+#   start  —— 成功 0，失败 1
+#   stop   —— 成功 0，失败 1
+#   status —— 运行中 0，未运行 3
+# ---------------------------------------------------------------------------
 
+set -euo pipefail
+
+# 定位同目录的授权快照函数库（sync_authorized_paths 定义同步函数）。
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
+# shellcheck source=cmd/sync_authorized_paths
 . "${SCRIPT_DIR}/sync_authorized_paths"
 
-case $1 in
-start)
-    # 启动应用的命令，成功返回 0，失败返回 1
+# start：应用「启动」即一次快照授权目录的机会。
+# 无守护进程要拉起，同步成功即视为启动成功。
+do_start() {
     sync_authorized_paths || true
-    exit 0
-    ;;
-stop)
-    # 停止应用的命令，成功返回 0，失败返回 1
-    exit 0
-    ;;
-status)
-    # 检查应用运行状态，运行中返回 0，未运行返回 3
-    exit 0
-    ;;
-*)
-    exit 1
-    ;;
+    return 0
+}
+
+# stop：无守护进程，没有需要停止的对象。
+do_stop() {
+    return 0
+}
+
+# status：无守护进程，按 fnOS 约定返回 0（运行中）。
+# 应用是否可用取决于 CGI 入口与 node 运行时，与常驻进程无关。
+do_status() {
+    return 0
+}
+
+# 分发 fnOS 传入的生命周期子命令；未知子命令按失败处理。
+case "${1:-}" in
+    start)
+        do_start
+        ;;
+    stop)
+        do_stop
+        ;;
+    status)
+        do_status
+        ;;
+    *)
+        exit 1
+        ;;
 esac
+
+exit 0

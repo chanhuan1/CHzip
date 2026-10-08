@@ -1,3 +1,16 @@
+/*
+ * CHzip - fnOS 智能分卷解压套件
+ * Copyright (C) 2026 chanhuan
+ *
+ * 本程序是自由软件：你可以依据自由软件基金会发布的
+ * GNU 通用公共许可证第 3 版（或更高版本，由你选择）的条款，
+ * 再分发和/或修改本程序。
+ *
+ * 发布本程序是希望它能有用，但不附带任何担保；
+ * 甚至不附带适销性或特定用途适用性的默示担保。
+ * 详见 GNU 通用公共许可证（仓库根目录 LICENSE 文件）。
+ */
+
 "use strict";
 
 const fs = require("node:fs");
@@ -8,20 +21,31 @@ const {
   parsePathList,
 } = require("./authorization-paths");
 
-function normalizeForComparison(value) {
+/**
+ * 把路径规整为「可比较形态」：resolve 成绝对路径，
+ * Windows 下统一小写（NTFS 大小写不敏感），POSIX 保持原样。
+ */
+function toComparablePath(value) {
   const normalized = path.resolve(value);
   return process.platform === "win32" ? normalized.toLowerCase() : normalized;
 }
 
+/**
+ * 判断 candidate 是否位于 root 之内（含 root 本身）。
+ * 用 path.relative 而非字符串前缀比较，避免 "/vol1/ab" 被误判在 "/vol1/a" 内。
+ */
 function isPathInside(rootPath, candidatePath) {
-  const root = normalizeForComparison(rootPath);
-  const candidate = normalizeForComparison(candidatePath);
+  const root = toComparablePath(rootPath);
+  const candidate = toComparablePath(candidatePath);
   const relative = path.relative(root, candidate);
   return relative === ""
     || (!relative.startsWith("..") && !path.isAbsolute(relative));
 }
 
-function ensureDirectoryAccess(directoryPath) {
+/**
+ * 断言目标存在、是目录、且应用对其有 读/写/执行 权限，否则抛错。
+ */
+function assertUsableDirectory(directoryPath) {
   const stat = fs.statSync(directoryPath);
   if (!stat.isDirectory()) {
     throw new Error("目标路径不是目录");
@@ -32,7 +56,10 @@ function ensureDirectoryAccess(directoryPath) {
   );
 }
 
-function canAccess(directoryPath, mode) {
+/**
+ * 探测某路径在给定 mode 下是否可访问，返回布尔而不抛错。
+ */
+function probeAccess(directoryPath, mode) {
   try {
     fs.accessSync(directoryPath, mode);
     return true;
@@ -41,9 +68,13 @@ function canAccess(directoryPath, mode) {
   }
 }
 
-// 访问性检查必须用 access(2) 而不是从 stat.mode 推断：fnOS 的共享目录授权
-// 走 ACL，stat.mode 不反映 ACL 授权结果。每子目录 stat+2×access 看似冗余，
-// 但换成 mode 位推断会在 ACL 场景误判——正确性优先于这 2 次 syscall。
+/**
+ * 返回目录的「可浏览 / 可选中（可写）」两项能力。
+ *
+ * 访问性检查必须用 access(2) 而不是从 stat.mode 推断：fnOS 的共享目录授权
+ * 走 ACL，stat.mode 不反映 ACL 授权结果。每子目录 stat+2×access 看似冗余，
+ * 但换成 mode 位推断会在 ACL 场景误判——正确性优先于这 2 次 syscall。
+ */
 function getDirectoryCapabilities(directoryPath) {
   const stat = fs.statSync(directoryPath);
   if (!stat.isDirectory()) {
@@ -53,22 +84,33 @@ function getDirectoryCapabilities(directoryPath) {
     };
   }
   return {
-    canBrowse: canAccess(directoryPath, fs.constants.R_OK | fs.constants.X_OK),
-    canSelect: canAccess(directoryPath, fs.constants.W_OK | fs.constants.X_OK),
+    canBrowse: probeAccess(directoryPath, fs.constants.R_OK | fs.constants.X_OK),
+    canSelect: probeAccess(directoryPath, fs.constants.W_OK | fs.constants.X_OK),
   };
 }
 
-function rootPath(root) {
+/**
+ * 授权根既可以是字符串路径，也可以是 { path } 对象，统一取出路径串。
+ */
+function pathOfRoot(root) {
   return typeof root === "string" ? root : root.path;
 }
 
-function realAuthorizedRoots(roots) {
+/**
+ * 把一组授权根解析为 realpath 后的物理路径数组（符号链接归一）。
+ */
+function resolveRootPaths(roots) {
   return roots.map((root) => {
-    const resolved = fs.realpathSync(rootPath(root));
+    const resolved = fs.realpathSync(pathOfRoot(root));
     return resolved;
   });
 }
 
+/**
+ * 校验并把「用户选定的输出目录」解析为可写的物理路径。
+ * 依次强制：绝对路径 -> 存在且可读写 -> 落在授权共享目录白名单内。
+ * 任何一步失败都抛出中文错误（前端原样展示）。
+ */
 function resolveAuthorizedDirectory(candidatePath, roots) {
   if (!path.isAbsolute(candidatePath)) {
     throw new Error("目录必须使用绝对路径");
@@ -77,14 +119,14 @@ function resolveAuthorizedDirectory(candidatePath, roots) {
   let resolved;
   try {
     resolved = fs.realpathSync(candidatePath);
-    ensureDirectoryAccess(resolved);
+    assertUsableDirectory(resolved);
   } catch (error) {
     throw new Error("目录不存在或应用没有读写权限");
   }
 
   let authorizedRoots;
   try {
-    authorizedRoots = realAuthorizedRoots(roots);
+    authorizedRoots = resolveRootPaths(roots);
   } catch (error) {
     throw new Error("授权共享目录不可用");
   }
@@ -94,6 +136,11 @@ function resolveAuthorizedDirectory(candidatePath, roots) {
   return resolved;
 }
 
+/**
+ * 列出某授权目录的直接子目录（前端目录选择器的数据源）。
+ * 只返回「子目录」、排除符号链接，并为每个子项附带可浏览/可选中能力；
+ * 无任何能力的子目录直接不进树。结果按自然序（数字感知、忽略大小写）排序。
+ */
 function listAuthorizedDirectory(candidatePath, roots) {
   if (!path.isAbsolute(candidatePath)) {
     const error = new Error("目录必须使用绝对路径");
@@ -108,7 +155,7 @@ function listAuthorizedDirectory(candidatePath, roots) {
     error.code = "DIRECTORY_NOT_BROWSABLE";
     throw error;
   }
-  const authorizedRoots = realAuthorizedRoots(roots);
+  const authorizedRoots = resolveRootPaths(roots);
   if (!authorizedRoots.some((root) => isPathInside(root, resolved))) {
     const error = new Error("目标目录不在应用授权的共享目录内");
     error.code = "DIRECTORY_NOT_AUTHORIZED";
@@ -153,6 +200,10 @@ function listAuthorizedDirectory(candidatePath, roots) {
   };
 }
 
+/**
+ * 把压缩包名清洗成「可用的输出目录名主干」：
+ * 替换非法字符、去掉末尾的点与空白，空结果回退为 "archive"。
+ */
 function sanitizeOutputStem(outputStem) {
   const cleaned = String(outputStem || "archive")
     .replace(/[<>:"/\\|?*\x00-\x1F]/g, "_")
@@ -164,8 +215,13 @@ function sanitizeOutputStem(outputStem) {
 const MAX_OUTPUT_DIR_ATTEMPTS = LIMITS.MAX_OUTPUT_DIR_ATTEMPTS;
 const MAX_OUTPUT_DIR_TIMEOUT_MS = 5000;
 
+/**
+ * 在 destinationRoot 下创建「不重名」的输出目录。
+ * 首选 safeStem，冲突则依次追加 " (2)"、" (3)"…；受 maxAttempts 与
+ * timeoutMs 双重限制，超限抛错。mkdir 用独占语义，撞名才重试。
+ */
 function createUniqueOutputDir(destinationRoot, outputStem, options = {}) {
-  ensureDirectoryAccess(destinationRoot);
+  assertUsableDirectory(destinationRoot);
   const safeStem = sanitizeOutputStem(outputStem);
   const maxAttempts = options.maxAttempts || MAX_OUTPUT_DIR_ATTEMPTS;
   const timeoutMs = options.timeoutMs || MAX_OUTPUT_DIR_TIMEOUT_MS;
@@ -242,6 +298,11 @@ function findArchiveAccessibleRoot(archivePath, options = {}) {
   return current;
 }
 
+/**
+ * 汇总当前可用的授权根列表（目录选择器的根节点集合）。
+ * 合并「环境/快照候选」与「压缩包所在可访问根」，逐项 realpath + 能力
+ * 探测后去重，再剔除被更上层可浏览根包含的冗余项，最终按路径排序。
+ */
 function discoverAuthorizedRoots(archivePath, options = {}) {
   const capabilityResolver = options.capabilityResolver
     || getDirectoryCapabilities;
@@ -292,12 +353,19 @@ function discoverAuthorizedRoots(archivePath, options = {}) {
   }));
 }
 
-function directoryError(code, message) {
+/**
+ * 构造一个带错误码的目录操作错误（前端按 code 区分提示文案）。
+ */
+function makeDirectoryError(code, message) {
   const error = new Error(message);
   error.code = code;
   return error;
 }
 
+/**
+ * 校验「新建文件夹名」是否合法：非空、非 . / ..、长度受限、不含路径
+ * 分隔符与控制字符。合法则返回清洗后的名字，否则抛 INVALID_DIRECTORY_NAME。
+ */
 function validateDirectoryName(name) {
   const value = String(name || "").trim();
   if (
@@ -307,28 +375,33 @@ function validateDirectoryName(name) {
     || value.length > LIMITS.MAX_DIRECTORY_NAME_LENGTH
     || /[\/\\\x00-\x1f]/.test(value)
   ) {
-    throw directoryError("INVALID_DIRECTORY_NAME", "文件夹名称无效");
+    throw makeDirectoryError("INVALID_DIRECTORY_NAME", "文件夹名称无效");
   }
   return value;
 }
 
+/**
+ * 在某授权父目录下「新建文件夹」（前端目录选择器的"新建"操作）。
+ * 强制：父目录存在 -> 在白名单内 -> 可写 -> 名字合法 -> 创建成功；
+ * 重名返回 DIRECTORY_EXISTS，其余失败映射为相应错误码。
+ */
 function createAuthorizedDirectory(parentPath, name, roots) {
   let parent;
   try {
     parent = fs.realpathSync(parentPath);
   } catch (cause) {
-    throw directoryError("DIRECTORY_NOT_BROWSABLE", "父目录不存在或无法访问");
+    throw makeDirectoryError("DIRECTORY_NOT_BROWSABLE", "父目录不存在或无法访问");
   }
-  const authorizedRoots = realAuthorizedRoots(roots);
+  const authorizedRoots = resolveRootPaths(roots);
   if (!authorizedRoots.some((root) => isPathInside(root, parent))) {
-    throw directoryError(
+    throw makeDirectoryError(
       "DIRECTORY_NOT_AUTHORIZED",
       "目标目录不在应用授权的共享目录内",
     );
   }
   const capabilities = getDirectoryCapabilities(parent);
   if (!capabilities.canSelect) {
-    throw directoryError("DIRECTORY_NOT_WRITABLE", "应用无法写入此目录");
+    throw makeDirectoryError("DIRECTORY_NOT_WRITABLE", "应用无法写入此目录");
   }
   const safeName = validateDirectoryName(name);
   const destination = path.join(parent, safeName);
@@ -336,9 +409,9 @@ function createAuthorizedDirectory(parentPath, name, roots) {
     fs.mkdirSync(destination, { mode: PERMISSIONS.MODE_DIR_OUTPUT });
   } catch (cause) {
     if (cause.code === "EEXIST") {
-      throw directoryError("DIRECTORY_EXISTS", "同名文件夹已经存在");
+      throw makeDirectoryError("DIRECTORY_EXISTS", "同名文件夹已经存在");
     }
-    throw directoryError("DIRECTORY_NOT_WRITABLE", "无法创建文件夹");
+    throw makeDirectoryError("DIRECTORY_NOT_WRITABLE", "无法创建文件夹");
   }
   const resolved = fs.realpathSync(destination);
   return {
