@@ -27,6 +27,7 @@ const PACKAGE_ITEMS = [
   "app",
   "cmd",
   "config",
+  "LICENSE",
   "manifest",
 ];
 
