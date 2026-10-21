@@ -67,9 +67,9 @@ function appendArchiveOptions(args, selection, options) {
   }
 
   if (options.password) {
-    args.push(passwordNeedsArgv(options.password)
-      ? `-p${options.password}`
-      : "-p");
+    // v4.0 的稳定做法：密码作为单个参数交给 spawn，不经过 shell。
+    // 旧式 ZIP 的 GBK 回退由 worker/spawn 层在收到 PASSWORD 后处理。
+    args.push(`-p${options.password}`);
   }
 }
 

@@ -235,8 +235,7 @@ test("F6 buildTestArgs builds a read-only streaming test command", () => {
   assert.ok(args.includes("-bsp1"), "进度输出与解压同构，前端轮询可复用");
   assert.ok(args.includes("-bb1"));
   assert.ok(args.includes("-sccUTF-8"));
-  assert.ok(args.includes("-p"));
-  assert.equal(args.some((arg) => arg.includes("secret")), false);
+  assert.ok(args.includes("-psecret"));
   assert.ok(!args.some((arg) => arg.startsWith("-o")), "体检只读不写盘");
   assert.equal(args[args.length - 1], "/data/file.7z");
 });

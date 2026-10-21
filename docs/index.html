@@ -1154,8 +1154,8 @@ footer .fl a:hover {
           <li>双击应用中心一键上传安装，自动注册右键</li>
         </ul>
         <div class="sha-box">
-          <span class="sha-text" title="e188bb1458ba8265030f9e6ace686b4a4ad116f9190d9f7a5c5d1ef6e9600122">SHA256: e188bb1458ba...e9600122</span>
-          <button class="copy" data-copy="e188bb1458ba8265030f9e6ace686b4a4ad116f9190d9f7a5c5d1ef6e9600122">复制</button>
+          <span class="sha-text" title="e42108c3efb39f4ee8f14ee74b92d4fe0cd5ca388910e9dcfc84b0cd771019bb">SHA256: e42108c3efb3...771019bb</span>
+          <button class="copy" data-copy="e42108c3efb39f4ee8f14ee74b92d4fe0cd5ca388910e9dcfc84b0cd771019bb">复制</button>
         </div>
         <div class="btns">
           <a class="btn primary" href="dist/CHzip_4.3_x86_64.fpk" download>下载 x86_64 安装包 (.fpk)</a>
@@ -1176,8 +1176,8 @@ footer .fl a:hover {
           <li>完整保留分卷合并、免解压预览等全部功能</li>
         </ul>
         <div class="sha-box">
-          <span class="sha-text" title="54c8c6820deefa746c4fa0490f98fb7a917d036fe31f5b517d2cc8763b4b942c">SHA256: 54c8c6820dee...3b4b942c</span>
-          <button class="copy" data-copy="54c8c6820deefa746c4fa0490f98fb7a917d036fe31f5b517d2cc8763b4b942c">复制</button>
+          <span class="sha-text" title="752e8f8d486aaa96eedbd6a21f5649d554734ede6f6d5d075c105071647c0a3e">SHA256: 752e8f8d486a...647c0a3e</span>
+          <button class="copy" data-copy="752e8f8d486aaa96eedbd6a21f5649d554734ede6f6d5d075c105071647c0a3e">复制</button>
         </div>
         <div class="btns">
           <a class="btn primary" href="dist/CHzip_4.3_arm64.fpk" download>下载 arm64 安装包 (.fpk)</a>
@@ -1279,8 +1279,8 @@ footer .fl a:hover {
       <div class="feat">
         <div class="ft"><span class="ft-icon"><svg><use href="#i-key"/></svg></span> 本地密码管理与用后即焚</div>
         <div class="fd">
-          常用解压密码保存在浏览器本地，解压时一键填入；支持中文密码。ASCII 密码通过进程标准输入传递，
-          中文密码因 7-Zip 控制台编码限制使用参数数组传递。临时密码文件在执行后进行多次随机数据覆写再删除。
+          常用解压密码保存在浏览器本地，解压时一键填入；支持中文密码。密码按 v4.0 稳定方式通过进程参数数组传递，
+          旧式 ZIP 会自动增加 GBK 兼容回退。临时密码文件在执行后进行多次随机数据覆写再删除。
         </div>
       </div>
 
@@ -1538,8 +1538,8 @@ footer .fl a:hover {
       <div class="faq-item">
         <button type="button" class="faq-q" id="faq-q-4" aria-expanded="false" aria-controls="faq-a-4"><span>解压带密码的压缩包安全吗？密码会不会泄露？</span><span class="arrow" aria-hidden="true">▾</span></button>
         <div class="faq-a" id="faq-a-4">
-          CHzip 运行在你的私有 NAS 本地，无云端上报。ASCII 密码通过进程标准输入交给 7-Zip；
-          中文密码因 7-Zip 控制台编码限制使用参数数组传递。临时密码文件用完后会执行多次随机覆写并删除。
+          CHzip 运行在你的私有 NAS 本地，无云端上报。密码按 v4.0 稳定方式通过进程参数数组交给 7-Zip；
+          旧式 ZIP 会自动增加 GBK 兼容回退。临时密码文件用完后会执行多次随机覆写并删除。
           浏览器本地密码库依赖当前浏览器的 WebCrypto 能力，无法使用时会拒绝保存，而不是降级为明文。
         </div>
       </div>
@@ -1859,7 +1859,7 @@ document.querySelectorAll('.faq-q').forEach((q) => {
         items: [
           "修复任务队列容量计算与同盘串行调度，排队任务可以正常补位并推进",
           "修复排队任务取消卡死、创建阶段假取消与停止按钮重复启用问题",
-          "解压密码改为通过进程标准输入传递，不再出现在命令行参数中",
+          "恢复 v4.0 稳定密码参数传递方式，并兼容旧式 ZIP 中文密码",
           "密码管理器在浏览器 WebCrypto 不可用时拒绝保存，不再降级为明文",
           "修复超长文件名部分救援失败误报成功、缩略图缓存泄漏、共享目录识别等问题",
           "补充并发、取消、密码、路径、缓存与打包回归测试，测试增至 462 项"
