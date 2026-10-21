@@ -20,6 +20,15 @@ test("buildListArgs requests stdin password without placing the secret in argv",
   assert.ok(args.includes("/data/file.7z"));
 });
 
+test("buildListArgs keeps non-ASCII passwords inline for 7-Zip compatibility", () => {
+  const args = buildListArgs(
+    { type: "7z", format: "7z" },
+    { archivePath: "/data/中文.7z", password: "中文 密码" },
+  );
+  assert.ok(args.includes("-p中文 密码"));
+  assert.equal(args.includes("-p"), false);
+});
+
 test("buildExtractArgs includes selection file", () => {
   const args = buildExtractArgs(
     { type: "7z", format: "7z" },

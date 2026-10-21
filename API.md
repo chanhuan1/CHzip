@@ -89,8 +89,9 @@ All responses use `Content-Type: application/json; charset=utf-8`.
 > `TIMEOUT` intentionally answers HTTP 200: CGI apps in fnOS deliver errors in
 > the response body, and only `NOT_FOUND` / `INVALID_JSON` / `BODY_TOO_LARGE` also set a non-200 status line (HTTP 429 is no longer used; concurrent requests above limit 3 enter a FIFO queue with `queued` status).
 
-> Archive passwords are sent to 7-Zip through the child process standard input.
-> The password value is never appended to the 7-Zip command-line arguments.
+> ASCII archive passwords are sent to 7-Zip through standard input. Non-ASCII
+> passwords, including Chinese passwords, are passed as one process argument
+> because 7-Zip does not reliably decode them from a non-TTY stdin.
 
 ## Endpoints
 

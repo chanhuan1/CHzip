@@ -52,6 +52,12 @@ function appendForcedType(args, selection) {
   }
 }
 
+function passwordNeedsArgv(password) {
+  // 7-Zip 26.x 在非 TTY stdin 下不能可靠地解码 UTF-8 中文密码；
+  // ASCII 密码继续走 stdin，非 ASCII 密码退回参数数组传递。
+  return /[^\x00-\x7F]/u.test(String(password || ""));
+}
+
 function appendArchiveOptions(args, selection, options) {
   appendForcedType(args, selection);
 
@@ -61,9 +67,9 @@ function appendArchiveOptions(args, selection, options) {
   }
 
   if (options.password) {
-    // 只下发裸 -p，密码本体由 stdin 送入。把密码拼进 argv 会被同机进程
-    // 通过 ps / /proc/<pid>/cmdline 读到，与“密码不出现在命令行”的红线冲突。
-    args.push("-p");
+    args.push(passwordNeedsArgv(options.password)
+      ? `-p${options.password}`
+      : "-p");
   }
 }
 
@@ -157,4 +163,5 @@ module.exports = {
   buildTestArgs,
   normalizeCodePage,
   normalizeConflictPolicy,
+  passwordNeedsArgv,
 };

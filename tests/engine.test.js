@@ -301,6 +301,26 @@ test("runSevenZipSync classifies a wrong stdin password as PASSWORD", () => {
   }
 });
 
+test("runSevenZipSync does not feed stdin when a non-ASCII password is inline", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "chzip-inline-password-"));
+  const toolPath = path.join(dir, "7z-fake");
+  fs.writeFileSync(
+    toolPath,
+    "#!/bin/sh\nprintf 'arg=%s\\n' \"$1\"\nif IFS= read -r password; then printf 'stdin=%s\\n' \"$password\"; else echo 'stdin=EOF'; fi\n",
+  );
+  fs.chmodSync(toolPath, 0o755);
+  try {
+    const result = runSevenZipSync(
+      { path: toolPath, source: "test" },
+      ["-p中文 密码"],
+      { password: "中文 密码" },
+    );
+    assert.equal(result.stdout, "arg=-p中文 密码\nstdin=EOF\n");
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("findSevenZip caches the probe result inside the process", () => {
   resetSevenZipCache();
   try {

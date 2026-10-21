@@ -286,6 +286,14 @@ function toText(value) {
   return Buffer.isBuffer(value) ? value.toString("utf8") : String(value);
 }
 
+function hasInlinePasswordArgument(args) {
+  return (args || []).some((argument) => (
+    typeof argument === "string"
+    && argument.startsWith("-p")
+    && argument.length > 2
+  ));
+}
+
 function runSevenZipSync(tool, args, options = {}) {
   // encoding 默认 utf8，保持所有既有调用点逐字节不变；
   // 传 null 时 stdout/stderr 是 Buffer —— 预览图片需要原始字节，不能先过
@@ -295,7 +303,9 @@ function runSevenZipSync(tool, args, options = {}) {
     cwd: options.cwd,
     encoding,
     // 裸 -p 会从 stdin 读取密码。spawnSync 在调用结束时自动关闭输入流。
-    input: options.password ? `${options.password}\n` : undefined,
+    input: options.password && !hasInlinePasswordArgument(args)
+      ? `${options.password}\n`
+      : undefined,
     timeout: options.timeout || TIMEOUTS.SEVENZIP_SYNC_MS,
     maxBuffer: options.maxBuffer || LIMITS.MAX_PREVIEW_OUTPUT_BYTES,
     windowsHide: true,
@@ -337,13 +347,14 @@ function runSevenZipSync(tool, args, options = {}) {
 
 function spawnSevenZip(tool, args, options = {}) {
   const password = options.password ? String(options.password) : "";
+  const feedPassword = Boolean(password) && !hasInlinePasswordArgument(args);
   const child = spawn(tool.path, args, {
     cwd: options.cwd,
     detached: options.detached !== false,
-    stdio: [password ? "pipe" : "ignore", "pipe", "pipe"],
+    stdio: [feedPassword ? "pipe" : "ignore", "pipe", "pipe"],
     windowsHide: true,
   });
-  if (password && child.stdin) {
+  if (feedPassword && child.stdin) {
     // EPIPE 通常意味着子进程已退出；后续 close/error 事件会给出真实错误，
     // 这里只负责吞掉 stdin 的异步错误，避免未处理异常打死 worker。
     child.stdin.on("error", () => {});
