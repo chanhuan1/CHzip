@@ -315,6 +315,32 @@ test("B6 defaultValidateListing validates in-process and returns entryCount/form
   assert.equal(store.read().processGroupPid, null);
 });
 
+test("B6 defaultValidateListing passes the whole tool object to spawnProcess", async () => {
+  const child = createFakeChild();
+  const store = createMemoryStore();
+  const tool = { path: "/bin/true", source: "test" };
+  let capturedTool = null;
+  const promise = defaultValidateListing(
+    tool,
+    ["l", "-slt", "x.zip"],
+    {
+      cwd: "/tmp",
+      job: store.read(),
+      store,
+      spawnProcess: (spawnedTool) => {
+        capturedTool = spawnedTool;
+        return child;
+      },
+    },
+  );
+
+  child.stdout.emit("data", Buffer.from(LISTING_OUTPUT, "utf8"));
+  child.emit("close", 0, null);
+  await promise;
+
+  assert.equal(capturedTool, tool, "必须传 tool 对象，不能传 tool.path 字符串");
+});
+
 test("B6 defaultValidateListing still rejects parent traversal entries", async () => {
   const child = createFakeChild();
   const store = createMemoryStore();

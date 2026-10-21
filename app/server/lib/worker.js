@@ -264,7 +264,9 @@ function defaultRunPhase(phase, context) {
 function defaultValidateListing(tool, args, context) {
   return new Promise((resolve, reject) => {
     const spawnProcess = context.spawnProcess || spawnSevenZip;
-    const child = spawnProcess(tool.path, args, {
+    // spawnSevenZip-compatible spawners take the tool object, not tool.path.
+    // Passing tool.path here produced spawn(undefined) in v4.3.
+    const child = spawnProcess(tool, args, {
       cwd: context.cwd || undefined,
       detached: true,
       password: context.password || "",
