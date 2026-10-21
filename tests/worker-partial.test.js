@@ -166,7 +166,7 @@ test("success terminal does not write partialSuccess", async () => {
   const runtimeRoot = makeRuntime();
   const outputDir = path.join(runtimeRoot, "out");
   fs.mkdirSync(outputDir, { recursive: true });
-  const store = createMemoryStore({ outputDir });
+  const store = createMemoryStore({ outputDir, workerPid: 54321 });
   const result = await runWorker(JOB_ID, {
     store,
     runtimeRoot,
@@ -175,6 +175,25 @@ test("success terminal does not write partialSuccess", async () => {
   });
   assert.equal(result.status, "success");
   assert.equal(result.partialSuccess, false, "success 终态不得有 partialSuccess=true");
+  assert.equal(result.workerPid, null, "success 终态必须清掉 workerPid");
+});
+
+test("failed terminal also clears workerPid so it cannot block same-disk queueing", async () => {
+  const runtimeRoot = makeRuntime();
+  const outputDir = path.join(runtimeRoot, "out");
+  fs.mkdirSync(outputDir, { recursive: true });
+  const store = createMemoryStore({ outputDir, workerPid: 65432 });
+  const result = await runWorker(JOB_ID, {
+    store,
+    runtimeRoot,
+    validateListing: async () => ({ entryCount: 1, format: "zip" }),
+    runPhase: async () => {
+      throw Object.assign(new Error("boom"), { code: "ENGINE" });
+    },
+  });
+
+  assert.equal(result.status, "failed");
+  assert.equal(result.workerPid, null);
 });
 
 test("uniqueRescuePath confines rescued file inside outputDir", () => {

@@ -351,13 +351,13 @@ function createServices(options = {}) {
       } catch (error) {
         continue;
       }
+      if (!other || TERMINAL_STATUSES.has(other.status)) {
+        continue;
+      }
       if (
-        other
-        && (
-          other.workerPid
-          || other.status === "running"
-          || other.status === "cancelling"
-        )
+        other.workerPid
+        || other.status === "running"
+        || other.status === "cancelling"
       ) {
         runningJobs.push(other);
       }

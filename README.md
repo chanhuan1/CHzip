@@ -107,7 +107,7 @@ CHzip/
 ## 🛠️ 开发 / 构建 / 测试
 
 ```bash
-npm test                 # node --test，456 个用例
+npm test                 # node --test，458 个用例
 node --check app/server/api.js   # 语法检查
 node scripts/build-fpk.js        # 构建 dist/*.fpk（双架构，需 fnpack）
 node scripts/audit-fpk.js        # 发布审计（校验和/版本/架构/搜索特性）

@@ -713,6 +713,47 @@ test("extract also defers a new job when all paths share a running disk", () => 
   assert.equal(services.store.read(result.jobId).workerPid, null);
 });
 
+test("a failed old job with stale workerPid must not block a same-disk job", () => {
+  const spawned = [];
+  const services = createServices(makeStubs({
+    runtimeRoot: tmpDir,
+    spawnWorker: (jobId) => {
+      spawned.push(jobId);
+      return fakeWorker(60600);
+    },
+    getMountKey: () => "dev:same",
+  }));
+  const failed = services.store.create({
+    archivePath: "/same/failed.zip",
+    outputDir: "/same/out-failed",
+    selection: { format: "zip", type: "zip" },
+    sevenZipPath: process.execPath,
+    sevenZipSource: "test",
+    partCount: 1,
+    sourceFingerprint: [],
+  });
+  services.store.update(failed.id, (current) => ({
+    ...current,
+    status: "failed",
+    startedAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+    finishedAt: new Date().toISOString(),
+    workerPid: process.pid,
+  }));
+  const queued = services.store.create({
+    archivePath: "/same/next.zip",
+    outputDir: "/same/out-next",
+    selection: { format: "zip", type: "zip" },
+    sevenZipPath: process.execPath,
+    sevenZipSource: "test",
+    partCount: 1,
+    sourceFingerprint: [],
+  });
+
+  services.spawnQueued();
+
+  assert.deepEqual(spawned, [queued.id]);
+});
+
 // 不同盘的任务照常唤起：并发上限内不引入多余串行。
 test("spawnQueued launches queued job on a different disk", () => {
   const spawned = [];
