@@ -137,15 +137,6 @@ function recordingApi() {
   };
 }
 
-function createPollElements() {
-  return {
-    taskCenterDialog: { hidden: true },
-    historyDialog: { hidden: true },
-    taskCenterList: { /* 渲染分支需要真 DOM，置空即提前 return */ },
-    historyList: null,
-  };
-}
-
 test("pollTaskMini passes POLL_TIMEOUT_MS to the jobs poll", async () => {
   const api = recordingApi();
   const state = createState({ elements: { taskStreamList: null } });

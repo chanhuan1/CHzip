@@ -214,8 +214,10 @@
             }
         }
         if (els.progressEta) {
-            els.progressEta.hidden = !eta;
-            els.progressEta.textContent = eta ? `剩余约 ${eta}` : "";
+            const speed = formatSpeed(job);
+            const parts = [eta ? `剩余约 ${eta}` : "", speed].filter(Boolean);
+            els.progressEta.hidden = !parts.length;
+            els.progressEta.textContent = parts.join(" · ");
         }
         const ok = job?.status === "success";
         const bad = job?.status === "failed" || job?.status === "cancelled";
@@ -266,6 +268,33 @@
         return seconds < 90 ? `${Math.round(seconds)} 秒` : `${Math.ceil(seconds / 60)} 分钟`;
     }
 
+    // 解压速率展示：后端 worker 按「百分比 × 压缩包总大小 / 耗时」估算
+    // 字节/秒随进度落盘。这里只做格式化；0/缺字段不展示（启动初期、
+    // preparing/validating 阶段、旧 job JSON 都不会有值）。
+    function formatSpeed(job) {
+        if (!job || job.status !== "running") {
+            return "";
+        }
+        const bytesPerSec = Number(job.speedBytesPerSec) || 0;
+        if (!(bytesPerSec > 0)) {
+            return "";
+        }
+        const mb = bytesPerSec / (1024 * 1024);
+        if (mb >= 100) {
+            return `${Math.round(mb)} MB/s`;
+        }
+        if (mb >= 1) {
+            // 一位小数但整数去尾：64.0 显示 64，2.5 保留 2.5。
+            const rounded = Math.round(mb * 10) / 10;
+            return `${rounded} MB/s`;
+        }
+        const kb = bytesPerSec / 1024;
+        if (kb >= 1) {
+            return `${Math.round(kb)} KB/s`;
+        }
+        return `${Math.max(1, Math.round(bytesPerSec))} B/s`;
+    }
+
     function finishPolling(state) {
         if (state.pollTimer) {
             state.pollTimer.stop();
@@ -292,7 +321,7 @@
         state.extractAbortController = abortController;
 
         if (els.cancelBtn) {
-            els.cancelBtn.disabled = false;
+            els.cancelBtn.disabled = true;
         }
         if (typeof state.onAvailabilityChange === "function") {
             state.onAvailabilityChange();
@@ -317,6 +346,7 @@
                 signal: abortController.signal,
             });
             state.jobId = result.jobId;
+            state.onAvailabilityChange?.();
             state.etaTracker = null;
             els.outputPreview.textContent = result.outputDir;
             setJobProgress(0, "任务已排队", "等待 7-Zip 启动...", state);
@@ -444,7 +474,7 @@
         state.extractAbortController = abortController;
 
         if (els.cancelBtn) {
-            els.cancelBtn.disabled = false;
+            els.cancelBtn.disabled = true;
         }
         if (typeof state.onAvailabilityChange === "function") {
             state.onAvailabilityChange();
@@ -461,6 +491,7 @@
                 signal: abortController.signal,
             });
             state.jobId = result.jobId;
+            state.onAvailabilityChange?.();
             state.etaTracker = null;
             setJobProgress(0, "任务已排队", "等待 7-Zip 启动...", state);
             ensureMiniPoll(state, api);
@@ -492,15 +523,10 @@
         if (!state.running) {
             return;
         }
-        // 若任务尚未完成创建（正在请求 extract 接口），直接中断在途网络请求
+        // 创建请求尚未返回 jobId 时，abort 只能停前端 fetch，无法通知 CGI
+        // 后端撤销已经开始的建任务流程。不要在这里假装取消成功。
         if (!state.jobId) {
-            if (state.extractAbortController) {
-                state.extractAbortController.abort();
-                state.extractAbortController = null;
-            }
-            finishPolling(state);
-            setJobProgress(0, "已取消", "任务已在创建阶段终止。", state);
-            setNotice("任务已取消。", "", state);
+            setNotice("任务仍在创建中，请等待任务编号返回后再停止。", "", state);
             return;
         }
         if (els.cancelBtn) {
@@ -518,7 +544,8 @@
         } catch (error) {
             setNotice(`停止任务失败：${error.message}`, "error", state);
             recordDiagnosticError(error, state);
-        } finally {
+            // 停止请求失败才重新开放按钮；成功后会由轮询推进到终态，
+            // 中间状态保持禁用，避免连点重复发 cancel。
             if (state.running && els.cancelBtn) {
                 els.cancelBtn.disabled = false;
             }
@@ -1101,6 +1128,7 @@
         createPoller,
         ensureMiniPoll,
         finishPolling,
+        formatSpeed,
         formatTaskDateTime,
         openHistory,
         openTaskCenter,

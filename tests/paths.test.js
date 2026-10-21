@@ -3,6 +3,7 @@
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
 const {
+  findArchiveAccessibleRoot,
   sanitizeOutputStem,
   validateDirectoryName,
 } = require("../app/server/lib/paths");
@@ -50,4 +51,19 @@ test("validateDirectoryName rejects control characters", () => {
 
 test("validateDirectoryName rejects too long", () => {
   assert.throws(() => validateDirectoryName("x".repeat(129)), /无效/);
+});
+
+test("findArchiveAccessibleRoot climbs to the fnOS share root", () => {
+  const root = findArchiveAccessibleRoot(
+    "/vol1/share/docs/archive.zip",
+    {
+      platform: "linux",
+      realpathResolver: (value) => value,
+      capabilityResolver: () => ({
+        canBrowse: true,
+        canSelect: true,
+      }),
+    },
+  );
+  assert.equal(root, "/vol1/share");
 });

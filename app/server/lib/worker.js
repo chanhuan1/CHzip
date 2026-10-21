@@ -1,6 +1,5 @@
 "use strict";
 
-const { spawn } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
@@ -42,6 +41,30 @@ const {
 const PROGRESS_THROTTLE_MS = 200;
 const PROGRESS_PERCENT_STEP = 1;
 
+// 速率估算的时间原点：进程组注册时刻（≈ 7z 真正开始跑）。比任务创建
+// 时刻准——queued 排队时间不该摊进吞吐。只在 extracting/testing 阶段
+// 更新，preparing/validating 的百分比不可靠（尤其 preparing 是外层解压）。
+function estimateSpeedBytesPerSec({ job, phase, percent, phaseStartedAtMs }) {
+  if (phase !== "extracting" && phase !== "testing") {
+    return 0;
+  }
+  const totalBytes = Number(job?.sizeBytes) || 0;
+  if (!totalBytes || !phaseStartedAtMs) {
+    return 0;
+  }
+  const pct = Number(percent);
+  if (!(pct > 0)) {
+    return 0;
+  }
+  const elapsedSec = (Date.now() - phaseStartedAtMs) / 1000;
+  if (elapsedSec < 1) {
+    // 不足 1s 的估算全是噪声，不展示。
+    return 0;
+  }
+  const processed = totalBytes * (pct / 100);
+  return Math.round(processed / elapsedSec);
+}
+
 // 失败/取消时保留部分成果：这些错误码都属于「非源文件问题」（源文件被换 /
 // 权限被拒走 SOURCE_* 分支，不在此列），已解压出来的文件仍然有价值，
 // 终态时保留 outputDir 并把 partialSuccess 置 true，前端据此提示用户
@@ -73,6 +96,8 @@ function createProgressWriter({
   phase,
   throttleMs = PROGRESS_THROTTLE_MS,
   percentStep = PROGRESS_PERCENT_STEP,
+  getJob,
+  phaseStartedAtMs,
 }) {
   let lastWriteMs = 0;
   let lastPercent = null;
@@ -86,11 +111,20 @@ function createProgressWriter({
     pending = null;
     lastWriteMs = Date.now();
     lastPercent = snapshot.percent;
+    const job = typeof getJob === "function" ? getJob() : null;
+    const speedBytesPerSec = estimateSpeedBytesPerSec({
+      job,
+      phase,
+      percent: snapshot.percent,
+      phaseStartedAtMs,
+    });
     store.update(jobId, (job) => ({
       ...job,
       phase,
       progress: snapshot.percent,
       currentFile: snapshot.currentFile || job.currentFile,
+      // 终态清 0：成功后还留着一个速率值没有意义，前端按 running 才展示。
+      speedBytesPerSec,
     }));
   };
 
@@ -138,6 +172,7 @@ function defaultRunPhase(phase, context) {
     const child = spawnProcess(context.tool, context.args, {
       cwd: path.dirname(context.job.archivePath),
       detached: true,
+      password: context.password || "",
     });
 
     registerProcessGroup(
@@ -156,12 +191,15 @@ function defaultRunPhase(phase, context) {
     // 不会出现乱码（原实现用 chunk.toString("utf8")，会偶发替换字符），
     // 并且不再对整段日志重复 split/正则。
     const tracker = createProgressTracker();
+    const phaseStartedAtMs = Date.now();
     const progressWriter = createProgressWriter({
       store: context.store,
       jobId: context.job.id,
       phase,
       throttleMs: context.progressThrottleMs,
       percentStep: context.progressPercentStep,
+      getJob: () => context.store.read(context.job.id),
+      phaseStartedAtMs,
     });
     const append = (chunk) => {
       const snapshot = tracker.write(chunk);
@@ -225,12 +263,11 @@ function defaultRunPhase(phase, context) {
 // maxRecordBytes 上限。校验失败时立即 SIGTERM（3s 后 SIGKILL）7z。
 function defaultValidateListing(tool, args, context) {
   return new Promise((resolve, reject) => {
-    const spawnProcess = context.spawnProcess || spawn;
+    const spawnProcess = context.spawnProcess || spawnSevenZip;
     const child = spawnProcess(tool.path, args, {
       cwd: context.cwd || undefined,
       detached: true,
-      stdio: ["ignore", "pipe", "pipe"],
-      windowsHide: true,
+      password: context.password || "",
     });
     registerProcessGroup(
       context.store,
@@ -299,9 +336,12 @@ function defaultValidateListing(tool, args, context) {
       }
       if (exitCode !== 0) {
         const current = context.store.read(context.job.id);
+        const passwordProvided = context.passwordProvided
+          ?? (Boolean(context.password)
+            || args.some((argument) => /^-p./s.test(argument)));
         const classified = classifySevenZipError(stderr, exitCode, {
           phase: "validating",
-          passwordProvided: args.some((argument) => /^-p./s.test(argument)),
+          passwordProvided,
           cancelled: current?.status === "cancelling"
             || Boolean(current?.cancelRequestedAt),
         });
@@ -377,13 +417,13 @@ function uniqueRescuePath(outputDir, internal) {
   return candidate;
 }
 
-function streamSingleToFile(tool, args, dest) {
+function streamSingleToFile(tool, args, dest, password = "") {
   return new Promise((resolve, reject) => {
     let child;
     try {
-      child = spawn(tool.path, args, {
-        stdio: ["ignore", "pipe", "pipe"],
-        windowsHide: true,
+      child = spawnSevenZip(tool, args, {
+        detached: false,
+        password,
       });
     } catch (error) {
       reject(error);
@@ -464,7 +504,7 @@ async function rescueTooLongNameFiles({
         codePage: job.codePage || "auto",
         selectionFile: listFile,
       });
-      await streamSingleToFile(tool, args, dest);
+      await streamSingleToFile(tool, args, dest, password);
       rescued.push(dest);
     } catch (error) {
       failed.push(internal);
@@ -753,6 +793,7 @@ async function runWorker(jobId, options = {}) {
   const store = options.store || new JobStore(runtimeRoot);
   const runPhase = options.runPhase || defaultRunPhase;
   const validateListing = options.validateListing || defaultValidateListing;
+  const rescueLongNames = options.rescueLongNames || rescueTooLongNameFiles;
   // 删除函数可注入，供单测制造「某一步删除失败」的场景。
   const remove = options.remove || fs.rmSync;
   const logger = options.logger || createDiagnosticLogger({
@@ -824,6 +865,7 @@ async function runWorker(jobId, options = {}) {
         job,
         store,
         tool,
+        password,
         passwordProvided: Boolean(password),
       });
       store.update(jobId, (current) => {
@@ -837,6 +879,7 @@ async function runWorker(jobId, options = {}) {
           processGroupPid: null,
           progress: 100,
           currentFile: "",
+          speedBytesPerSec: 0,
           finishedAt: new Date().toISOString(),
           error: null,
         };
@@ -870,6 +913,7 @@ async function runWorker(jobId, options = {}) {
         job,
         store,
         tool,
+        password,
         passwordProvided: Boolean(password),
       });
       verifyFingerprints(job.sourceFingerprint, sourceDescriptors);
@@ -890,6 +934,7 @@ async function runWorker(jobId, options = {}) {
       cwd: path.dirname(extractionArchivePath),
       job,
       store,
+      password: extractionPassword,
     });
     if (!extractionSelection.format && listing.format) {
       extractionSelection = {
@@ -906,6 +951,7 @@ async function runWorker(jobId, options = {}) {
           cwd: path.dirname(extractionArchivePath),
           job,
           store,
+          password: extractionPassword,
         });
       }
     }
@@ -922,11 +968,12 @@ async function runWorker(jobId, options = {}) {
       // normalizeConflictPolicy(undefined) 回落 rename，与以前行为一致。
       conflictPolicy: job.conflictPolicy,
     });
-    const extractResult = await runPhase("extracting", {
+    await runPhase("extracting", {
       args: extractArgs,
       job,
       store,
       tool,
+      password: extractionPassword,
       passwordProvided: Boolean(extractionPassword),
     });
 
@@ -947,6 +994,7 @@ async function runWorker(jobId, options = {}) {
         processGroupPid: null,
         progress: 100,
         currentFile: "",
+        speedBytesPerSec: 0,
         finishedAt: new Date().toISOString(),
         error: null,
         flattened: Boolean(flattenResult.flattened),
@@ -975,16 +1023,34 @@ async function runWorker(jobId, options = {}) {
     // 文件名过长属于“个别文件写不进”的环境限制：保留已解压输出，
     // 并尝试把超长文件按“截断后的文件名”单条救回来。
     let rescuedNote = "";
+    let rescueFailedCount = 0;
+    let rescueAttempted = false;
     if (error.code === "FILE_NAME_TOO_LONG") {
       try {
-        const { rescued } = await rescueTooLongNameFiles({
+        const originalLog = error.log || "";
+        rescueAttempted = true;
+        const rescueResult = await rescueLongNames({
           tool,
           job,
-          log: error.log || "",
+          log: originalLog,
           password,
         });
+        const rescued = Array.isArray(rescueResult?.rescued)
+          ? rescueResult.rescued
+          : [];
+        const failed = Array.isArray(rescueResult?.failed)
+          ? rescueResult.failed
+          : [];
+        rescueFailedCount = failed.length;
         if (rescued.length) {
           rescuedNote = `已把 ${rescued.length} 个超长文件名文件按截断后的名称保存。`;
+        }
+        if (failed.length) {
+          const failedNote = `${failed.length} 个超长文件名文件无法救援。`;
+          const originalMessage = error.message || "超长文件名导致解压失败";
+          error = new Error(`${originalMessage} ${rescuedNote}${failedNote}`.trim());
+          error.code = "FILE_NAME_TOO_LONG";
+          error.log = originalLog;
         }
       } catch (rescueError) {
         // 救援失败按普通失败处理，但仍保留已解压的输出
@@ -998,7 +1064,10 @@ async function runWorker(jobId, options = {}) {
     if (!keepPartial) {
       cleanupOutput(job);
     }
-    const finalOk = Boolean(rescuedNote) && !cancelled;
+    const finalOk = rescueAttempted
+      && Boolean(rescuedNote)
+      && rescueFailedCount === 0
+      && !cancelled;
     // partialSuccess 在「未完全成功且保留了部分成果」时落 true（主动停止或特定错误）：
     // - finalOk（救援成功→success）不算部分成果，整体已成功；
     // - test kind 不进入此逻辑（isExtractKind 已过滤）。
@@ -1010,6 +1079,7 @@ async function runWorker(jobId, options = {}) {
       processGroupPid: null,
       currentFile: "",
       progress: finalOk ? 100 : current.progress,
+      speedBytesPerSec: 0,
       finishedAt: new Date().toISOString(),
       partialSuccess,
       error: cancelled || finalOk
@@ -1050,6 +1120,7 @@ module.exports = {
   createProgressWriter,
   defaultRunPhase,
   defaultValidateListing,
+  estimateSpeedBytesPerSec,
   extractTestFailures,
   flattenSingleRootDirectory,
   internalPathFromTarget,

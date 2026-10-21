@@ -2214,11 +2214,31 @@ dd {
 
 .preview-loading {
     display: flex;
+    flex-direction: column;
+    gap: 12px;
     align-items: center;
     justify-content: center;
     height: 100%;
     color: var(--muted);
     font-size: 14px;
+    text-align: center;
+    padding: 0 24px;
+}
+
+.preview-loading-cancel {
+    padding: 4px 14px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.preview-loading-cancel:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-soft);
 }
 
 .preview-error {

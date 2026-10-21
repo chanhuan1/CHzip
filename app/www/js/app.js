@@ -135,6 +135,9 @@
                 state.thumbWallController.dispose();
                 state.thumbWallController = null;
             }
+            els.thumbWall.replaceChildren();
+            state.thumbCache?.clear();
+            state.thumbCache = null;
             state.fileViewMode = "list";
             els.fileTree.hidden = false;
             els.thumbWall.hidden = true;
@@ -413,12 +416,46 @@
         // 固实（solid）压缩包取出任一文件都要先解压整包，耗时与压缩包体积
         // 成正比、与目标文件大小无关。提前把原因说清楚，别让用户面对一次
         // 莫名其妙的长时间等待。
+        //
+        // 等待反馈两件套：
+        // - 已等待秒数：固实包可能跑到 45s 上限，每秒跳动的数字让用户知道
+        //   请求活着、还剩多久会被后端超时打断，比一句静态文案安心得多。
+        // - 取消按钮：改变主意可以立即放弃。abort 只停前端 fetch，服务端
+        //   那个 7z 仍由 preview-file 的 45s 超时兜底（它感知不到 abort）。
         const loading = document.createElement("div");
         loading.className = "preview-loading";
-        loading.textContent = state.previewSolid
+        const loadingText = document.createElement("span");
+        const loadingStartedAt = Date.now();
+        const loadingMessage = state.previewSolid
             ? "正在加载预览…此压缩包为固实（solid）压缩，需先解压到目标文件所在位置，可能耗时较久。"
             : "正在加载预览...";
+        loadingText.textContent = loadingMessage;
+        loading.appendChild(loadingText);
+        const cancelLoadingBtn = document.createElement("button");
+        cancelLoadingBtn.type = "button";
+        cancelLoadingBtn.className = "preview-loading-cancel";
+        cancelLoadingBtn.textContent = "取消";
+        loading.appendChild(cancelLoadingBtn);
         els.previewBody.replaceChildren(loading);
+
+        let loadingTicker = null;
+        const stopLoadingTicker = () => {
+            if (loadingTicker) {
+                clearInterval(loadingTicker);
+                loadingTicker = null;
+            }
+        };
+        if (state.previewSolid) {
+            loadingTicker = setInterval(() => {
+                // 请求已结束（DOM 被换掉）时自我了断，别残留在后台。
+                if (!loading.isConnected) {
+                    stopLoadingTicker();
+                    return;
+                }
+                const waitedSec = Math.floor((Date.now() - loadingStartedAt) / 1000);
+                loadingText.textContent = `${loadingMessage}（已等待 ${waitedSec} 秒）`;
+            }, 1000);
+        }
 
         // 取消上一个仍在途的预览请求：否则连点几次会同时跑起多个 7z，
         // 把「占满一个核」升级成「占满多个核」。
@@ -429,6 +466,20 @@
         }
         const abortController = new AbortController();
         state.previewAbortController = abortController;
+
+        // 取消按钮：复用 closePreviewDialog 同一条 abort 链路——前端立刻
+        // 把 loading 换成"已取消"提示，服务端 7z 交给 45s 超时兜底。
+        cancelLoadingBtn.addEventListener("click", () => {
+            stopLoadingTicker();
+            abortController.abort();
+            if (state.previewAbortController === abortController) {
+                state.previewAbortController = null;
+            }
+            const cancelledBox = document.createElement("div");
+            cancelledBox.className = "preview-loading";
+            cancelledBox.textContent = "已取消预览。";
+            els.previewBody.replaceChildren(cancelledBox);
+        });
 
         const requestSeq = ++state.previewFileRequestId;
         try {
@@ -497,11 +548,17 @@
             if (requestSeq !== state.previewFileRequestId) {
                 return;
             }
+            // 用户点了「取消」：界面已被按钮 handler 换成"已取消"提示，
+            // 不要再覆盖成红色错误框。
+            if (error?.name === "AbortError" || abortController.signal.aborted) {
+                return;
+            }
             const errorBox = document.createElement("div");
             errorBox.className = "preview-error";
             errorBox.textContent = error.message || "预览失败";
             els.previewBody.replaceChildren(errorBox);
         } finally {
+            stopLoadingTicker();
             if (state.previewAbortController === abortController) {
                 state.previewAbortController = null;
             }
@@ -719,7 +776,7 @@
             || state.running
             || state.previewing
         );
-        els.cancelBtn.disabled = !state.running;
+        els.cancelBtn.disabled = !state.running || !state.jobId;
         els.refreshPreviewBtn.disabled = state.running || state.previewing || !state.info;
         els.codePageSelect.disabled = state.running || state.previewing;
         els.conflictPolicySelect.disabled = state.running || state.previewing;
@@ -771,12 +828,18 @@
         els.viewThumbsBtn.classList.toggle("is-active", isThumbs);
         els.viewThumbsBtn.setAttribute("aria-pressed", String(isThumbs));
         if (isThumbs) {
+            if (!state.thumbCache) {
+                state.thumbCache = uiThumbs.createThumbCache(
+                    uiThumbs.THUMB_LRU_CAPACITY,
+                );
+            }
             state.thumbWallController = uiThumbs.renderThumbWall(state, {
                 api,
                 uiPreview,
                 archivePath: state.filePath,
                 getPassword: () => els.passwordInput.value,
                 getCodePage: () => els.codePageSelect.value,
+                cache: state.thumbCache,
             });
         } else if (state.thumbWallController) {
             state.thumbWallController.dispose();
@@ -930,7 +993,6 @@
     });
     els.cancelBtn.addEventListener("click", () => {
         uiJobs.cancelExtract(state, api);
-        updateActionAvailability();
     });
     els.closeResultDialogBtn.addEventListener("click", closeResultDialog);
     els.confirmResultDialogBtn.addEventListener("click", closeResultDialog);

@@ -23,3 +23,11 @@ test("truncateUtf8Name never splits a multi-byte char", () => {
   // 结果要么合法 utf8 且不出现半个字符（replacement），要么为空兜底
   assert.doesNotThrow(() => Buffer.from(result, "utf8").toString("utf8"));
 });
+
+test("truncateUtf8Name still enforces the byte cap when the extension is huge", () => {
+  const longExtension = `archive.${"中".repeat(100)}`;
+  const result = truncateUtf8Name(longExtension, 230);
+  assert.ok(Buffer.byteLength(result, "utf8") <= 230);
+  assert.ok(result.isWellFormed());
+  assert.notEqual(result, longExtension);
+});

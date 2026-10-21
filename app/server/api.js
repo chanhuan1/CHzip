@@ -67,7 +67,11 @@ function parseJsonBody(rawBody) {
     return {};
   }
   try {
-    return JSON.parse(rawBody);
+    const parsed = JSON.parse(rawBody);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("JSON body must be an object");
+    }
+    return parsed;
   } catch (error) {
     const invalid = new Error("请求 JSON 格式无效");
     invalid.code = "INVALID_JSON";
@@ -76,7 +80,8 @@ function parseJsonBody(rawBody) {
 }
 
 function normalizeApiName(query, body) {
-  return String(query.api || query._api || body.api || "").trim();
+  const requestBody = body && typeof body === "object" ? body : {};
+  return String(query.api || query._api || requestBody.api || "").trim();
 }
 
 // 只有用户主动动作的接口才值得顺带做过期清理；status/preview/info 这些
@@ -354,7 +359,7 @@ async function runCli() {
     }[error.code] || 200;
     sendJson({
       success: false,
-      code: error.code === "NOT_FOUND" ? 404 : 500,
+      code: statusCode,
       error: {
         code: error.code || "INTERNAL",
         message: error.message || "调用错误",

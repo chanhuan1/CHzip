@@ -53,10 +53,35 @@ New-Item -ItemType Directory -Path $CacheRoot -Force | Out-Null
 foreach ($package in $SevenZipPackages) {
     # 已下载过的压缩包直接复用，避免重复拉取。
     $archivePath = Join-Path $CacheRoot "$($package.Arch).tar.xz"
+    $partialArchivePath = "$archivePath.part"
     $extractDir = Join-Path $CacheRoot $package.Arch
 
+    # 缓存损坏时删除并重新下载，避免一次中断下载永久卡住更新脚本。
+    if (Test-Path -LiteralPath $archivePath) {
+        try {
+            $cachedHash = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($cachedHash -ne $package.Sha256) {
+                Remove-Item -LiteralPath $archivePath -Force
+                Write-Warning "7-Zip $($package.Arch) 缓存校验失败，重新下载。"
+            }
+        } catch {
+            Remove-Item -LiteralPath $archivePath -Force -ErrorAction SilentlyContinue
+            Write-Warning "7-Zip $($package.Arch) 缓存不可读，重新下载。"
+        }
+    }
+
     if (-not (Test-Path -LiteralPath $archivePath)) {
-        Invoke-WebRequest -Uri $package.Url -OutFile $archivePath
+        Remove-Item -LiteralPath $partialArchivePath -Force -ErrorAction SilentlyContinue
+        try {
+            Invoke-WebRequest -Uri $package.Url -OutFile $partialArchivePath
+            $partialHash = (Get-FileHash -LiteralPath $partialArchivePath -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($partialHash -ne $package.Sha256) {
+                throw "7-Zip $($package.Arch) 校验和不匹配：$partialHash"
+            }
+            Move-Item -LiteralPath $partialArchivePath -Destination $archivePath -Force
+        } finally {
+            Remove-Item -LiteralPath $partialArchivePath -Force -ErrorAction SilentlyContinue
+        }
     }
 
     # 哈希不匹配即中止，绝不把未校验的二进制写进 vendor。
@@ -65,6 +90,7 @@ foreach ($package in $SevenZipPackages) {
         throw "7-Zip $($package.Arch) 校验和不匹配：$actualHash"
     }
 
+    Remove-Item -LiteralPath $extractDir -Recurse -Force -ErrorAction SilentlyContinue
     New-Item -ItemType Directory -Path $extractDir -Force | Out-Null
     tar.exe -xf $archivePath -C $extractDir
 

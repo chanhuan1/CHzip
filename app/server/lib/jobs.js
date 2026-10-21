@@ -10,7 +10,7 @@ const {
   PERMISSIONS,
   TIMEOUTS,
 } = require("./constants");
-const { acquireFileLock } = require("./fs-utils");
+const { acquireFileLock, overwriteFileSync } = require("./fs-utils");
 
 const TERMINAL_STATUSES = new Set(JOB.TERMINAL_STATUSES);
 
@@ -129,6 +129,9 @@ class JobStore {
       passwordFile: input.passwordFile || "",
       partCount: input.partCount || 1,
       sourceFingerprint: input.sourceFingerprint || [],
+      // 源压缩包总字节数（全卷合计）：worker 估算解压吞吐用。
+      // 创建任务时从指纹里汇总，worker 不再重复 stat。
+      sizeBytes: input.sizeBytes || 0,
       processGroupPid: null,
       workerPid: null,
       progress: 0,
@@ -338,13 +341,19 @@ class JobStore {
       }
     });
     const now = options.now || new Date();
+    const excludeJobId = options.excludeJobId || "";
+    const includeStartingQueued = options.includeStartingQueued !== false;
     let count = 0;
     for (const name of fs.readdirSync(this.jobsDir)) {
       if (!/^[a-f0-9]{32}\.json$/.test(name)) {
         continue;
       }
       const job = this.read(name.slice(0, -5));
-      if (!job || TERMINAL_STATUSES.has(job.status)) {
+      if (
+        !job
+        || job.id === excludeJobId
+        || TERMINAL_STATUSES.has(job.status)
+      ) {
         continue;
       }
       const livePid = job.workerPid || job.processGroupPid;
@@ -354,6 +363,12 @@ class JobStore {
       }
       // Worker 刚起（还没登记 pid）或排队中的任务也算并发，避免瞬时超发；
       // 太久没有存活进程的非终态任务视为已崩溃残留，不计入限流。
+      const claimedStartingSlot = job.workerPid === -1
+        || job.status === "running"
+        || job.status === "cancelling";
+      if (!includeStartingQueued && !claimedStartingSlot) {
+        continue;
+      }
       const started = job.startedAt ? new Date(job.startedAt).getTime() : null;
       const created = new Date(job.createdAt).getTime();
       const starting = started
@@ -431,6 +446,62 @@ class JobStore {
   }
 }
 
+function finalizeQueuedCancellation(store, jobId) {
+  let finalized = null;
+  try {
+    store.withLock(jobId, () => {
+      const current = store.read(jobId);
+      if (
+        !current
+        || TERMINAL_STATUSES.has(current.status)
+        || current.workerPid
+        || current.processGroupPid
+        || current.status !== "cancelling"
+      ) {
+        return;
+      }
+      if (current.passwordFile) {
+        overwriteFileSync(current.passwordFile);
+      }
+      for (const filePath of [current.passwordFile, current.selectionFile]) {
+        if (!filePath) {
+          continue;
+        }
+        try {
+          fs.rmSync(filePath, { force: true });
+        } catch (error) {
+          // 取消不应因临时文件清理失败而卡死；过期清理会继续兜底。
+        }
+      }
+      if (current.outputOwned && current.outputDir) {
+        try {
+          fs.rmSync(current.outputDir, { recursive: true, force: true });
+        } catch (error) {
+          // 同上：任务状态必须落终态，目录清理允许后续重试。
+        }
+      }
+      finalized = store.write({
+        ...current,
+        status: "cancelled",
+        phase: "cancelled",
+        processGroupPid: null,
+        workerPid: null,
+        currentFile: "",
+        progress: 0,
+        speedBytesPerSec: 0,
+        passwordFile: "",
+        selectionFile: "",
+        partialSuccess: false,
+        finishedAt: nowIso(),
+        error: null,
+      });
+    });
+  } catch (error) {
+    // 状态文件可能被并发清理；返回调用方重新读取到的最新结果。
+  }
+  return finalized || store.read(jobId);
+}
+
 async function requestCancellation(store, jobId, dependencies = {}) {
   const kill = dependencies.kill || process.kill.bind(process);
   const sleep = dependencies.sleep
@@ -449,6 +520,10 @@ async function requestCancellation(store, jobId, dependencies = {}) {
     cancelRequestedAt: nowIso(),
   }));
 
+  if (!job.processGroupPid && !job.workerPid) {
+    return finalizeQueuedCancellation(store, jobId) || job;
+  }
+
   if (!job.processGroupPid) {
     for (let attempt = 0; attempt < TIMEOUTS.CANCELLATION_MAX_ATTEMPTS; attempt += 1) {
       await sleep(TIMEOUTS.CANCELLATION_WAIT_MS);
@@ -458,6 +533,9 @@ async function requestCancellation(store, jobId, dependencies = {}) {
       }
     }
     if (!job.processGroupPid) {
+      if (!job.workerPid) {
+        return finalizeQueuedCancellation(store, jobId) || job;
+      }
       return job;
     }
   }

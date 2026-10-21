@@ -32,9 +32,12 @@
         async function renderPasswordManagerList() {
             const els = state.elements;
             const entries = await passwordStore.list();
+            const selectedEntry = state.selectedManagerPasswordId
+                ? await passwordStore.get(state.selectedManagerPasswordId)
+                : null;
             if (
                 state.selectedManagerPasswordId
-                && !passwordStore.get(state.selectedManagerPasswordId)
+                && !selectedEntry
             ) {
                 state.selectedManagerPasswordId = "";
             }

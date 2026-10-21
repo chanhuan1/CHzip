@@ -294,6 +294,8 @@ function runSevenZipSync(tool, args, options = {}) {
   const result = spawnSync(tool.path, args, {
     cwd: options.cwd,
     encoding,
+    // 裸 -p 会从 stdin 读取密码。spawnSync 在调用结束时自动关闭输入流。
+    input: options.password ? `${options.password}\n` : undefined,
     timeout: options.timeout || TIMEOUTS.SEVENZIP_SYNC_MS,
     maxBuffer: options.maxBuffer || LIMITS.MAX_PREVIEW_OUTPUT_BYTES,
     windowsHide: true,
@@ -312,10 +314,12 @@ function runSevenZipSync(tool, args, options = {}) {
     throw result.error;
   }
   if (result.status !== 0) {
+    const passwordProvided = options.passwordProvided
+      ?? (Boolean(options.password)
+        || args.some((argument) => /^-p./s.test(argument)));
     const classified = classifySevenZipError(log, result.status, {
       ...options,
-      passwordProvided: options.passwordProvided
-        ?? args.some((argument) => /^-p./s.test(argument)),
+      passwordProvided,
     });
     const error = new Error(classified.message);
     error.code = classified.code;
@@ -332,12 +336,20 @@ function runSevenZipSync(tool, args, options = {}) {
 }
 
 function spawnSevenZip(tool, args, options = {}) {
-  return spawn(tool.path, args, {
+  const password = options.password ? String(options.password) : "";
+  const child = spawn(tool.path, args, {
     cwd: options.cwd,
     detached: options.detached !== false,
-    stdio: ["ignore", "pipe", "pipe"],
+    stdio: [password ? "pipe" : "ignore", "pipe", "pipe"],
     windowsHide: true,
   });
+  if (password && child.stdin) {
+    // EPIPE 通常意味着子进程已退出；后续 close/error 事件会给出真实错误，
+    // 这里只负责吞掉 stdin 的异步错误，避免未处理异常打死 worker。
+    child.stdin.on("error", () => {});
+    child.stdin.end(`${password}\n`);
+  }
+  return child;
 }
 
 module.exports = {

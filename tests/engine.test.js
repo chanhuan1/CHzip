@@ -2,12 +2,18 @@
 
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
+const { once } = require("node:events");
 const {
   classifySevenZipError,
   createProgressTracker,
   findSevenZip,
   parseProgress,
   resetSevenZipCache,
+  runSevenZipSync,
+  spawnSevenZip,
 } = require("../app/server/lib/engine");
 
 // 覆盖既有用例 + chunk 边界敏感的场景。逐字节喂入时任何边界都会被切到，
@@ -225,6 +231,75 @@ function withEnv(name, value, callback) {
     }
   }
 }
+
+function writePasswordReader() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "chzip-password-stdin-"));
+  const toolPath = path.join(dir, "7z-fake");
+  fs.writeFileSync(
+    toolPath,
+    "#!/bin/sh\nIFS= read -r password\nprintf '%s' \"$password\"\n",
+  );
+  fs.chmodSync(toolPath, 0o755);
+  return {
+    dir,
+    tool: { path: toolPath, source: "test" },
+  };
+}
+
+test("runSevenZipSync feeds the password through stdin, not argv", () => {
+  const fixture = writePasswordReader();
+  try {
+    const password = "secret with space";
+    const result = runSevenZipSync(fixture.tool, ["-p"], {
+      password,
+    });
+    assert.equal(result.stdout, password);
+  } finally {
+    fs.rmSync(fixture.dir, { recursive: true, force: true });
+  }
+});
+
+test("spawnSevenZip feeds the password through stdin, not argv", async () => {
+  const fixture = writePasswordReader();
+  try {
+    const password = "异步 secret";
+    const child = spawnSevenZip(fixture.tool, ["-p"], {
+      detached: false,
+      password,
+    });
+    let stdout = "";
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString("utf8");
+    });
+    const [exitCode] = await once(child, "close");
+    assert.equal(exitCode, 0);
+    assert.equal(stdout, password);
+  } finally {
+    fs.rmSync(fixture.dir, { recursive: true, force: true });
+  }
+});
+
+test("runSevenZipSync classifies a wrong stdin password as PASSWORD", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "chzip-password-error-"));
+  const toolPath = path.join(dir, "7z-fake");
+  fs.writeFileSync(
+    toolPath,
+    "#!/bin/sh\nIFS= read -r password\necho 'Wrong password' >&2\nexit 255\n",
+  );
+  fs.chmodSync(toolPath, 0o755);
+  try {
+    assert.throws(
+      () => runSevenZipSync(
+        { path: toolPath, source: "test" },
+        ["-p"],
+        { password: "bad" },
+      ),
+      (error) => error.code === "PASSWORD",
+    );
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
 
 test("findSevenZip caches the probe result inside the process", () => {
   resetSevenZipCache();

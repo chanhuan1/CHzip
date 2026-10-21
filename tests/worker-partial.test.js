@@ -195,3 +195,60 @@ test("uniqueRescuePath confines rescued file inside outputDir", () => {
   );
 });
 
+test("all overlong files rescued marks the extraction successful", async () => {
+  const runtimeRoot = makeRuntime();
+  const outputDir = path.join(runtimeRoot, "out");
+  fs.mkdirSync(outputDir, { recursive: true });
+  const store = createMemoryStore({ outputDir });
+  const error = Object.assign(new Error("file name too long"), {
+    code: "FILE_NAME_TOO_LONG",
+    log: `File name too long : ${path.join(outputDir, "very-long.txt")}`,
+  });
+  const result = await runWorker(JOB_ID, {
+    store,
+    runtimeRoot,
+    validateListing: async () => ({ entryCount: 1, format: "zip" }),
+    runPhase: async () => {
+      throw error;
+    },
+    rescueLongNames: async () => ({
+      rescued: ["saved.txt"],
+      failed: [],
+    }),
+    remove: () => {},
+  });
+
+  assert.equal(result.status, "success");
+  assert.equal(result.partialSuccess, false);
+  assert.equal(result.error, null);
+});
+
+test("partially rescued overlong files must fail and report the remainder", async () => {
+  const runtimeRoot = makeRuntime();
+  const outputDir = path.join(runtimeRoot, "out");
+  fs.mkdirSync(outputDir, { recursive: true });
+  const store = createMemoryStore({ outputDir });
+  const error = Object.assign(new Error("file name too long"), {
+    code: "FILE_NAME_TOO_LONG",
+    log: "two overlong files",
+  });
+  const result = await runWorker(JOB_ID, {
+    store,
+    runtimeRoot,
+    validateListing: async () => ({ entryCount: 1, format: "zip" }),
+    runPhase: async () => {
+      throw error;
+    },
+    rescueLongNames: async () => ({
+      rescued: ["saved.txt"],
+      failed: ["failed.txt"],
+    }),
+    remove: () => {},
+  });
+
+  assert.equal(result.status, "failed");
+  assert.equal(result.partialSuccess, true);
+  assert.match(result.error.message, /已把 1 个/);
+  assert.match(result.error.message, /1 个超长文件名文件无法救援/);
+});
+

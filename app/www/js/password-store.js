@@ -22,21 +22,12 @@
         return `password-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     }
 
-    function validEntry(entry) {
-        return entry
-            && typeof entry.id === "string"
-            && typeof entry.label === "string"
-            && typeof entry.password === "string"
-            && typeof entry.createdAt === "string"
-            && typeof entry.lastUsedAt === "string";
-    }
-
-    function getSalt(storage) {
+    function getSalt(storage, cryptoApi) {
         try {
             let saltHex = storage.getItem(SALT_STORAGE_KEY);
             if (!saltHex) {
                 const saltBytes = new Uint8Array(16);
-                globalThis.crypto.getRandomValues(saltBytes);
+                cryptoApi.getRandomValues(saltBytes);
                 saltHex = Array.from(saltBytes)
                     .map((byte) => byte.toString(16).padStart(2, "0"))
                     .join("");
@@ -48,21 +39,21 @@
         }
     }
 
-    async function deriveKey(saltHex) {
-        if (!globalThis.crypto?.subtle) {
+    async function deriveKey(saltHex, cryptoApi) {
+        if (!cryptoApi?.subtle) {
             return null;
         }
         const saltBytes = new Uint8Array(
             saltHex.match(/.{1,2}/g).map((byte) => parseInt(byte, 16)),
         );
-        const baseKey = await globalThis.crypto.subtle.importKey(
+        const baseKey = await cryptoApi.subtle.importKey(
             "raw",
             new TextEncoder().encode("chzip-password-store"),
             { name: "PBKDF2" },
             false,
             ["deriveKey"],
         );
-        return globalThis.crypto.subtle.deriveKey(
+        return cryptoApi.subtle.deriveKey(
             {
                 name: "PBKDF2",
                 salt: saltBytes,
@@ -76,14 +67,14 @@
         );
     }
 
-    async function encryptPassword(key, password) {
+    async function encryptPassword(key, password, cryptoApi) {
         if (!key) {
             return null;
         }
         const iv = new Uint8Array(12);
-        globalThis.crypto.getRandomValues(iv);
+        cryptoApi.getRandomValues(iv);
         const encoded = new TextEncoder().encode(password);
-        const ciphertext = await globalThis.crypto.subtle.encrypt(
+        const ciphertext = await cryptoApi.subtle.encrypt(
             { name: "AES-GCM", iv },
             key,
             encoded,
@@ -96,7 +87,7 @@
         };
     }
 
-    async function decryptPassword(key, encrypted) {
+    async function decryptPassword(key, encrypted, cryptoApi) {
         if (!key || !encrypted) {
             return null;
         }
@@ -107,7 +98,7 @@
             const data = new Uint8Array(
                 encrypted.data.match(/.{1,2}/g).map((byte) => parseInt(byte, 16)),
             );
-            const decrypted = await globalThis.crypto.subtle.decrypt(
+            const decrypted = await cryptoApi.subtle.decrypt(
                 { name: "AES-GCM", iv },
                 key,
                 data,
@@ -121,8 +112,13 @@
     function createPasswordStore(storage, options = {}) {
         const now = options.now || (() => new Date().toISOString());
         const randomId = options.randomId || defaultRandomId;
-        const saltHex = getSalt(storage);
-        let cryptoKeyPromise = saltHex ? deriveKey(saltHex) : null;
+        const cryptoApi = options.crypto === undefined
+            ? globalThis.crypto
+            : options.crypto;
+        const saltHex = cryptoApi?.getRandomValues
+            ? getSalt(storage, cryptoApi)
+            : null;
+        let cryptoKeyPromise = saltHex ? deriveKey(saltHex, cryptoApi) : null;
 
         async function getKey() {
             if (!cryptoKeyPromise) {
@@ -158,15 +154,16 @@
                 }
                 const key = await getKey();
                 if (!key) {
-                    cache = parsed.filter(validEntry);
-                    return cloneEntries(cache);
+                    // 无法解密时不回退到明文读取：宁可暂时不展示，也不把
+                    // 旧版降级保存的明文密码再次暴露给页面。
+                    return [];
                 }
                 const entries = [];
                 for (const item of parsed) {
                     if (!item || !item.encrypted) {
                         continue;
                     }
-                    const password = await decryptPassword(key, item.encrypted);
+                    const password = await decryptPassword(key, item.encrypted, cryptoApi);
                     if (password === null) {
                         continue;
                     }
@@ -195,16 +192,15 @@
                     return true;
                 }
                 const key = await getKey();
+                if (!key) {
+                    // 没有 WebCrypto 就拒绝保存，绝不静默降级为明文。
+                    return false;
+                }
                 const records = [];
                 for (const entry of entries.slice(0, MAX_ENTRIES)) {
-                    if (!key) {
-                        records.push(entry);
-                        continue;
-                    }
-                    const encrypted = await encryptPassword(key, entry.password);
+                    const encrypted = await encryptPassword(key, entry.password, cryptoApi);
                     if (!encrypted) {
-                        records.push(entry);
-                        continue;
+                        return false;
                     }
                     records.push({
                         id: entry.id,

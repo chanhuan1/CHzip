@@ -410,3 +410,67 @@ test("B6 defaultValidateListing reports a cancellation instead of a password err
 
   await assert.rejects(() => promise, (error) => error.code === "CANCELLED");
 });
+
+// ------------------------------------------------------------ 吞吐估算
+
+test("estimateSpeedBytesPerSec derives throughput from percent x size / elapsed", () => {
+  const { estimateSpeedBytesPerSec } = require("../app/server/lib/worker");
+  const startedAt = Date.now() - 10 * 1000;
+  const speed = estimateSpeedBytesPerSec({
+    job: { sizeBytes: 100 * 1024 * 1024 },
+    phase: "extracting",
+    percent: 50,
+    phaseStartedAtMs: startedAt,
+  });
+  // 50 MiB / ~10s ≈ 5 MB/s（允许 1s 计时抖动）
+  assert.ok(speed > 4 * 1024 * 1024 && speed < 6 * 1024 * 1024);
+});
+
+test("estimateSpeedBytesPerSec stays zero outside extracting/testing or without size", () => {
+  const { estimateSpeedBytesPerSec } = require("../app/server/lib/worker");
+  const startedAt = Date.now() - 10 * 1000;
+  assert.equal(estimateSpeedBytesPerSec({
+    job: { sizeBytes: 100 }, phase: "preparing", percent: 50, phaseStartedAtMs: startedAt,
+  }), 0, "preparing 是外层解压，百分比不代表真实吞吐");
+  assert.equal(estimateSpeedBytesPerSec({
+    job: { sizeBytes: 0 }, phase: "extracting", percent: 50, phaseStartedAtMs: startedAt,
+  }), 0, "旧 job JSON 没有 sizeBytes");
+  assert.equal(estimateSpeedBytesPerSec({
+    job: { sizeBytes: 100 }, phase: "extracting", percent: 0, phaseStartedAtMs: startedAt,
+  }), 0);
+  // 不足 1s 的估算是噪声
+  assert.equal(estimateSpeedBytesPerSec({
+    job: { sizeBytes: 100 * 1024 * 1024 },
+    phase: "extracting",
+    percent: 1,
+    phaseStartedAtMs: Date.now(),
+  }), 0);
+});
+
+test("progress writer persists speedBytesPerSec alongside progress", async () => {
+  const child = createFakeChild();
+  const store = createMemoryStore({
+    sizeBytes: 200 * 1024 * 1024,
+  });
+  const promise = defaultRunPhase("extracting", {
+    args: ["x", "x.zip"],
+    job: store.read(),
+    store,
+    tool: { path: "/bin/true" },
+    spawnProcess: () => child,
+    progressThrottleMs: 0,
+    progressPercentStep: 0,
+  });
+
+  child.stdout.emit("data", Buffer.from(" 10% - a.bin\r", "utf8"));
+  child.emit("close", 0, null);
+  await promise;
+
+  const withSpeed = store.writes.filter((w) => w.progress === 10);
+  assert.ok(withSpeed.length >= 1, "10% 进度应落盘");
+  assert.equal(
+    typeof withSpeed.at(-1).speedBytesPerSec,
+    "number",
+    "进度落盘应携带速率字段",
+  );
+});

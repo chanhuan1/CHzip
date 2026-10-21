@@ -61,7 +61,9 @@ function appendArchiveOptions(args, selection, options) {
   }
 
   if (options.password) {
-    args.push(`-p${options.password}`);
+    // 只下发裸 -p，密码本体由 stdin 送入。把密码拼进 argv 会被同机进程
+    // 通过 ps / /proc/<pid>/cmdline 读到，与“密码不出现在命令行”的红线冲突。
+    args.push("-p");
   }
 }
 
@@ -135,8 +137,8 @@ function buildReadCommentArgs(selection, options) {
 // 完整性体检（F6）：`7z t` 流式校验整个压缩包的 CRC。
 // 与 x 的关键差别：只读不写盘（无 -o），因此对固实包、大归档都是安全预检；
 // -bsp1 让进度行与解压同构，前端轮询同一套解析即可复用。
-// 密码与代码页走与 list/extract 相同的 appendArchiveOptions（含 -p 临时文件语义
-// 由调用方保证；这里只拼参数）。
+// 密码与代码页走与 list/extract 相同的 appendArchiveOptions。密码只以下发
+// 裸 -p 的形式出现，实际内容由 spawn 层通过 stdin 送入。
 function buildTestArgs(selection, options = {}) {
   const args = ["t", "-y", "-bsp1", "-bb1", "-sccUTF-8"];
   appendArchiveOptions(args, selection, options);

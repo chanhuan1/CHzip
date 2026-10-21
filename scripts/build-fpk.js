@@ -165,7 +165,7 @@ function prepareStage({
 }
 
 /**
- * 从 manifest 文本里解析 version 字段（如 "4.2"）。缺失即抛错，
+ * 从 manifest 文本里解析 version 字段（如 "4.3"）。缺失即抛错，
  * 因为产物文件名与版本门禁都依赖它。
  */
 function parseVersion(manifestPath) {

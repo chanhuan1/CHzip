@@ -149,34 +149,6 @@
         return "mixed";
     }
 
-    function cloneNode(node, children) {
-        return {
-            ...node,
-            children,
-        };
-    }
-
-    function filterTree(nodes, query) {
-        const needle = String(query || "").trim().toLocaleLowerCase();
-        if (!needle) {
-            return nodes;
-        }
-
-        const result = [];
-        for (const node of nodes) {
-            const matches = node.path.toLocaleLowerCase().includes(needle);
-            if (matches) {
-                result.push(cloneNode(node, node.children));
-                continue;
-            }
-            const children = filterTree(node.children || [], needle);
-            if (children.length) {
-                result.push(cloneNode(node, children));
-            }
-        }
-        return result;
-    }
-
     function searchFiles(entries, query) {
         const needle = String(query || "").trim().toLocaleLowerCase();
         if (!needle) {
@@ -261,7 +233,6 @@
         collectDescendantFiles,
         computeSelectionCounts,
         createSearchScheduler,
-        filterTree,
         renderBatches,
         searchFiles,
         selectionState,

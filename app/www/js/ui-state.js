@@ -32,9 +32,10 @@
             // F11 视图切换：'list' | 'thumbs'。默认列表。
             fileViewMode: "list",
             // 缩略图墙当前的控制器（renderThumbWall 返回值），切视图/换包时
-            // 调它的 dispose() 停掉观察器与队列。缩略图墙的 LRU 缓存挂在
-            // 这个控制器上，跨「切到列表再切回」保留。
+            // 调它的 dispose() 停掉观察器与队列。
             thumbWallController: null,
+            // LRU 缓存由页面状态持有，切到列表再切回仍可命中；换包时统一 clear。
+            thumbCache: null,
             // 当前在途的预览请求。新请求发起前先 abort 掉上一个，避免连点
             // 导致多个 7z 同时跑（那会把单核占满升级成多核占满）。
             previewAbortController: null,

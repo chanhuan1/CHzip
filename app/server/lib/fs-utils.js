@@ -2,7 +2,7 @@
 
 const crypto = require("node:crypto");
 const fs = require("node:fs");
-const { CRYPTO, PERMISSIONS } = require("./constants");
+const { CRYPTO } = require("./constants");
 
 const DEFAULT_LOCK_ATTEMPTS = 200;
 const DEFAULT_LOCK_RETRY_MS = 5;
@@ -66,13 +66,21 @@ function releaseFileLock(lockPath, descriptor) {
 
 function truncateUtf8Name(name, byteLimit = 230) {
   const value = String(name || "");
-  if (Buffer.byteLength(value, "utf8") <= byteLimit) {
+  const limit = Math.max(0, Math.floor(Number(byteLimit) || 0));
+  if (limit === 0) {
+    return "";
+  }
+  if (Buffer.byteLength(value, "utf8") <= limit) {
     return value;
   }
   const dotIndex = value.lastIndexOf(".");
-  const ext = dotIndex > 0 ? value.slice(dotIndex) : "";
-  const stem = dotIndex > 0 ? value.slice(0, dotIndex) : value;
-  const stemBudget = Math.max(1, byteLimit - Buffer.byteLength(ext, "utf8"));
+  let ext = dotIndex > 0 ? value.slice(dotIndex) : "";
+  if (Buffer.byteLength(ext, "utf8") + 1 > limit) {
+    // 扩展名自身就超过上限时不能强行保留，否则会再次越过文件系统限制。
+    ext = "";
+  }
+  const stem = ext ? value.slice(0, dotIndex) : value;
+  const stemBudget = Math.max(0, limit - Buffer.byteLength(ext, "utf8"));
   let out = "";
   let bytes = 0;
   for (const char of stem) {
@@ -83,10 +91,26 @@ function truncateUtf8Name(name, byteLimit = 230) {
     out += char;
     bytes += size;
   }
-  const candidate = `${out}${ext}` || value.slice(0, byteLimit);
-  return Buffer.byteLength(candidate, "utf8") <= byteLimit
-    ? candidate
-    : candidate.slice(0, byteLimit);
+  let candidate = `${out}${ext}`;
+  if (!candidate && !ext) {
+    // 至少返回一个合法字符；调用方传入的典型上限远大于 1 字节。
+    for (const char of value) {
+      if (Buffer.byteLength(char, "utf8") <= limit) {
+        candidate = char;
+      }
+      break;
+    }
+  }
+  if (!candidate) {
+    candidate = "_";
+  }
+  // 正常分支已按字节精确截断；这里再做一次字符级兜底，绝不做 UTF-16 slice。
+  while (Buffer.byteLength(candidate, "utf8") > limit) {
+    const chars = Array.from(candidate);
+    chars.pop();
+    candidate = chars.join("");
+  }
+  return candidate || "_";
 }
 
 function overwriteFileSync(filePath, passes = CRYPTO.PASSWORD_OVERWRITE_PASSES) {

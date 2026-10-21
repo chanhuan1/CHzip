@@ -2,7 +2,6 @@
     "use strict";
 
     function createCommentManager(state, api) {
-        let currentComment = "";
         let originalComment = "";
 
         function updateCommentStatus() {

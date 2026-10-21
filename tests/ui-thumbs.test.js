@@ -234,6 +234,41 @@ test("renderThumbWall renders only image files, skipping non-images and oversize
   wall.dispose();
 });
 
+test("renderThumbWall reuses the cache owned by the page state", () => {
+  const { createThumbCache, renderThumbWall } = globalThis.CHzipUiThumbs;
+  const cache = createThumbCache(2);
+  cache.set("photos/a.jpg", "blob:cached-thumbnail");
+  let requests = 0;
+  const state = createState({
+    entries: [IMAGE_ENTRIES[0]],
+  });
+
+  const wall = renderThumbWall(state, {
+    api: {
+      postApi: async () => {
+        requests += 1;
+        return { content: "" };
+      },
+    },
+    uiPreview: globalThis.CHzipPreview,
+    archivePath: "/fake.zip",
+    getPassword: () => "",
+    getCodePage: () => "auto",
+    cache,
+  });
+
+  const cell = flatten(thumbWall).find(
+    (el) => el.dataset.path === "photos/a.jpg",
+  );
+  assert.equal(cell.dataset.cached, "1");
+  const image = flatten(cell).find((el) => el.classList.contains("thumb-img"));
+  assert.equal(image.src, "blob:cached-thumbnail");
+  assert.equal(requests, 0);
+
+  wall.dispose();
+  cache.clear();
+});
+
 test("renderThumbWall shows solid-archive warning and returns no-op dispose", () => {
   const { renderThumbWall } = globalThis.CHzipUiThumbs;
   const state = createState({

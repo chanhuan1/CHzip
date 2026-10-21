@@ -6,7 +6,7 @@
 
 面向 **fnOS（飞牛私有云）文件管理器右键场景**的专业压缩包处理工具 —— 解压 · 分卷 · 选择性解压 · 文件预览 · 密码管理，一键完成。
 
-[![版本](https://img.shields.io/badge/版本-v4.2-2786dc?style=flat-square)](https://github.com/chanhuan1/CHzip/releases)
+[![版本](https://img.shields.io/badge/版本-v4.3-2786dc?style=flat-square)](https://github.com/chanhuan1/CHzip/releases)
 [![平台](https://img.shields.io/badge/平台-fnOS%20(x86_64%20·%20arm64)-2786dc?style=flat-square)]()
 [![Stars](https://img.shields.io/github/stars/chanhuan1/CHzip?style=flat-square&label=Stars&color=2786dc)](https://github.com/chanhuan1/CHzip/stargazers)
 [![Forks](https://img.shields.io/github/forks/chanhuan1/CHzip?style=flat-square&label=Forks&color=2786dc)](https://github.com/chanhuan1/CHzip/forks)
@@ -50,14 +50,14 @@
 
 **🔒 安全设计**
 - 路径越权防护（目录遍历 / 绝对路径 / 危险字符拦截）+ 授权目录白名单。
-- 临时密码文件用后即焚（多次随机覆写再删除）；任务前后源文件指纹校验。
+- 解压密码通过进程标准输入传递，不出现在命令行参数；临时密码文件用后即焚（多次随机覆写再删除）；任务前后源文件指纹校验。
 - 诊断日志自动脱敏，按请求 ID 追踪。
 
 ---
 
 ## 🚀 快速开始
 
-1. 在飞牛应用中心手动安装 `CHzip_4.2_<架构>.fpk`（x86_64 / arm64）。
+1. 在飞牛应用中心手动安装 `CHzip_4.3_<架构>.fpk`（x86_64 / arm64）。
 2. 文件管理器右键压缩包（分卷选中首卷即可）→「使用 CHzip 打开」。
 3. 预览目录 → 选择目标路径 → 点「开始解压」。
 
@@ -107,7 +107,7 @@ CHzip/
 ## 🛠️ 开发 / 构建 / 测试
 
 ```bash
-npm test                 # node --test，418 个用例
+npm test                 # node --test，455 个用例
 node --check app/server/api.js   # 语法检查
 node scripts/build-fpk.js        # 构建 dist/*.fpk（双架构，需 fnpack）
 node scripts/audit-fpk.js        # 发布审计（校验和/版本/架构/搜索特性）

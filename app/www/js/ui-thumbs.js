@@ -6,7 +6,6 @@
     // 缩略图墙是「挑选」场景：每次取图都是一次 CGI + 一次 7z 调用（NAS 上
     // 不免费），所以必须同时上「懒加载 + 并发限流 + LRU 缓存」三道闸，
     // 不能一进缩略图视图就把几百张图全拉一遍。
-    const THUMB_CELL_SIZE = 112;         // 单元格边长（CSS 像素）
     const THUMB_LRU_CAPACITY = 60;       // 同时存活的最大 blob URL 数
     const THUMB_FETCH_CONCURRENCY = 2;   // 同时在途的 preview-file 请求数
     // 进入「距离视口还差多少 px 就开始取图」的预取窗口。太小会变成「刚好进
@@ -183,7 +182,8 @@
             return { dispose() {} };
         }
 
-        const cache = createThumbCache(THUMB_LRU_CAPACITY);
+        // 缓存由外层持有：切到列表再切回来仍可命中，换压缩包时由外层 clear。
+        const cache = options.cache || createThumbCache(THUMB_LRU_CAPACITY);
         const queue = createThumbQueue(THUMB_FETCH_CONCURRENCY, async (task) => {
             const { entry, cell, img } = task;
             // 渲染期间用户切回列表 / 切走压缩包：cell 已不在 document 里，
@@ -286,9 +286,6 @@
                 queue.clear();
                 // cache 不在这里 clear —— 切回列表再切回来时仍想命中缓存。
             },
-            cacheSize() {
-                return cache.size();
-            },
         };
     }
 
@@ -309,7 +306,6 @@
     }
 
     root.CHzipUiThumbs = {
-        THUMB_CELL_SIZE,
         THUMB_FETCH_CONCURRENCY,
         THUMB_LRU_CAPACITY,
         createThumbCache,

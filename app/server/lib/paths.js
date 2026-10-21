@@ -18,7 +18,6 @@ const path = require("node:path");
 const { LIMITS, PERMISSIONS } = require("./constants");
 const {
   collectAuthorizedPathCandidates,
-  parsePathList,
 } = require("./authorization-paths");
 
 /**
@@ -268,7 +267,7 @@ function findArchiveAccessibleRoot(archivePath, options = {}) {
   // 例如: /vol1/共享文件夹/文档/archive.zip
   // 我们需要找到共享目录的根路径 (/vol1/共享文件夹)
   const fnosSharePattern = options.fnosSharePattern
-    || /^(\/vol\d+\/[^/]+\/[^/]+)(?:\/|$)/i;
+    || /^(\/vol\d+\/[^/]+)(?:\/|$)/i;
   const match = archiveDirectory.match(fnosSharePattern);
   if (!match) {
     return archiveDirectory;

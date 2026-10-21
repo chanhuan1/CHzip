@@ -8,7 +8,6 @@ const {
   collectDescendantFiles,
   computeSelectionCounts,
   createSearchScheduler,
-  filterTree,
   searchFiles,
   selectionState,
   stateFromCounts,
@@ -81,29 +80,6 @@ test("selectionState returns correct states", () => {
   assert.equal(selectionState(node, new Set()), "unchecked");
   assert.equal(selectionState(node, new Set(["dir/file1.txt"])), "mixed");
   assert.equal(selectionState(node, new Set(["dir/file1.txt", "dir/file2.txt"])), "checked");
-});
-
-test("filterTree filters by query", () => {
-  const entries = [
-    { path: "dir/file1.txt", type: "file", size: 100 },
-    { path: "dir/file2.log", type: "file", size: 200 },
-    { path: "other/file3.txt", type: "file", size: 300 },
-  ];
-  const tree = buildTree(entries);
-  const filtered = filterTree(tree, "file1");
-  assert.equal(filtered.length, 1);
-  assert.equal(filtered[0].name, "dir");
-  assert.equal(filtered[0].children.length, 1);
-  assert.equal(filtered[0].children[0].name, "file1.txt");
-});
-
-test("filterTree returns all for empty query", () => {
-  const entries = [
-    { path: "dir/file1.txt", type: "file", size: 100 },
-  ];
-  const tree = buildTree(entries);
-  const filtered = filterTree(tree, "");
-  assert.equal(filtered.length, tree.length);
 });
 
 test("searchFiles finds matching files", () => {

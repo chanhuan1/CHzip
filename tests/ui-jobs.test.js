@@ -8,6 +8,7 @@ require("../app/www/js/ui-jobs");
 const {
   HIDDEN_POLL_INTERVAL_MS,
   IDLE_BACKOFF_MS,
+  cancelExtract,
   createPoller,
   formatTaskDateTime,
   setJobProgress,
@@ -297,4 +298,84 @@ test("setJobProgress works with window.CHzipUiTree present without ReferenceErro
   } finally {
     globalThis.window = originalWindow;
   }
+});
+
+test("formatSpeed renders MB/s for running jobs and stays quiet otherwise", () => {
+  const { formatSpeed } = globalThis.CHzipUiJobs;
+  assert.equal(
+    formatSpeed({ status: "running", speedBytesPerSec: 120 * 1024 * 1024 }),
+    "120 MB/s",
+  );
+  assert.equal(
+    formatSpeed({ status: "running", speedBytesPerSec: 2.5 * 1024 * 1024 }),
+    "2.5 MB/s",
+  );
+  assert.equal(
+    formatSpeed({ status: "running", speedBytesPerSec: 300 * 1024 }),
+    "300 KB/s",
+  );
+  assert.equal(
+    formatSpeed({ status: "running", speedBytesPerSec: 1 }),
+    "1 B/s",
+  );
+  // 启动初期 / preparing 阶段 / 旧 job JSON：没有速率值，不展示。
+  assert.equal(formatSpeed({ status: "running", speedBytesPerSec: 0 }), "");
+  assert.equal(formatSpeed({ status: "running" }), "");
+  // 非 running 终态残留值也不展示。
+  assert.equal(
+    formatSpeed({ status: "success", speedBytesPerSec: 100 * 1024 * 1024 }),
+    "",
+  );
+});
+
+test("cancelExtract does not claim success while the job is still being created", async () => {
+  let aborted = false;
+  const state = {
+    running: true,
+    jobId: "",
+    extractAbortController: {
+      abort() {
+        aborted = true;
+      },
+    },
+    elements: {
+      cancelBtn: { disabled: true },
+      notice: { className: "", textContent: "" },
+    },
+  };
+
+  await cancelExtract(state, {
+    postApi: async () => {
+      throw new Error("不应发起取消请求");
+    },
+  });
+
+  assert.equal(aborted, false);
+  assert.equal(state.running, true);
+  assert.match(state.elements.notice.textContent, /仍在创建中/);
+});
+
+test("setJobProgress appends the speed to the ETA line for running jobs", () => {
+  const state = { elements: createProgressStub() };
+  setJobProgress(
+    40,
+    "正在解压",
+    "a.bin",
+    state,
+    { status: "running", speedBytesPerSec: 64 * 1024 * 1024 },
+    "30 秒",
+  );
+  assert.equal(state.elements.progressEta.hidden, false);
+  assert.equal(state.elements.progressEta.textContent, "剩余约 30 秒 · 64 MB/s");
+
+  // 没有速率值时只显示 ETA，不留尾巴分隔符。
+  setJobProgress(
+    40,
+    "正在解压",
+    "a.bin",
+    state,
+    { status: "running" },
+    "30 秒",
+  );
+  assert.equal(state.elements.progressEta.textContent, "剩余约 30 秒");
 });

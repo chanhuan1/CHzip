@@ -10,12 +10,13 @@ const {
   buildStdoutExtractArgs,
 } = require("../app/server/lib/sevenzip");
 
-test("buildListArgs includes password when provided", () => {
+test("buildListArgs requests stdin password without placing the secret in argv", () => {
   const args = buildListArgs(
     { type: "7z", format: "7z" },
     { archivePath: "/data/file.7z", password: "secret" },
   );
-  assert.ok(args.includes("-psecret"));
+  assert.ok(args.includes("-p"));
+  assert.equal(args.some((arg) => arg.includes("secret")), false);
   assert.ok(args.includes("/data/file.7z"));
 });
 
