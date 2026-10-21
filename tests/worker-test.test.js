@@ -119,6 +119,40 @@ test("F6 test job runs only the testing phase and succeeds", async () => {
   assert.ok(args.includes("/nonexistent/archive.7z"));
 });
 
+test("legacy ZIP Chinese password retries GBK after a PASSWORD failure", async () => {
+  const runtimeRoot = makeRuntimeRoot();
+  const passwordFile = path.join(runtimeRoot, "password.txt");
+  fs.writeFileSync(passwordFile, "中文密码", "utf8");
+  const store = createMemoryStore({
+    kind: "test",
+    selection: { format: "zip", type: "zip.split" },
+    passwordFile,
+  });
+  const contexts = [];
+  let attempts = 0;
+
+  const result = await runWorker(JOB_ID, {
+    store,
+    runtimeRoot,
+    runPhase: async (phase, context) => {
+      attempts += 1;
+      contexts.push({ phase, ...context });
+      if (attempts === 1) {
+        const error = new Error("密码错误或压缩包需要密码");
+        error.code = "PASSWORD";
+        throw error;
+      }
+      return { exitCode: 0, signal: null, log: "" };
+    },
+    validateListing: async () => ({ entryCount: 0 }),
+  });
+
+  assert.equal(result.status, "success");
+  assert.equal(attempts, 2);
+  assert.equal(contexts[0].passwordEncoding || "", "");
+  assert.equal(contexts[1].passwordEncoding, "gbk");
+});
+
 test("F6 test job kind survives to the terminal record", async () => {
   const store = createMemoryStore();
 

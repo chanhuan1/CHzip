@@ -294,16 +294,55 @@ function hasInlinePasswordArgument(args) {
   ));
 }
 
+function prepareSevenZipLaunch(tool, args, options = {}) {
+  const password = options.password ? String(options.password) : "";
+  if (!password || !options.passwordEncoding) {
+    return {
+      command: tool.path,
+      args,
+      feedPassword: Boolean(password) && !hasInlinePasswordArgument(args),
+    };
+  }
+  const inlinePassword = `-p${password}`;
+  const filteredArgs = (args || []).filter((argument) => (
+    argument !== inlinePassword && argument !== "-p"
+  ));
+  const command = "/bin/sh";
+  const shellArgs = [
+    "-c",
+    [
+      "set -e",
+      "IFS= read -r password",
+      "encoding=$1",
+      "shift",
+      "tool=$1",
+      "shift",
+      "encoded=$(printf '%s' \"$password\" | iconv -f UTF-8 -t \"$encoding\")",
+      "exec \"$tool\" \"-p$encoded\" \"$@\"",
+    ].join("\n"),
+    "chzip-password",
+    options.passwordEncoding,
+    tool.path,
+    ...filteredArgs,
+  ];
+  return {
+    command,
+    args: shellArgs,
+    feedPassword: true,
+  };
+}
+
 function runSevenZipSync(tool, args, options = {}) {
   // encoding 默认 utf8，保持所有既有调用点逐字节不变；
   // 传 null 时 stdout/stderr 是 Buffer —— 预览图片需要原始字节，不能先过
   // 一次 UTF-8 解码（那会把二进制内容替换成 U+FFFD）。
   const encoding = options.encoding === undefined ? "utf8" : options.encoding;
-  const result = spawnSync(tool.path, args, {
+  const launch = prepareSevenZipLaunch(tool, args, options);
+  const result = spawnSync(launch.command, launch.args, {
     cwd: options.cwd,
     encoding,
     // 裸 -p 会从 stdin 读取密码。spawnSync 在调用结束时自动关闭输入流。
-    input: options.password && !hasInlinePasswordArgument(args)
+    input: launch.feedPassword
       ? `${options.password}\n`
       : undefined,
     timeout: options.timeout || TIMEOUTS.SEVENZIP_SYNC_MS,
@@ -347,14 +386,14 @@ function runSevenZipSync(tool, args, options = {}) {
 
 function spawnSevenZip(tool, args, options = {}) {
   const password = options.password ? String(options.password) : "";
-  const feedPassword = Boolean(password) && !hasInlinePasswordArgument(args);
-  const child = spawn(tool.path, args, {
+  const launch = prepareSevenZipLaunch(tool, args, options);
+  const child = spawn(launch.command, launch.args, {
     cwd: options.cwd,
     detached: options.detached !== false,
-    stdio: [feedPassword ? "pipe" : "ignore", "pipe", "pipe"],
+    stdio: [launch.feedPassword ? "pipe" : "ignore", "pipe", "pipe"],
     windowsHide: true,
   });
-  if (feedPassword && child.stdin) {
+  if (launch.feedPassword && child.stdin) {
     // EPIPE 通常意味着子进程已退出；后续 close/error 事件会给出真实错误，
     // 这里只负责吞掉 stdin 的异步错误，避免未处理异常打死 worker。
     child.stdin.on("error", () => {});

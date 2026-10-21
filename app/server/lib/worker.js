@@ -17,6 +17,7 @@ const {
   buildListArgs,
   buildStdoutExtractArgs,
   buildTestArgs,
+  passwordNeedsArgv,
 } = require("./sevenzip");
 const {
   findNestedTar,
@@ -173,6 +174,7 @@ function defaultRunPhase(phase, context) {
       cwd: path.dirname(context.job.archivePath),
       detached: true,
       password: context.password || "",
+      passwordEncoding: context.passwordEncoding || "",
     });
 
     registerProcessGroup(
@@ -270,6 +272,7 @@ function defaultValidateListing(tool, args, context) {
       cwd: context.cwd || undefined,
       detached: true,
       password: context.password || "",
+      passwordEncoding: context.passwordEncoding || "",
     });
     registerProcessGroup(
       context.store,
@@ -807,6 +810,49 @@ async function runWorker(jobId, options = {}) {
     ].filter(Boolean),
   });
 
+  async function runPhaseWithPasswordFallback(phase, context) {
+    try {
+      return await runPhase(phase, context);
+    } catch (error) {
+      const canRetryLegacyZip = error?.code === "PASSWORD"
+        && context.job?.selection?.format === "zip"
+        && passwordNeedsArgv(context.password)
+        && !context.passwordEncoding;
+      if (!canRetryLegacyZip) {
+        throw error;
+      }
+      safeDiagnosticWrite(logger, {
+        event: "worker_password_fallback",
+        requestId: context.job.requestId || "",
+        jobId: context.job.id,
+        encoding: "gbk",
+      });
+      return runPhase(phase, {
+        ...context,
+        passwordEncoding: "gbk",
+        passwordProvided: true,
+      });
+    }
+  }
+
+  async function validateListingWithPasswordFallback(tool, args, context, format) {
+    try {
+      return await validateListing(tool, args, context);
+    } catch (error) {
+      const canRetryLegacyZip = error?.code === "PASSWORD"
+        && format === "zip"
+        && passwordNeedsArgv(context.password)
+        && !context.passwordEncoding;
+      if (!canRetryLegacyZip) {
+        throw error;
+      }
+      return validateListing(tool, args, {
+        ...context,
+        passwordEncoding: "gbk",
+      });
+    }
+  }
+
   // 启动前段（读任务 / 取密码 / 开源文件 fd）必须单独包一层 try：
   // 这里的异常发生在下面的状态机之外，不落终态就会让任务永久卡在 queued。
   let job;
@@ -862,7 +908,7 @@ async function runWorker(jobId, options = {}) {
         password,
         codePage: job.codePage,
       });
-      await runPhase("testing", {
+      await runPhaseWithPasswordFallback("testing", {
         args: testArgs,
         job,
         store,
@@ -911,7 +957,7 @@ async function runWorker(jobId, options = {}) {
         password,
         codePage: job.codePage,
       });
-      await runPhase("preparing", {
+      await runPhaseWithPasswordFallback("preparing", {
         args: prepareArgs,
         job,
         store,
@@ -933,12 +979,17 @@ async function runWorker(jobId, options = {}) {
       password: extractionPassword,
       codePage: extractionCodePage,
     });
-    let listing = await validateListing(tool, listingArgs, {
-      cwd: path.dirname(extractionArchivePath),
-      job,
-      store,
-      password: extractionPassword,
-    });
+    let listing = await validateListingWithPasswordFallback(
+      tool,
+      listingArgs,
+      {
+        cwd: path.dirname(extractionArchivePath),
+        job,
+        store,
+        password: extractionPassword,
+      },
+      extractionSelection.format,
+    );
     if (!extractionSelection.format && listing.format) {
       extractionSelection = {
         ...extractionSelection,
@@ -950,12 +1001,17 @@ async function runWorker(jobId, options = {}) {
           password: extractionPassword,
           codePage: extractionCodePage,
         });
-        listing = await validateListing(tool, listingArgs, {
-          cwd: path.dirname(extractionArchivePath),
-          job,
-          store,
-          password: extractionPassword,
-        });
+        listing = await validateListingWithPasswordFallback(
+          tool,
+          listingArgs,
+          {
+            cwd: path.dirname(extractionArchivePath),
+            job,
+            store,
+            password: extractionPassword,
+          },
+          extractionSelection.format,
+        );
       }
     }
     verifyFingerprints(job.sourceFingerprint, sourceDescriptors);
@@ -971,7 +1027,7 @@ async function runWorker(jobId, options = {}) {
       // normalizeConflictPolicy(undefined) 回落 rename，与以前行为一致。
       conflictPolicy: job.conflictPolicy,
     });
-    await runPhase("extracting", {
+    await runPhaseWithPasswordFallback("extracting", {
       args: extractArgs,
       job,
       store,

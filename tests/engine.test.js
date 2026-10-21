@@ -321,6 +321,26 @@ test("runSevenZipSync does not feed stdin when a non-ASCII password is inline", 
   }
 });
 
+test("runSevenZipSync can convert a UTF-8 password to GBK for legacy ZIP", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "chzip-gbk-password-"));
+  const toolPath = path.join(dir, "7z-fake");
+  fs.writeFileSync(
+    toolPath,
+    "#!/bin/sh\nprintf '%s' \"$1\" | od -An -tx1 | tr -d ' \\n'\n",
+  );
+  fs.chmodSync(toolPath, 0o755);
+  try {
+    const result = runSevenZipSync(
+      { path: toolPath, source: "test" },
+      ["-p中文", "archive.zip"],
+      { password: "中文", passwordEncoding: "gbk" },
+    );
+    assert.equal(result.stdout.trim(), "2d70d6d0cec4");
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("findSevenZip caches the probe result inside the process", () => {
   resetSevenZipCache();
   try {

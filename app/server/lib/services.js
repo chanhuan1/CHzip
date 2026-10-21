@@ -45,6 +45,7 @@ const {
   buildListArgs,
   buildReadCommentArgs,
   buildStdoutExtractArgs,
+  passwordNeedsArgv,
 } = require("./sevenzip");
 const {
   fingerprintFiles,
@@ -205,6 +206,24 @@ function createServices(options = {}) {
     || TIMEOUTS.PREVIEW_FILE_MS;
   // 挂载点归属判定（同盘串行用）可注入：单测里不用真 statfs。
   const getMountKey = options.getMountKey || defaultMountKey;
+
+  function runSyncWithZipPasswordFallback(tool, args, runOptions, format, password) {
+    try {
+      return runSync(tool, args, runOptions);
+    } catch (error) {
+      const canRetryLegacyZip = error?.code === "PASSWORD"
+        && format === "zip"
+        && passwordNeedsArgv(password)
+        && !runOptions.passwordEncoding;
+      if (!canRetryLegacyZip) {
+        throw error;
+      }
+      return runSync(tool, args, {
+        ...runOptions,
+        passwordEncoding: "gbk",
+      });
+    }
+  }
   const spawnWorker = options.spawnWorker || ((jobId) => {
     const apiPath = path.resolve(__dirname, "..", "api.js");
     const child = spawn(process.execPath, [apiPath, "--worker", jobId], {
@@ -515,20 +534,26 @@ function createServices(options = {}) {
       throw attachMissingDetails(error, archive);
     }
     return withPreparedArchive(archive, input, (listingArchive) => {
-      let result = runSync(listingArchive.tool, buildListArgs(
+      let result = runSyncWithZipPasswordFallback(
+        listingArchive.tool,
+        buildListArgs(
         listingArchive.selection,
         {
           archivePath: listingArchive.filePath,
           password: input.password || "",
           codePage: input.codePage || "auto",
         },
-      ), {
-        cwd: listingArchive.directory,
-        maxBuffer: LIMITS.MAX_PREVIEW_OUTPUT_BYTES,
-        phase: "preview",
-        passwordProvided: Boolean(input.password),
-        password: input.password || "",
-      });
+        ),
+        {
+          cwd: listingArchive.directory,
+          maxBuffer: LIMITS.MAX_PREVIEW_OUTPUT_BYTES,
+          phase: "preview",
+          passwordProvided: Boolean(input.password),
+          password: input.password || "",
+        },
+        listingArchive.selection.format,
+        input.password || "",
+      );
       let effectiveSelection = listingArchive.selection;
       let detectedFormat = detectTechnicalListFormat(result.stdout);
       if (!effectiveSelection.format && detectedFormat) {
@@ -537,17 +562,23 @@ function createServices(options = {}) {
           format: detectedFormat,
         };
         if ((input.codePage || "auto") !== "auto") {
-          result = runSync(listingArchive.tool, buildListArgs(effectiveSelection, {
-            archivePath: listingArchive.filePath,
-            password: input.password || "",
-            codePage: input.codePage || "auto",
-          }), {
-            cwd: listingArchive.directory,
-            maxBuffer: LIMITS.MAX_PREVIEW_OUTPUT_BYTES,
-            phase: "preview",
-            passwordProvided: Boolean(input.password),
-            password: input.password || "",
-          });
+          result = runSyncWithZipPasswordFallback(
+            listingArchive.tool,
+            buildListArgs(effectiveSelection, {
+              archivePath: listingArchive.filePath,
+              password: input.password || "",
+              codePage: input.codePage || "auto",
+            }),
+            {
+              cwd: listingArchive.directory,
+              maxBuffer: LIMITS.MAX_PREVIEW_OUTPUT_BYTES,
+              phase: "preview",
+              passwordProvided: Boolean(input.password),
+              password: input.password || "",
+            },
+            effectiveSelection.format,
+            input.password || "",
+          );
           detectedFormat = detectTechnicalListFormat(result.stdout);
         }
       }
@@ -982,20 +1013,26 @@ function createServices(options = {}) {
       // 现在 runSevenZipSync 支持 encoding 选项，两者可以兼得。
       let result;
       try {
-        result = runSync(archive.tool, buildStdoutExtractArgs(archive.selection, {
-          archivePath: archive.filePath,
-          password: input.password || "",
-          codePage: input.codePage || "auto",
-          selectionFile,
-        }), {
-          cwd: archive.directory,
-          maxBuffer: maxPreviewFileBytes,
-          encoding: null,
-          timeout: previewFileTimeoutMs,
-          // 超时后必须真的把 7z 杀掉，否则它会在后台继续烧 CPU。
-          killSignal: "SIGKILL",
-          password: input.password || "",
-        });
+        result = runSyncWithZipPasswordFallback(
+          archive.tool,
+          buildStdoutExtractArgs(archive.selection, {
+            archivePath: archive.filePath,
+            password: input.password || "",
+            codePage: input.codePage || "auto",
+            selectionFile,
+          }),
+          {
+            cwd: archive.directory,
+            maxBuffer: maxPreviewFileBytes,
+            encoding: null,
+            timeout: previewFileTimeoutMs,
+            // 超时后必须真的把 7z 杀掉，否则它会在后台继续烧 CPU。
+            killSignal: "SIGKILL",
+            password: input.password || "",
+          },
+          archive.selection.format,
+          input.password || "",
+        );
       } catch (previewError) {
         // spawnSync 超时会给出 ETIMEDOUT（此时子进程已按 killSignal 被杀）。
         if (previewError.code === "ETIMEDOUT") {
