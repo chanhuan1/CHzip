@@ -178,7 +178,7 @@ test("success terminal does not write partialSuccess", async () => {
   assert.equal(result.workerPid, null, "success 终态必须清掉 workerPid");
 });
 
-test("failed terminal also clears workerPid so it cannot block same-disk queueing", async () => {
+test("failed terminal clears workerPid so it cannot remain active", async () => {
   const runtimeRoot = makeRuntime();
   const outputDir = path.join(runtimeRoot, "out");
   fs.mkdirSync(outputDir, { recursive: true });

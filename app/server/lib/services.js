@@ -89,59 +89,6 @@ function requireTool(findTool) {
   return tool;
 }
 
-// 「这块盘」的稳定标识：statfs 的 f_fsid（FreeBSD/macOS 风格）在 Linux 上
-// 不可用，Linux 下用路径归属的块设备 dev（stat.dev 的高 12 位 major + 低
-// 20 位 minor）——同一物理盘上的所有路径 stat.dev 相同，跨盘不同。
-// 取不到（平台不支持/路径不存在）返回 null，调用方按「未知→允许并发」处理。
-function defaultMountKey(filePath) {
-  try {
-    const stat = fs.statSync(filePath);
-    if (typeof stat.dev !== "number") {
-      return null;
-    }
-    // dev 是 major/minor 复合值；不同挂载点落在同一设备上时 dev 相同。
-    return `dev:${stat.dev}`;
-  } catch (error) {
-    return null;
-  }
-}
-
-// 归并任务的「盘集合」：源压缩包 + 输出目录各占一份。
-// 任一空（取不到 stat）都返回 null，表示无法判定，不阻塞并发。
-function jobDiskKeys(job, getKey) {
-  const keys = new Set();
-  for (const candidate of [job.archivePath, job.outputDir].filter(Boolean)) {
-    const key = getKey(candidate);
-    if (key === null) {
-      return null;
-    }
-    keys.add(key);
-  }
-  return keys;
-}
-
-// 同盘串行判定：queued 任务的源/目标盘与任一 running 任务重叠即视为冲突。
-// 判定失败（某路径 stat 不到、平台无 dev）一律放行——并发自适应只是性能
-// 优化，绝不能把任务卡死在队列里。
-function conflictsWithRunning(queuedJob, runningJobs, getKey) {
-  const queuedKeys = jobDiskKeys(queuedJob, getKey);
-  if (queuedKeys === null) {
-    return false;
-  }
-  for (const running of runningJobs) {
-    const runningKeys = jobDiskKeys(running, getKey);
-    if (runningKeys === null) {
-      continue;
-    }
-    for (const key of queuedKeys) {
-      if (runningKeys.has(key)) {
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
 // 对外的任务视图：只暴露前端真正消费的字段。
 // 原始 job 还带 log（最大 64KB）、sourceFingerprint、selectionFile、
 // passwordFile（绝对路径）等内部状态，status 每秒轮询一次，全量回传既浪费
@@ -204,9 +151,6 @@ function createServices(options = {}) {
     || LIMITS.MAX_PREVIEW_FILE_BYTES;
   const previewFileTimeoutMs = options.previewFileTimeoutMs
     || TIMEOUTS.PREVIEW_FILE_MS;
-  // 挂载点归属判定（同盘串行用）可注入：单测里不用真 statfs。
-  const getMountKey = options.getMountKey || defaultMountKey;
-
   function runSyncWithZipPasswordFallback(tool, args, runOptions, format, password) {
     try {
       return runSync(tool, args, runOptions);
@@ -358,32 +302,6 @@ function createServices(options = {}) {
     return ahead;
   }
 
-  function listRunningJobs() {
-    const runningJobs = [];
-    for (const name of fs.readdirSync(store.jobsDir)) {
-      if (!/^[a-f0-9]{32}\.json$/.test(name)) {
-        continue;
-      }
-      let other;
-      try {
-        other = store.read(name.slice(0, -5));
-      } catch (error) {
-        continue;
-      }
-      if (!other || TERMINAL_STATUSES.has(other.status)) {
-        continue;
-      }
-      if (
-        other.workerPid
-        || other.status === "running"
-        || other.status === "cancelling"
-      ) {
-        runningJobs.push(other);
-      }
-    }
-    return runningJobs;
-  }
-
   // 顺带唤起：扫 jobs 找到仍在 queued（无 workerPid、无 cancelRequestedAt）的
   // 任务（extract 与 test 共用同一并发池，不再按 kind 过滤），按 createdAt
   // 升序在还有名额时逐个 launchWorker。
@@ -419,12 +337,6 @@ function createServices(options = {}) {
           includeStartingQueued: false,
         }) >= LIMITS.MAX_CONCURRENT_EXTRACTS) {
           return;
-        }
-        // 同盘串行：机械硬盘上多个解压互抢磁头反而整体更慢，
-        // 与 running 任务落在同一物理盘（源或输出任一重叠）时跳过本轮，
-        // 留在 queued 里等下一次 spawnQueued（状态轮询每秒都会进来）。
-        if (conflictsWithRunning(job, listRunningJobs(), getMountKey)) {
-          continue;
         }
         try {
           launchWorker(job.id);
@@ -742,14 +654,8 @@ function createServices(options = {}) {
       // 由后续请求（status/jobs/extract）的 spawnQueued 在腾出名额时唤起。
       // 返回体多带 queued/queueAhead 让前端任务中心能显示「排队中，前面还有 N 个」。
       let queued = false;
-      const diskConflict = conflictsWithRunning(
-        job,
-        listRunningJobs(),
-        getMountKey,
-      );
       if (
-        !diskConflict
-        && store.countActive({
+        store.countActive({
           excludeJobId: job.id,
         }) < LIMITS.MAX_CONCURRENT_EXTRACTS
       ) {
@@ -863,14 +769,8 @@ function createServices(options = {}) {
 
       // 与 extract 同一并发池：有名额立刻启动，满员留 queued 等 spawnQueued。
       let queued = false;
-      const diskConflict = conflictsWithRunning(
-        job,
-        listRunningJobs(),
-        getMountKey,
-      );
       if (
-        !diskConflict
-        && store.countActive({
+        store.countActive({
           excludeJobId: job.id,
         }) < LIMITS.MAX_CONCURRENT_EXTRACTS
       ) {
@@ -1111,9 +1011,6 @@ function createServices(options = {}) {
 }
 
 module.exports = {
-  conflictsWithRunning,
   createServices,
-  defaultMountKey,
   defaultRuntimeRoot,
-  jobDiskKeys,
 };

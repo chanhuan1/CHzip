@@ -628,11 +628,9 @@ test("api main no longer rejects extract with TOO_MANY_REQUESTS", () => {
   );
 });
 
-// ------------------------------------------------------------ 同盘串行（并发自适应）
+// ------------------------------------------------------------ 全局并发调度
 
-// running 任务与 queued 任务的「源/输出」任一落在同一物理盘（stat.dev 相同）
-// 时，本轮不唤起，留在队列里等下一次 spawnQueued。
-test("spawnQueued defers queued job on the same disk as a running job", () => {
+test("spawnQueued fills a free slot while another job is running", () => {
   const spawned = [];
   const services = createServices(makeStubs({
     runtimeRoot: tmpDir,
@@ -640,12 +638,10 @@ test("spawnQueued defers queued job on the same disk as a running job", () => {
       spawned.push(jobId);
       return fakeWorker(60000 + spawned.length);
     },
-    // 注入的挂载判定：路径里带 same 的视为同一块盘。
-    getMountKey: (p) => (String(p).includes("same") ? "dev:1" : "dev:2"),
   }));
   const running = services.store.create({
-    archivePath: "/same/running.zip",
-    outputDir: "/same/out-running",
+    archivePath: path.join(tmpDir, "running.zip"),
+    outputDir: path.join(tmpDir, "out-running"),
     selection: { format: "zip", type: "zip" },
     sevenZipPath: process.execPath,
     sevenZipSource: "test",
@@ -659,9 +655,8 @@ test("spawnQueued defers queued job on the same disk as a running job", () => {
     workerPid: process.pid,
   }));
   const queued = services.store.create({
-    // 输出目录与 running 的源同盘 → 冲突
-    archivePath: "/other/pending.zip",
-    outputDir: "/same/out-pending",
+    archivePath: path.join(tmpDir, "pending.zip"),
+    outputDir: path.join(tmpDir, "out-pending"),
     selection: { format: "zip", type: "zip" },
     sevenZipPath: process.execPath,
     sevenZipSource: "test",
@@ -671,12 +666,11 @@ test("spawnQueued defers queued job on the same disk as a running job", () => {
 
   services.spawnQueued();
 
-  assert.equal(spawned.length, 0, "同盘任务本轮不唤起");
-  assert.equal(services.store.read(queued.id).status, "queued");
-  assert.equal(services.store.read(queued.id).workerPid, null);
+  assert.deepEqual(spawned, [queued.id], "存在空闲槽位时应正常唤起");
+  assert.ok(services.store.read(queued.id).workerPid > 0);
 });
 
-test("extract also defers a new job when all paths share a running disk", () => {
+test("extract starts immediately while another task uses the same directory", () => {
   const spawned = [];
   const services = createServices(makeStubs({
     runtimeRoot: tmpDir,
@@ -684,11 +678,10 @@ test("extract also defers a new job when all paths share a running disk", () => 
       spawned.push(jobId);
       return fakeWorker(60500);
     },
-    getMountKey: () => "dev:same",
   }));
   const running = services.store.create({
-    archivePath: "/same/running.zip",
-    outputDir: "/same/out-running",
+    archivePath: path.join(tmpDir, "running.zip"),
+    outputDir: path.join(tmpDir, "out-running"),
     selection: { format: "zip", type: "zip" },
     sevenZipPath: process.execPath,
     sevenZipSource: "test",
@@ -701,19 +694,19 @@ test("extract also defers a new job when all paths share a running disk", () => 
     startedAt: new Date().toISOString(),
     workerPid: process.pid,
   }));
-  const archivePath = writeArchive("same-disk.zip");
+  const archivePath = writeArchive("pending.zip");
 
   const result = services.extract({
     path: archivePath,
     destinationRoot: tmpDir,
   });
 
-  assert.equal(spawned.length, 0);
-  assert.equal(result.queued, true);
-  assert.equal(services.store.read(result.jobId).workerPid, null);
+  assert.deepEqual(spawned, [result.jobId]);
+  assert.equal(result.queued, undefined, "存在空闲槽位时应立即启动");
+  assert.ok(services.store.read(result.jobId).workerPid > 0);
 });
 
-test("a failed old job with stale workerPid must not block a same-disk job", () => {
+test("a failed old job with stale workerPid does not consume a slot", () => {
   const spawned = [];
   const services = createServices(makeStubs({
     runtimeRoot: tmpDir,
@@ -721,11 +714,10 @@ test("a failed old job with stale workerPid must not block a same-disk job", () 
       spawned.push(jobId);
       return fakeWorker(60600);
     },
-    getMountKey: () => "dev:same",
   }));
   const failed = services.store.create({
-    archivePath: "/same/failed.zip",
-    outputDir: "/same/out-failed",
+    archivePath: path.join(tmpDir, "failed.zip"),
+    outputDir: path.join(tmpDir, "out-failed"),
     selection: { format: "zip", type: "zip" },
     sevenZipPath: process.execPath,
     sevenZipSource: "test",
@@ -740,8 +732,8 @@ test("a failed old job with stale workerPid must not block a same-disk job", () 
     workerPid: process.pid,
   }));
   const queued = services.store.create({
-    archivePath: "/same/next.zip",
-    outputDir: "/same/out-next",
+    archivePath: path.join(tmpDir, "next.zip"),
+    outputDir: path.join(tmpDir, "out-next"),
     selection: { format: "zip", type: "zip" },
     sevenZipPath: process.execPath,
     sevenZipSource: "test",
@@ -752,87 +744,4 @@ test("a failed old job with stale workerPid must not block a same-disk job", () 
   services.spawnQueued();
 
   assert.deepEqual(spawned, [queued.id]);
-});
-
-// 不同盘的任务照常唤起：并发上限内不引入多余串行。
-test("spawnQueued launches queued job on a different disk", () => {
-  const spawned = [];
-  const services = createServices(makeStubs({
-    runtimeRoot: tmpDir,
-    spawnWorker: (jobId) => {
-      spawned.push(jobId);
-      return fakeWorker(61000 + spawned.length);
-    },
-    getMountKey: (p) => (String(p).includes("diskA") ? "dev:1" : "dev:2"),
-  }));
-  const running = services.store.create({
-    archivePath: "/diskA/running.zip",
-    outputDir: "/diskA/out",
-    selection: { format: "zip", type: "zip" },
-    sevenZipPath: process.execPath,
-    sevenZipSource: "test",
-    partCount: 1,
-    sourceFingerprint: [],
-  });
-  services.store.update(running.id, (current) => ({
-    ...current,
-    status: "running",
-    startedAt: new Date().toISOString(),
-    workerPid: process.pid,
-  }));
-  const queued = services.store.create({
-    archivePath: "/diskB/pending.zip",
-    outputDir: "/diskB/out",
-    selection: { format: "zip", type: "zip" },
-    sevenZipPath: process.execPath,
-    sevenZipSource: "test",
-    partCount: 1,
-    sourceFingerprint: [],
-  });
-
-  services.spawnQueued();
-
-  assert.deepEqual(spawned, [queued.id], "不同盘任务正常唤起");
-});
-
-// 判定失败（路径 stat 不到、平台不支持）一律放行：并发自适应是优化，
-// 绝不能把任务卡死在队列里。
-test("spawnQueued falls back to launching when disk detection fails", () => {
-  const spawned = [];
-  const services = createServices(makeStubs({
-    runtimeRoot: tmpDir,
-    spawnWorker: (jobId) => {
-      spawned.push(jobId);
-      return fakeWorker(62000 + spawned.length);
-    },
-    getMountKey: () => null,
-  }));
-  const running = services.store.create({
-    archivePath: "/x/running.zip",
-    outputDir: "/x/out",
-    selection: { format: "zip", type: "zip" },
-    sevenZipPath: process.execPath,
-    sevenZipSource: "test",
-    partCount: 1,
-    sourceFingerprint: [],
-  });
-  services.store.update(running.id, (current) => ({
-    ...current,
-    status: "running",
-    startedAt: new Date().toISOString(),
-    workerPid: process.pid,
-  }));
-  const queued = services.store.create({
-    archivePath: "/x/pending.zip",
-    outputDir: "/x/out2",
-    selection: { format: "zip", type: "zip" },
-    sevenZipPath: process.execPath,
-    sevenZipSource: "test",
-    partCount: 1,
-    sourceFingerprint: [],
-  });
-
-  services.spawnQueued();
-
-  assert.deepEqual(spawned, [queued.id], "判定失败时照常唤起");
 });
