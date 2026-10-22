@@ -138,6 +138,7 @@ function auditPackage(config) {
   const html = innerEntry(appArchive, "www/index.html").toString("utf8");
   const treeJs = innerEntry(appArchive, "www/js/tree.js").toString("utf8");
   const appJs = innerEntry(appArchive, "www/js/app.js").toString("utf8");
+  const focusJs = innerEntry(appArchive, "www/js/ui-focus.js").toString("utf8");
   const sevenZip = innerEntry(appArchive, config.sevenZipPath);
 
   assert.equal(sha256(font), FONT_SHA256);
@@ -150,6 +151,8 @@ function auditPackage(config) {
   assert.match(treeJs, /createSearchScheduler/);
   assert.match(treeJs, /renderBatches/);
   assert.match(appJs, /createSearchScheduler\(\{\s*delay:\s*180/);
+  assert.match(focusJs, /CHzipFocus/);
+  assert.match(focusJs, /initFocusManagement/);
   assert.equal(sevenZip.subarray(0, 4).toString("hex"), "7f454c46");
   assert.equal(sevenZip.readUInt16LE(18), config.machine);
 
@@ -159,9 +162,9 @@ function auditPackage(config) {
   // 随版本演进可增补。
   const serverChecks = [
     ["server/api.js", ["QUIET_SUCCESS_APIS", "CLEANUP_APIS", "routeRequest"]],
-    ["server/lib/paths.js", ["resolveAuthorizedDirectory", "isPathInside"]],
+    ["server/lib/paths.js", ["resolveAuthorizedDirectory", "isPathInside", "prepareConflictAwareOutputDir"]],
     ["server/lib/worker.js", ["markStartupFailure", "registerProcessGroup", "cleanupJobArtifacts"]],
-    ["server/lib/services.js", ["createServices", "toJobView", "withPreparedArchive"]],
+    ["server/lib/services.js", ["createServices", "withSourceLock", "withOutputLock", "verifyEncryptedPassword"]],
     ["server/lib/engine.js", ["classifySevenZipError", "createProgressTracker"]],
     ["server/lib/constants.js", ["PREVIEW_FILE_MS", "MAX_CONCURRENT_EXTRACTS"]],
     ["server/lib/diagnostics.js", ["redactDiagnosticValue", "createDiagnosticLogger"]],

@@ -49,6 +49,8 @@
                         packedSize: isLeaf ? Number(entry.packedSize || 0) : 0,
                         modified: isLeaf ? (entry.modified || "") : "",
                         encrypted: isLeaf ? Boolean(entry.encrypted) : false,
+                        method: isLeaf ? (entry.method || "") : "",
+                        attributes: isLeaf ? (entry.attributes || "") : "",
                         children: [],
                     };
                     nodes.set(nodePath, node);
@@ -117,6 +119,37 @@
             walk(node);
         }
         return counts;
+    }
+
+    function computeDirectoryStats(nodes) {
+        const stats = new Map();
+        const walk = (node) => {
+            if (!node) {
+                return { fileCount: 0, totalSize: 0 };
+            }
+            if (node.type === "file") {
+                const entry = {
+                    fileCount: 1,
+                    totalSize: Number(node.size) || 0,
+                };
+                stats.set(node, entry);
+                return entry;
+            }
+            let fileCount = 0;
+            let totalSize = 0;
+            for (const child of node.children || []) {
+                const childStats = walk(child);
+                fileCount += childStats.fileCount;
+                totalSize += childStats.totalSize;
+            }
+            const entry = { fileCount, totalSize };
+            stats.set(node, entry);
+            return entry;
+        };
+        for (const node of nodes || []) {
+            walk(node);
+        }
+        return stats;
     }
 
     function stateFromCounts(counts) {
@@ -210,6 +243,15 @@
         const isCurrent = options.isCurrent;
         const renderBatch = options.renderBatch;
         let index = 0;
+        let completed = false;
+
+        function complete() {
+            if (completed) {
+                return;
+            }
+            completed = true;
+            options.onComplete?.();
+        }
 
         function renderNextBatch() {
             if (!isCurrent()) {
@@ -220,10 +262,14 @@
             index = nextIndex;
             if (index < items.length && isCurrent()) {
                 scheduleFrame(renderNextBatch);
+                return;
             }
+            complete();
         }
 
-        if (items.length && isCurrent()) {
+        if (!items.length) {
+            complete();
+        } else if (isCurrent()) {
             scheduleFrame(renderNextBatch);
         }
     }
@@ -231,6 +277,7 @@
     return {
         buildTree,
         collectDescendantFiles,
+        computeDirectoryStats,
         computeSelectionCounts,
         createSearchScheduler,
         renderBatches,

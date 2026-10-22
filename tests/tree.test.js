@@ -6,8 +6,10 @@ const { test } = require("node:test");
 const {
   buildTree,
   collectDescendantFiles,
+  computeDirectoryStats,
   computeSelectionCounts,
   createSearchScheduler,
+  renderBatches,
   searchFiles,
   selectionState,
   stateFromCounts,
@@ -237,5 +239,43 @@ test("selectionState without counts keeps the legacy behaviour", () => {
   assert.equal(selectionState(a, new Set()), "unchecked");
   assert.equal(selectionState(a, new Set(["a/1.txt"])), "mixed");
   assert.equal(selectionState(a, new Set(["a/1.txt", "a/2.txt"])), "checked");
+});
+
+test("renderBatches calls onComplete exactly once after the final batch", () => {
+  const rendered = [];
+  let completed = 0;
+  renderBatches([1, 2, 3, 4, 5], {
+    batchSize: 2,
+    scheduleFrame(callback) {
+      callback();
+    },
+    isCurrent() {
+      return true;
+    },
+    renderBatch(items) {
+      rendered.push(...items);
+    },
+    onComplete() {
+      completed += 1;
+    },
+  });
+
+  assert.deepEqual(rendered, [1, 2, 3, 4, 5]);
+  assert.equal(completed, 1);
+});
+
+test("computeDirectoryStats aggregates file count and total size", () => {
+  const entries = [
+    { path: "a/one.bin", type: "file", size: 100 },
+    { path: "a/two.bin", type: "file", size: 250 },
+    { path: "a/sub/three.bin", type: "file", size: 50 },
+  ];
+  const tree = buildTree(entries);
+  const stats = computeDirectoryStats(tree);
+  const root = tree[0];
+  const sub = root.children.find((node) => node.path === "a/sub");
+
+  assert.deepEqual(stats.get(root), { fileCount: 3, totalSize: 400 });
+  assert.deepEqual(stats.get(sub), { fileCount: 1, totalSize: 50 });
 });
 

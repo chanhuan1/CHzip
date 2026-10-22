@@ -239,7 +239,7 @@ function collectVolumeNames(selection, directoryNames) {
       missingParts: missing.values,
       missingTotal: missing.total,
       missingTruncated: missing.truncated,
-      firstVolumeName: selection.firstVolumeName,
+      firstVolumeName: resolveActualName(directoryNames, selection.firstVolumeName),
     };
   }
 
@@ -260,7 +260,7 @@ function collectVolumeNames(selection, directoryNames) {
       missingParts: missing.values,
       missingTotal: missing.total,
       missingTruncated: missing.truncated,
-      firstVolumeName: selection.firstVolumeName,
+      firstVolumeName: resolveActualName(directoryNames, selection.firstVolumeName),
     };
   }
 
@@ -289,14 +289,15 @@ function collectVolumeNames(selection, directoryNames) {
     if (parts.length) {
       const maxPart = parts.at(-1).part;
       const mainName = `${stem}.zip`;
+      const actualMainName = resolveActualName(directoryNames, mainName);
       const missing = missingRange(parts.map((entry) => entry.part), 1, maxPart);
       return {
-        names: [...parts.map((entry) => entry.name), mainName]
+        names: [...parts.map((entry) => entry.name), actualMainName]
           .filter((name) => getLowerCaseIndex().has(name.toLowerCase())),
         missingParts: missing.values,
         missingTotal: missing.total,
         missingTruncated: missing.truncated,
-        firstVolumeName: mainName,
+        firstVolumeName: actualMainName,
       };
     }
   }
@@ -314,14 +315,15 @@ function collectVolumeNames(selection, directoryNames) {
     if (parts.length) {
       const maxPart = parts.at(-1).part;
       const mainName = `${stem}.rar`;
+      const actualMainName = resolveActualName(directoryNames, mainName);
       const missing = missingRange(parts.map((entry) => entry.part), 0, maxPart);
       return {
-        names: [mainName, ...parts.map((entry) => entry.name)]
+        names: [actualMainName, ...parts.map((entry) => entry.name)]
           .filter((name) => getLowerCaseIndex().has(name.toLowerCase())),
         missingParts: missing.values,
         missingTotal: missing.total,
         missingTruncated: missing.truncated,
-        firstVolumeName: mainName,
+        firstVolumeName: actualMainName,
       };
     }
   }
@@ -334,8 +336,14 @@ function collectVolumeNames(selection, directoryNames) {
     missingParts: [],
     missingTotal: 0,
     missingTruncated: false,
-    firstVolumeName: selection.firstVolumeName,
+    firstVolumeName: resolveActualName(directoryNames, selection.firstVolumeName),
   };
+}
+
+function resolveActualName(directoryNames, expectedName) {
+  const expectedLower = String(expectedName || "").toLowerCase();
+  return directoryNames.find((name) => name.toLowerCase() === expectedLower)
+    || expectedName;
 }
 
 function escapeRegExp(value) {

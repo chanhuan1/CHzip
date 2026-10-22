@@ -186,4 +186,14 @@ test("delete source: selection changes preserve an enabled checked option", () =
     assert.equal(elements.deleteSourceInput.checked, true);
     state[key] = false;
   }
+  state.info = {
+    tool: {},
+    partCount: 1,
+    selection: { format: "zip" },
+  };
+  update();
+  assert.equal(elements.openCommentBtn.disabled, false);
+  state.running = true;
+  update();
+  assert.equal(elements.openCommentBtn.disabled, true, "运行中必须禁止修改注释");
 });

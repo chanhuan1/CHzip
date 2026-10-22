@@ -16,6 +16,68 @@
         return `${value.toFixed(digits)} ${units[unit]}`;
     }
 
+    // 大小列拆成「数字 + 单位」两部分：数字用主色保证可读，
+    // 单位用 muted 浅色降低视觉噪音。返回 null 表示无有效大小。
+    function splitSize(size) {
+        if (!Number.isFinite(Number(size))) {
+            return null;
+        }
+        const units = ["B", "KB", "MB", "GB", "TB"];
+        let value = Number(size);
+        let unit = 0;
+        while (value >= 1024 && unit < units.length - 1) {
+            value /= 1024;
+            unit += 1;
+        }
+        const digits = value >= 10 || unit === 0 ? 0 : 1;
+        return { value: value.toFixed(digits), unit: units[unit] };
+    }
+
+    function renderSizeInto(el, size) {
+        const parts = splitSize(size);
+        if (!parts) {
+            el.textContent = "-";
+            return;
+        }
+        // 先写 textContent 保证测试桩（不拼接子节点）和真实 DOM 都能读到完整值；
+        // 真实 DOM 里紧接着 replaceChildren 会把它替换成结构化子节点。
+        el.textContent = `${parts.value} ${parts.unit}`;
+        if (typeof document === "undefined" || !el.ownerDocument) {
+            return;
+        }
+        el.replaceChildren();
+        const valueSpan = document.createElement("span");
+        valueSpan.className = "tree-size-value";
+        valueSpan.textContent = parts.value;
+        const unitSpan = document.createElement("span");
+        unitSpan.className = "tree-size-unit";
+        unitSpan.textContent = ` ${parts.unit}`;
+        el.append(valueSpan, unitSpan);
+    }
+
+    function formatModifiedDate(value) {
+        const text = String(value || "").trim();
+        const match = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+        return match ? `${match[1]}-${match[2]}-${match[3]}` : "";
+    }
+
+    function fileTypeLabel(name, isDirectory = false) {
+        if (isDirectory) {
+            return "文件夹";
+        }
+        const text = String(name || "");
+        const lastDot = text.lastIndexOf(".");
+        if (lastDot < 0 || lastDot === text.length - 1) {
+            return "文件";
+        }
+        const extension = text.slice(lastDot + 1).toUpperCase();
+        const aliases = {
+            JPG: "JPEG",
+            TIF: "TIFF",
+        };
+        return aliases[extension] || extension.slice(0, 8);
+    }
+
     // 用内联 SVG 代替原先 CSS 画的圆角方框：文件夹与文件都是实心双色调，
     // 主体用竖向渐变（渐变为 index.html 中的 #chzipFolderBody / #chzipFileBody），
     // 顶部平涂部分分别为页签与折角。
@@ -128,35 +190,26 @@
         + '<rect class="tree-lock-body" x="3.5" y="7" width="9" height="7" rx="1.4"/>'
         + "</svg>";
 
-    // 压缩率展示：返回 "-62%" 这种短串；没有可展示的收益
-    // （size<=0、packedSize 缺失/非法、或压完反而更大）返回空串，
-    // 调用方据此把 .tree-ratio 留空。
-    // 内部辅助函数，不导出（理由同 LOCK_ICON）。
-    function formatRatio(packedSize, size) {
-        const original = Number(size);
-        const packed = Number(packedSize);
-        if (!Number.isFinite(original) || original <= 0) {
-            return "";
-        }
-        // packedSize===0 而 size>0 视为"无压缩数据"（buildTree 对缺失的 packedSize
-        // 默认 0，不是真的压成 0 字节 —— 原文件非空的话压到 0 不可能）。
-        if (!Number.isFinite(packed) || packed <= 0) {
-            return "";
-        }
-        const savings = 1 - packed / original;
-        if (savings <= 0) {
-            return "";
-        }
-        return `-${Math.round(savings * 100)}%`;
-    }
-
-    // 文件行的多行 tooltip：完整路径 + 修改时间（若有）+ 原始/压缩后大小。
+    // 文件行的多行详情：桌面端列放不下的方法、属性和完整时间放在这里。
     // entry 可以是 buildTree 的叶子节点，也可以是 searchFiles 返回的原始 entry —
     // 两个路径上的字段名一致（size/packedSize/modified/encrypted），统一在这里拼。
-    function buildFileTooltip(path, entry) {
+    function buildFileTooltip(path, entry, stats = null) {
         const lines = [String(path || "")];
+        if (entry?.type === "directory" && stats) {
+            lines.push(`内容: ${stats.fileCount} 个文件 · ${formatSize(stats.totalSize)}`);
+            if (entry.modified) {
+                lines.push(`修改时间: ${entry.modified}`);
+            }
+            return lines.join("\n");
+        }
         if (entry && entry.modified) {
             lines.push(`修改时间: ${entry.modified}`);
+        }
+        if (entry?.method) {
+            lines.push(`压缩方法: ${entry.method}`);
+        }
+        if (entry?.attributes) {
+            lines.push(`文件属性: ${entry.attributes}`);
         }
         if (entry && Number.isFinite(Number(entry.size)) && Number(entry.size) > 0) {
             lines.push(`原始: ${formatSize(entry.size)} / 压缩后: ${formatSize(entry.packedSize)}`);
@@ -178,6 +231,7 @@
     let checkboxIndex = new Map();
     let activeState = null;
     let activeTreeApi = null;
+    const rememberedScrollPositions = new WeakMap();
     // 当前这棵树的选中计数（path→node 的 Map 的反向：以节点对象为键）。
     // 必须放在模块级而不是 renderTree 的闭包里：分批渲染可能跨多帧，
     // 用户在这期间勾选会让"渲染开始时算的 counts"过期，
@@ -241,23 +295,49 @@
         const normalizedPath = String(entry.path || "").replace(/\\/g, "/");
         label.textContent = normalizedPath.slice(normalizedPath.lastIndexOf("/") + 1);
 
-        const ratio = document.createElement("span");
-        ratio.className = "tree-ratio";
-        ratio.textContent = formatRatio(entry.packedSize, entry.size);
+        const modified = document.createElement("span");
+        modified.className = "tree-modified";
+        modified.textContent = formatModifiedDate(entry.modified);
+
+        const type = document.createElement("span");
+        type.className = "tree-type";
+        type.textContent = fileTypeLabel(entry.name || label.textContent);
 
         const size = document.createElement("span");
         size.className = "tree-size";
-        size.textContent = formatSize(entry.size);
+        renderSizeInto(size, entry.size);
 
-        row.append(toggle, checkbox, icon, lock, label, ratio, size);
+        const action = document.createElement("span");
+        action.className = "tree-row-action";
+
+        row.append(
+            toggle,
+            checkbox,
+            icon,
+            lock,
+            label,
+            modified,
+            type,
+            size,
+            action,
+        );
         container.append(row);
     }
 
-    function appendTreeNode(container, node, depth, state, treeApi, counts) {
+    function appendTreeNode(
+        container,
+        node,
+        depth,
+        state,
+        treeApi,
+        counts,
+        directoryStats,
+    ) {
         const row = registerRow(document.createElement("div"), node.path);
         row.className = "tree-row";
         row.style.setProperty("--tree-depth", String(depth));
-        row.title = node.type === "file" ? buildFileTooltip(node.path, node) : node.path;
+        const nodeStats = directoryStats?.get(node) || null;
+        row.title = buildFileTooltip(node.path, node, nodeStats);
 
         const toggle = document.createElement("button");
         toggle.type = "button";
@@ -300,18 +380,37 @@
         label.className = "tree-label";
         label.textContent = node.name;
 
-        // 压缩率列：仅文件节点显示；目录行留空占位。
-        const ratio = document.createElement("span");
-        ratio.className = "tree-ratio";
-        ratio.textContent = node.type === "file"
-            ? formatRatio(node.packedSize, node.size)
-            : "";
+        const modified = document.createElement("span");
+        modified.className = "tree-modified";
+        modified.textContent = formatModifiedDate(node.modified);
+
+        const type = document.createElement("span");
+        type.className = "tree-type";
+        type.textContent = fileTypeLabel(node.name, node.type === "directory");
 
         const size = document.createElement("span");
         size.className = "tree-size";
-        size.textContent = node.type === "file" ? formatSize(node.size) : "";
+        if (node.type === "file") {
+            renderSizeInto(size, node.size);
+        } else {
+            size.textContent = nodeStats
+                ? `${nodeStats.fileCount} 项 · ${formatSize(nodeStats.totalSize)}`
+                : "";
+        }
 
-        row.append(toggle, checkbox, icon, lock, label, ratio, size);
+        const action = document.createElement("span");
+        action.className = "tree-row-action";
+        row.append(
+            toggle,
+            checkbox,
+            icon,
+            lock,
+            label,
+            modified,
+            type,
+            size,
+            action,
+        );
 
         if (node.type === "file" && state.previewableFiles && state.previewableFiles.has(node.path)) {
             const previewBtn = document.createElement("button");
@@ -325,7 +424,7 @@
                 ? "固实压缩包：单文件预览需解压整包，耗时较长（点击查看提示）"
                 : "预览文件";
             previewBtn.setAttribute("aria-label", `预览 ${node.name}`);
-            row.append(previewBtn);
+            action.append(previewBtn);
         }
 
         container.append(row);
@@ -364,7 +463,18 @@
         } else if (!state.previewReady) {
             els.selectionSummary.textContent = "等待预览";
         } else {
-            els.selectionSummary.textContent = `已选择 ${selectedCount} / ${state.allFilePaths.length} 个文件`;
+            const sizeByPath = state.fileSizeByPath instanceof Map
+                ? state.fileSizeByPath
+                : new Map(
+                    (state.entries || [])
+                        .filter((entry) => entry.type === "file")
+                        .map((entry) => [entry.path, Number(entry.size) || 0]),
+                );
+            let selectedBytes = 0;
+            for (const filePath of state.selectedPaths) {
+                selectedBytes += sizeByPath.get(filePath) || 0;
+            }
+            els.selectionSummary.textContent = `已选择 ${selectedCount} / ${state.allFilePaths.length} 个文件 · ${formatSize(selectedBytes)}`;
         }
 
         const allSelected = state.allFilePaths.length > 0
@@ -479,7 +589,11 @@
                 } else {
                     state.expandedPaths.add(togglePath);
                 }
-                renderTree(state, treeApi);
+                renderTree(state, treeApi, {
+                    revealPath: state.expandedPaths.has(togglePath)
+                        ? node.children?.[0]?.path
+                        : "",
+                });
                 return;
             }
 
@@ -518,7 +632,11 @@
             } else {
                 state.expandedPaths.add(path);
             }
-            renderTree(state, treeApi);
+            renderTree(state, treeApi, {
+                revealPath: state.expandedPaths.has(path)
+                    ? node.children?.[0]?.path
+                    : "",
+            });
         });
 
         container.addEventListener("change", (event) => {
@@ -551,6 +669,7 @@
     function renderSearchResults(query, renderId, state, treeApi) {
         const els = state.elements;
         const matches = treeApi.searchFiles(state.entries, query);
+        updateSearchSummary(state, query, matches.length);
         if (!matches.length) {
             const empty = document.createElement("div");
             empty.className = "tree-empty";
@@ -578,8 +697,53 @@
         });
     }
 
-    function renderTree(state, treeApi) {
+    // 搜索结果计数：有查询时显示「匹配 N 项」，无查询时隐藏。
+    // 用 role=status + aria-live 让屏幕阅读器在用户输入时自动朗读。
+    function updateSearchSummary(state, query, matchCount) {
         const els = state.elements;
+        const box = els.treeSearchSummary;
+        if (!box) {
+            return;
+        }
+        if (!query) {
+            box.hidden = true;
+            box.textContent = "";
+            return;
+        }
+        box.hidden = false;
+        box.textContent = matchCount > 0
+            ? `匹配 ${matchCount} 项`
+            : "无匹配";
+    }
+
+    // 文件树空态按三种来源区分文案，避免用户分不清「没传文件」
+    // 和「正在解析」。
+    function emptyTreeText(state) {
+        if (!state.filePath) {
+            return "尚未选择压缩包";
+        }
+        if (state.previewing) {
+            return "正在解析压缩包目录...";
+        }
+        return "尚未载入压缩包目录";
+    }
+
+    function renderTree(state, treeApi, options = {}) {
+        const els = state.elements;
+        const query = els.treeSearchInput?.value.trim() || "";
+        const currentScroll = {
+            top: Number(els.fileTree.scrollTop) || 0,
+            left: Number(els.fileTree.scrollLeft) || 0,
+        };
+        let restoreScroll = currentScroll;
+        if (query) {
+            if (!rememberedScrollPositions.has(state)) {
+                rememberedScrollPositions.set(state, currentScroll);
+            }
+        } else if (rememberedScrollPositions.has(state)) {
+            restoreScroll = rememberedScrollPositions.get(state);
+            rememberedScrollPositions.delete(state);
+        }
         const renderId = ++state.searchRenderId;
         activeState = state;
         activeTreeApi = treeApi;
@@ -590,8 +754,9 @@
         if (!state.previewReady && !state.previewLimited) {
             const empty = document.createElement("div");
             empty.className = "tree-empty";
-            empty.textContent = "尚未载入压缩包目录";
+            empty.textContent = emptyTreeText(state);
             els.fileTree.append(empty);
+            updateSearchSummary(state, "", 0);
             updateSelectionSummary(state);
             return;
         }
@@ -600,22 +765,28 @@
             empty.className = "tree-empty";
             empty.textContent = "压缩包内容超过预览限制，将按整包方式解压。";
             els.fileTree.append(empty);
+            updateSearchSummary(state, "", 0);
             updateSelectionSummary(state);
             return;
         }
 
-        const query = els.treeSearchInput?.value.trim() || "";
         if (query) {
+            els.fileTree.scrollTop = 0;
+            els.fileTree.scrollLeft = 0;
             renderSearchResults(query, renderId, state, treeApi);
             updateSelectionSummary(state);
             return;
         }
+
+        // 无查询时清空搜索计数
+        updateSearchSummary(state, "", 0);
 
         // 一次后序遍历算好每个节点的文件数/已选数：原实现是每个节点各递归一次，
         // 整棵树渲染的代价是 O(节点数 × 深度)。
         // activeCounts 是共享的：分批渲染期间用户改勾选时，applySelectionChange
         // 会把它刷新，尚未渲染的批次读到的就是最新值。
         activeCounts = treeApi.computeSelectionCounts(state.tree, state.selectedPaths);
+        const directoryStats = treeApi.computeDirectoryStats(state.tree);
         const flat = flattenVisibleNodes(state.tree, state);
         for (const item of flat) {
             nodeIndex.set(item.node.path, item.node);
@@ -638,9 +809,20 @@
                         state,
                         treeApi,
                         activeCounts,
+                        directoryStats,
                     );
                 }
                 els.fileTree.append(fragment);
+            },
+            onComplete() {
+                if (renderId !== state.searchRenderId) {
+                    return;
+                }
+                els.fileTree.scrollTop = restoreScroll.top;
+                els.fileTree.scrollLeft = restoreScroll.left;
+                if (options.revealPath) {
+                    revealRowInScrollContainer(els.fileTree, options.revealPath);
+                }
             },
         });
         updateSelectionSummary(state);
@@ -693,6 +875,114 @@
         }
         state.expandedPaths.clear();
         renderTree(state, treeApi);
+    }
+
+    function revealRowInScrollContainer(container, targetPath) {
+        if (!container || !targetPath) {
+            return false;
+        }
+        const rows = container.children || [];
+        const row = Array.from(rows).find(
+            (item) => item.dataset?.path === targetPath,
+        );
+        if (!row) {
+            return false;
+        }
+
+        const padding = 4;
+        const scrollTop = Number(container.scrollTop) || 0;
+        if (
+            typeof container.getBoundingClientRect === "function"
+            && typeof row.getBoundingClientRect === "function"
+        ) {
+            const containerRect = container.getBoundingClientRect();
+            const rowRect = row.getBoundingClientRect();
+            const bottomOverflow = rowRect.bottom - (containerRect.bottom - padding);
+            if (bottomOverflow > 0) {
+                container.scrollTop = scrollTop + bottomOverflow;
+                return true;
+            }
+            const topOverflow = (containerRect.top + padding) - rowRect.top;
+            if (topOverflow > 0) {
+                container.scrollTop = Math.max(0, scrollTop - topOverflow);
+                return true;
+            }
+            return false;
+        }
+
+        const rowTop = Number(row.offsetTop);
+        const rowHeight = Number(row.offsetHeight);
+        const clientHeight = Number(container.clientHeight);
+        if (
+            !Number.isFinite(rowTop)
+            || !Number.isFinite(rowHeight)
+            || !Number.isFinite(clientHeight)
+        ) {
+            return false;
+        }
+        const visibleBottom = scrollTop + clientHeight - padding;
+        const visibleTop = scrollTop + padding;
+        if (rowTop + rowHeight > visibleBottom) {
+            container.scrollTop = rowTop + rowHeight - clientHeight + padding;
+        } else if (rowTop < visibleTop) {
+            container.scrollTop = Math.max(0, rowTop - padding);
+        }
+        return true;
+    }
+
+    function enableVerticalWheelChaining(element, options = {}) {
+        if (!element || typeof element.addEventListener !== "function") {
+            return false;
+        }
+        if (element.dataset?.wheelChainEnabled === "1") {
+            return true;
+        }
+        if (element.dataset) {
+            element.dataset.wheelChainEnabled = "1";
+        }
+        const scrollTarget = options.scrollTarget
+            || (typeof window !== "undefined" ? window : null);
+        const lineHeight = options.lineHeight || 16;
+        const handler = (event) => {
+            if (
+                event.defaultPrevented
+                || event.ctrlKey
+                || event.shiftKey
+                || !scrollTarget?.scrollBy
+            ) {
+                return;
+            }
+            const deltaX = Number(event.deltaX) || 0;
+            let deltaY = Number(event.deltaY) || 0;
+            if (Math.abs(deltaY) <= Math.abs(deltaX) || deltaY === 0) {
+                return;
+            }
+            if (event.deltaMode === 1) {
+                deltaY *= lineHeight;
+            } else if (event.deltaMode === 2) {
+                deltaY *= Math.max(1, Number(element.clientHeight) || 1);
+            }
+
+            const maxScrollTop = Math.max(
+                0,
+                Number(element.scrollHeight) - Number(element.clientHeight),
+            );
+            const scrollTop = Math.max(0, Number(element.scrollTop) || 0);
+            const atBottom = deltaY > 0 && scrollTop >= maxScrollTop - 1;
+            const atTop = deltaY < 0 && scrollTop <= 1;
+            if (!atBottom && !atTop) {
+                return;
+            }
+
+            event.preventDefault();
+            scrollTarget.scrollBy({
+                top: deltaY,
+                left: 0,
+                behavior: "auto",
+            });
+        };
+        element.addEventListener("wheel", handler, { passive: false });
+        return true;
     }
 
     // 实时高亮正在解压的文件节点（支持递归匹配、折叠目录祖先提示与平滑保持）
@@ -842,10 +1132,12 @@
 
     root.CHzipUiTree = {
         collapseAll,
+        enableVerticalWheelChaining,
         expandAll,
         formatSize,
         highlightExtractingFile,
         renderTree,
+        revealRowInScrollContainer,
         setPreviewControls,
         updateSelectionSummary,
     };

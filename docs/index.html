@@ -1146,7 +1146,7 @@ footer .fl a:hover {
       <div class="card card-featured">
         <div class="ico"><svg><use href="#i-chip"/></svg></div>
         <h3>飞牛 fnOS x86_64 安装包</h3>
-        <div class="meta">CHzip_4.3_x86_64.fpk · 2.29 MB</div>
+        <div class="meta">CHzip_4.3_x86_64.fpk · 2.30 MB</div>
         <p>适配 Intel 与 AMD 64 位处理器的 NAS 设备（如自建 x86 软路由、联想、极空间、绿联等 x86 机型）。</p>
         <ul>
           <li>内置预编译 <b>7zzs 64位独立静态内核</b></li>
@@ -1154,8 +1154,8 @@ footer .fl a:hover {
           <li>双击应用中心一键上传安装，自动注册右键</li>
         </ul>
         <div class="sha-box">
-          <span class="sha-text" title="faa30f9a11fad410cb8fb1cbd6cf2fefd0c92fda0cb97b0aa947148ec4921fa3">SHA256: faa30f9a11fa...c4921fa3</span>
-          <button class="copy" data-copy="faa30f9a11fad410cb8fb1cbd6cf2fefd0c92fda0cb97b0aa947148ec4921fa3">复制</button>
+          <span class="sha-text" title="e0570b9f5cb285bd2b2b683eab7f37622d40337538e86dd0dea63d8cfbf29fdd">SHA256: e0570b9f5cb2...bf29fdd</span>
+          <button class="copy" data-copy="e0570b9f5cb285bd2b2b683eab7f37622d40337538e86dd0dea63d8cfbf29fdd">复制</button>
         </div>
         <div class="btns">
           <a class="btn primary" href="dist/CHzip_4.3_x86_64.fpk" download>下载 x86_64 安装包 (.fpk)</a>
@@ -1168,7 +1168,7 @@ footer .fl a:hover {
       <div class="card">
         <div class="ico"><svg><use href="#i-chip"/></svg></div>
         <h3>飞牛 fnOS arm64 安装包</h3>
-        <div class="meta">CHzip_4.3_arm64.fpk · 2.14 MB</div>
+        <div class="meta">CHzip_4.3_arm64.fpk · 2.15 MB</div>
         <p>适配 ARM 64 位架构设备（如树莓派 4/5、RK3588 开发板、飞腾及各品牌 ARM 架构飞牛设备）。</p>
         <ul>
           <li>针对 <b>AArch64 架构</b> 剥离优化，低功耗高吞吐</li>
@@ -1176,8 +1176,8 @@ footer .fl a:hover {
           <li>完整保留分卷合并、免解压预览等全部功能</li>
         </ul>
         <div class="sha-box">
-          <span class="sha-text" title="04b633f7eebcf822febec9e94bc93dc0f42faebeff51ca5e0cda0f0eee71f3b8">SHA256: 04b633f7eebc...ee71f3b8</span>
-          <button class="copy" data-copy="04b633f7eebcf822febec9e94bc93dc0f42faebeff51ca5e0cda0f0eee71f3b8">复制</button>
+          <span class="sha-text" title="5cfcd4454be4478bb4f7aefd779414dfac40a8eb454299de29820b00b206ea63">SHA256: 5cfcd4454be4...206ea63</span>
+          <button class="copy" data-copy="5cfcd4454be4478bb4f7aefd779414dfac40a8eb454299de29820b00b206ea63">复制</button>
         </div>
         <div class="btns">
           <a class="btn primary" href="dist/CHzip_4.3_arm64.fpk" download>下载 arm64 安装包 (.fpk)</a>
@@ -1195,7 +1195,7 @@ footer .fl a:hover {
         <ul>
           <li>查看完整更新日志与 Release 归档</li>
           <li>CGI 后端 + 纯原生 ES6 前端，零混淆零捆绑</li>
-          <li>包含 400+ 项严格的单元测试与 CI 覆盖</li>
+          <li>包含 485 项严格的单元测试与 CI 覆盖</li>
           <li>觉得好用请给个 <b>Star</b>，让更多飞牛用户看到</li>
         </ul>
         <div class="btns" style="margin-top:auto;">
@@ -1255,8 +1255,8 @@ footer .fl a:hover {
       <div class="feat">
         <div class="ft"><span class="ft-icon"><svg><use href="#i-tree"/></svg></span> 免解压文件树与选择性解压</div>
         <div class="fd">
-          打开几十 GB 的庞大压缩包无需全盘解压！秒级呈现包内完整目录树，支持关键字即时过滤与搜索。
-          可仅勾选目标文件或单个子文件夹进行「选择性解压」，极速省时省存储。
+          打开几十 GB 的庞大压缩包无需全盘解压！秒级呈现包内完整目录树，支持关键字即时过滤与搜索计数。
+          文件列表同时展示修改时间、类型与大小，可仅勾选目标文件或单个子文件夹进行「选择性解压」。
         </div>
       </div>
 
@@ -1280,7 +1280,7 @@ footer .fl a:hover {
         <div class="ft"><span class="ft-icon"><svg><use href="#i-key"/></svg></span> 本地密码管理与用后即焚</div>
         <div class="fd">
           常用解压密码保存在浏览器本地，解压时一键填入；支持中文密码。密码按 v4.0 稳定方式通过进程参数数组传递，
-          旧式 ZIP 会自动增加 GBK 兼容回退。临时密码文件在执行后进行多次随机数据覆写再删除。
+          旧式 ZIP 会自动增加 GBK 兼容回退；加密成员验证超时会明确报错，不会把仅有目录列表当成密码正确。
         </div>
       </div>
 
@@ -1288,7 +1288,8 @@ footer .fl a:hover {
         <div class="ft"><span class="ft-icon"><svg><use href="#i-shield"/></svg></span> 安全防护与后台静默任务</div>
         <div class="fd">
           严密防范跨目录遍历（如恶意压缩包中的 <code>../../</code> 逃逸攻击）；
-          解压任务由独立后台 Worker 守护，浏览器关闭不中断，支持实时取消并自动清理未完成半成品目录。
+          解压任务由独立后台 Worker 守护，浏览器关闭不中断；来源与输出目录互斥可避免并发覆盖，
+          主动取消或可恢复失败时会保留已解压文件并明确提示位置。
         </div>
       </div>
 
@@ -1312,7 +1313,8 @@ footer .fl a:hover {
         <div class="ft"><span class="ft-icon"><svg><use href="#i-clipboard"/></svg></span> 任务中心与智能收尾</div>
         <div class="fd">
           实时进度 + 预计剩余时间 + 最近 20 条历史记录；解压成功自动「拍平」同名外壳目录；
-          同名冲突 4 种策略（自动重命名 / 覆盖 / 跳过 / 保留较新）；权限异常可一键生成<b>脱敏诊断报告</b>。
+          同名冲突 4 种策略（自动重命名使用新目录，覆盖 / 跳过 / 保留较新复用同名目录）；
+          权限异常可一键生成<b>脱敏诊断报告</b>。
         </div>
       </div>
     </div>
@@ -1854,15 +1856,18 @@ document.querySelectorAll('.faq-q').forEach((q) => {
     changelog: [
       {
         version: "v4.3",
-        date: "2026-10-21",
+        date: "2026-10-22",
         kind: "fix",
         items: [
           "移除同盘串行限制，任务并发统一由全局槽位控制，并修复队列容量计算与补位推进",
           "修复排队任务取消卡死、创建阶段假取消与停止按钮重复启用问题",
-          "恢复 v4.0 稳定密码参数传递方式，并兼容旧式 ZIP 中文密码",
-          "密码管理器在浏览器 WebCrypto 不可用时拒绝保存，不再降级为明文",
-          "修复超长文件名部分救援失败误报成功、缩略图缓存泄漏、共享目录识别等问题",
-          "补充并发、取消、密码、路径、缓存与打包回归测试，测试增至 460 项"
+          "新增来源与输出目录任务锁，拦截并发覆盖、注释写入冲突和同目录重复解压",
+          "加密包通过实际测试加密成员确认密码；验证超时返回明确错误，不再仅凭目录读取判定成功",
+          "修正同名冲突策略：自动重命名使用新目录，覆盖、跳过、保留较新安全复用同名目录",
+          "文件树新增修改时间、类型、大小列与搜索计数/清除；补全滚动位置、焦点循环和键盘操作体验",
+          "恢复 v4.0 稳定密码参数传递方式，并兼容旧式 ZIP 中文密码；WebCrypto 不可用时拒绝保存明文",
+          "修复超长文件名部分救援误报、缩略图缓存泄漏、共享目录识别与 ZIP 主卷缺失提示等问题",
+          "补充并发、取消、密码、路径、缓存、文件树与打包回归测试，测试增至 485 项"
         ]
       },
       {

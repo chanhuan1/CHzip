@@ -304,6 +304,14 @@ test("renderTree shows the empty and limited placeholders", () => {
   const empty = createState({ previewReady: false });
   renderTree(empty, globalThis.CHzipTree);
   assert.equal(rowsOf(fileTree).length, 0);
+  // 空态按来源区分：未传文件时显示「尚未选择压缩包」；
+  // 已传文件但尚未就绪时显示「尚未载入压缩包目录」。
+  assert.equal(fileTree.children[0].textContent, "尚未选择压缩包");
+
+  fileTree.replaceChildren();
+  const pending = createState({ previewReady: false, filePath: "/tmp/a.7z" });
+  renderTree(pending, globalThis.CHzipTree);
+  assert.equal(rowsOf(fileTree).length, 0);
   assert.equal(fileTree.children[0].textContent, "尚未载入压缩包目录");
 
   fileTree.replaceChildren();
@@ -329,7 +337,10 @@ test("renderTree adds a preview button only for previewable files", () => {
   renderTree(state, globalThis.CHzipTree);
 
   const withButton = rowsOf(fileTree).filter((row) => (
-    row.children.some((child) => child.classList.contains("tree-preview-btn"))
+    row.children.some((child) => (
+      child.classList.contains("tree-row-action")
+      && child.children.some((button) => button.classList.contains("tree-preview-btn"))
+    ))
   ));
   assert.deepEqual(withButton.map((row) => row.dataset.path), ["dir1/a.txt"]);
 });
@@ -365,6 +376,7 @@ test("delegated checkbox change updates only the affected checkboxes", () => {
   assert.equal(checkboxOf("dir1/a.txt").checked, true, "子节点复选框应同步");
   assert.equal(checkboxOf("dir1/b.txt").checked, true);
   assert.ok(state.elements.selectionSummary.textContent.includes("已选择 2 / 3"));
+  assert.ok(state.elements.selectionSummary.textContent.includes("30 B"));
 
   // 取消其中一个子文件 → 目录应变成半选
   const aCheckbox = checkboxOf("dir1/a.txt");
@@ -584,9 +596,9 @@ test("a mid-render deselection is also honoured by the remaining batches", () =>
 
 
 
-// ------------------------------------------- F13: 压缩率列 + 加密锁标
+// ------------------------------------------- 文件大小列 + 加密锁标
 
-test("file rows render ratio cell and lock badge; directory rows leave ratio empty", () => {
+test("file rows render size and lock badge without compression ratio", () => {
   const { renderTree } = globalThis.CHzipUiTree;
   const entries = [
     {
@@ -596,11 +608,20 @@ test("file rows render ratio cell and lock badge; directory rows leave ratio emp
       packedSize: 38,
       encrypted: true,
       modified: "2024-01-15T10:30:00.000Z",
+      method: "Deflate",
+      attributes: "A -rw-r--r--",
     },
-    { path: "dir/plain.txt", type: "file", size: 200, packedSize: 50 },
+    {
+      path: "dir/plain.txt",
+      type: "file",
+      size: 200,
+      packedSize: 50,
+      modified: "2025-09-18 14:22:13",
+    },
     { path: "dir/empty.txt", type: "file", size: 0, packedSize: 0 },
     { path: "dir/nopack.txt", type: "file", size: 100 },
     { path: "dir/negative.txt", type: "file", size: 100, packedSize: 150 },
+    { path: "dir/photo.jpg", type: "file", size: 10000, packedSize: 9999 },
   ];
   const state = createState({
     entries,
@@ -616,21 +637,20 @@ test("file rows render ratio cell and lock badge; directory rows leave ratio emp
     .get(path)
     .children.find((c) => c.classList.contains(cls));
 
-  // 压缩率文本：100→38 = -62%，200→50 = -75%
-  assert.equal(childOf("dir/encrypted.zip", "tree-ratio").textContent, "-62%");
-  assert.equal(childOf("dir/plain.txt", "tree-ratio").textContent, "-75%");
-  // size<=0 / packedSize 缺失 / 压完反而更大 → 空串
-  assert.equal(childOf("dir/empty.txt", "tree-ratio").textContent, "");
-  assert.equal(childOf("dir/nopack.txt", "tree-ratio").textContent, "");
-  assert.equal(childOf("dir/negative.txt", "tree-ratio").textContent, "");
+  assert.equal(childOf("dir/encrypted.zip", "tree-size").textContent, "100 B");
+  assert.equal(childOf("dir/plain.txt", "tree-size").textContent, "200 B");
+  assert.equal(childOf("dir/encrypted.zip", "tree-modified").textContent, "2024-01-15");
+  assert.equal(childOf("dir/plain.txt", "tree-modified").textContent, "2025-09-18");
+  assert.equal(childOf("dir/encrypted.zip", "tree-type").textContent, "ZIP");
+  assert.equal(childOf("dir/plain.txt", "tree-type").textContent, "TXT");
+  assert.equal(childOf("dir/encrypted.zip", "tree-ratio"), undefined);
+  assert.equal(childOf("dir/plain.txt", "tree-ratio"), undefined);
 
-  // 目录行：仍占位列但内容为空
-  const dirRatio = childOf("dir", "tree-ratio");
-  assert.ok(dirRatio, "目录行仍应渲染 .tree-ratio 占位元素");
-  assert.equal(dirRatio.textContent, "");
+  // 目录行仍保留锁标占位，但没有压缩率列。
   const dirLock = childOf("dir", "tree-lock");
   assert.ok(dirLock, "目录行仍应渲染 .tree-lock 占位元素");
   assert.equal(dirLock.innerHTML, "");
+  assert.equal(childOf("dir", "tree-ratio"), undefined);
 
   // 加密锁标：只有 encrypted=true 的文件才挂 SVG
   assert.ok(
@@ -649,14 +669,21 @@ test("file rows render ratio cell and lock badge; directory rows leave ratio emp
   const tip = rowByPath.get("dir/encrypted.zip").title;
   assert.ok(tip.includes("dir/encrypted.zip"), "tooltip 应含完整路径");
   assert.ok(tip.includes("2024-01-15"), "tooltip 应含修改时间");
+  assert.ok(tip.includes("压缩方法: Deflate"), "tooltip 应含压缩方法");
+  assert.ok(tip.includes("文件属性: A -rw-r--r--"), "tooltip 应含文件属性");
   assert.ok(tip.includes("100 B"), "tooltip 应含原始大小");
   assert.ok(tip.includes("38 B"), "tooltip 应含压缩后大小");
 
-  // 目录行 tooltip 仍只是路径
-  assert.equal(rowByPath.get("dir").title, "dir");
+  // 目录行显示汇总，tooltip 提供完整信息。
+  assert.equal(childOf("dir", "tree-type").textContent, "文件夹");
+  assert.equal(childOf("dir", "tree-size").textContent, "6 项 · 10 KB");
+  assert.equal(
+    rowByPath.get("dir").title,
+    "dir\n内容: 6 个文件 · 10 KB",
+  );
 });
 
-test("search rows also render ratio cell and lock badge", () => {
+test("search rows render size and lock badge without compression ratio", () => {
   const { renderTree } = globalThis.CHzipUiTree;
   const entries = [
     {
@@ -684,9 +711,10 @@ test("search rows also render ratio cell and lock badge", () => {
   const find = (path, cls) => byPath.get(path).children
     .find((c) => c.classList.contains(cls));
 
-  // 100→20 = -80%
-  assert.equal(find("x/locked.bin", "tree-ratio").textContent, "-80%");
-  assert.equal(find("x/open.bin", "tree-ratio").textContent, "-80%");
+  assert.equal(find("x/locked.bin", "tree-size").textContent, "100 B");
+  assert.equal(find("x/open.bin", "tree-size").textContent, "100 B");
+  assert.equal(find("x/locked.bin", "tree-ratio"), undefined);
+  assert.equal(find("x/open.bin", "tree-ratio"), undefined);
 
   assert.ok(find("x/locked.bin", "tree-lock").innerHTML.includes("<svg"));
   assert.equal(find("x/open.bin", "tree-lock").innerHTML, "");
@@ -862,4 +890,132 @@ test("semantic file icon classes are rendered based on file extensions", () => {
   assert.ok(iconOf("test.pdf").classList.contains("file-pdf"));
   assert.ok(iconOf("test.docx").classList.contains("file-doc"));
   assert.ok(iconOf("test.unknown").classList.contains("file-file"));
+});
+
+test("wheel scrolling chains from file tree boundary to the page", () => {
+  const { enableVerticalWheelChaining } = globalThis.CHzipUiTree;
+  const element = createElementStub("div");
+  element.scrollHeight = 500;
+  element.clientHeight = 200;
+  element.scrollTop = 300;
+  const pageScrolls = [];
+  assert.equal(enableVerticalWheelChaining(element, {
+    scrollTarget: {
+      scrollBy(options) {
+        pageScrolls.push(options);
+      },
+    },
+  }), true);
+  const handler = element.listeners.get("wheel")[0];
+  const event = {
+    deltaX: 0,
+    deltaY: 120,
+    deltaMode: 0,
+    ctrlKey: false,
+    shiftKey: false,
+    defaultPrevented: false,
+    preventDefault() {
+      this.defaultPrevented = true;
+    },
+  };
+
+  handler(event);
+
+  assert.equal(event.defaultPrevented, true);
+  assert.deepEqual(pageScrolls, [{
+    top: 120,
+    left: 0,
+    behavior: "auto",
+  }]);
+});
+
+test("wheel chaining normalizes line deltas and only acts at boundaries", () => {
+  const { enableVerticalWheelChaining } = globalThis.CHzipUiTree;
+  const element = createElementStub("div");
+  element.scrollHeight = 500;
+  element.clientHeight = 200;
+  element.scrollTop = 100;
+  const pageScrolls = [];
+  enableVerticalWheelChaining(element, {
+    scrollTarget: {
+      scrollBy(options) {
+        pageScrolls.push(options.top);
+      },
+    },
+  });
+  const handler = element.listeners.get("wheel")[0];
+  const base = {
+    deltaX: 0,
+    deltaY: 2,
+    deltaMode: 1,
+    ctrlKey: false,
+    shiftKey: false,
+    defaultPrevented: false,
+    preventDefault() {
+      this.defaultPrevented = true;
+    },
+  };
+
+  handler({ ...base });
+  assert.deepEqual(pageScrolls, [], "尚未到边界时应由文件树自己滚动");
+
+  element.scrollTop = 0;
+  const up = { ...base, deltaY: -2, preventDefault() { this.defaultPrevented = true; } };
+  handler(up);
+  assert.equal(up.defaultPrevented, true);
+  assert.deepEqual(pageScrolls, [-32], "行模式应换算为像素后滚动页面");
+});
+
+test("renderTree preserves file tree scroll position across rerenders", () => {
+  const { renderTree } = globalThis.CHzipUiTree;
+  const state = createState({
+    entries: ENTRIES,
+    tree: buildTree(ENTRIES),
+    allFilePaths: ENTRIES.map((entry) => entry.path),
+    expandedPaths: new Set(["dir1", "dir2", "dir2/sub"]),
+  });
+  renderTree(state, globalThis.CHzipTree);
+  fileTree.scrollTop = 136;
+
+  renderTree(state, globalThis.CHzipTree);
+
+  assert.equal(fileTree.scrollTop, 136);
+});
+
+test("leaving search restores the previous file tree position", () => {
+  const { renderTree } = globalThis.CHzipUiTree;
+  const state = createState({
+    entries: ENTRIES,
+    tree: buildTree(ENTRIES),
+    allFilePaths: ENTRIES.map((entry) => entry.path),
+    expandedPaths: new Set(["dir1", "dir2", "dir2/sub"]),
+  });
+  renderTree(state, globalThis.CHzipTree);
+  fileTree.scrollTop = 88;
+
+  state.elements.treeSearchInput.value = "txt";
+  renderTree(state, globalThis.CHzipTree);
+  assert.equal(fileTree.scrollTop, 0, "搜索结果应从顶部显示");
+
+  state.elements.treeSearchInput.value = "";
+  renderTree(state, globalThis.CHzipTree);
+  assert.equal(fileTree.scrollTop, 88, "退出搜索后应回到原浏览位置");
+});
+
+test("revealRowInScrollContainer scrolls an expanded child into view", () => {
+  const { revealRowInScrollContainer } = globalThis.CHzipUiTree;
+  const container = createElementStub("div");
+  container.clientHeight = 100;
+  container.scrollTop = 0;
+  const row = createElementStub("div");
+  row.dataset.path = "bottom-folder/child.mp4";
+  row.offsetTop = 85;
+  row.offsetHeight = 32;
+  container.children.push(row);
+
+  assert.equal(
+    revealRowInScrollContainer(container, "bottom-folder/child.mp4"),
+    true,
+  );
+  assert.equal(container.scrollTop, 21);
 });

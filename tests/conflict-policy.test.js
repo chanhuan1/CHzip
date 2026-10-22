@@ -248,15 +248,36 @@ test("F1 services.extract stores conflictPolicy on the job (default rename)", ()
   }));
 
   const defaulted = services.extract({ path: archivePath, destinationRoot: tmpDir });
-  assert.equal(services.store.read(defaulted.jobId).conflictPolicy, "rename",
+  const defaultJob = services.store.read(defaulted.jobId);
+  assert.equal(defaultJob.conflictPolicy, "rename",
     "缺省必须落 rename");
+  assert.equal(defaultJob.outputOwned, true);
+  assert.equal(defaultJob.outputDir, path.join(fs.realpathSync(tmpDir), "plain"));
+  services.store.update(defaulted.jobId, (current) => ({
+    ...current,
+    status: "success",
+    finishedAt: new Date().toISOString(),
+  }));
 
   const explicit = services.extract({
     path: archivePath,
     destinationRoot: tmpDir,
     conflictPolicy: "keepnew",
   });
-  assert.equal(services.store.read(explicit.jobId).conflictPolicy, "keepnew");
+  const explicitJob = services.store.read(explicit.jobId);
+  assert.equal(explicitJob.conflictPolicy, "keepnew");
+  assert.equal(explicitJob.outputDir, defaultJob.outputDir,
+    "keepnew 必须复用同名目录，才能让 -aot 处理已有文件");
+  assert.equal(explicitJob.outputOwned, false);
+  assert.throws(
+    () => services.extract({
+      path: archivePath,
+      destinationRoot: tmpDir,
+      conflictPolicy: "overwrite",
+    }),
+    (error) => error.code === "OUTPUT_BUSY",
+    "同一输出目录不能同时运行两个解压任务",
+  );
   services.store.removeAllFinished();
 });
 

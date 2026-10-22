@@ -44,8 +44,8 @@ test("C14 every asset cache-busting key matches the manifest version", () => {
     entries.push({ url: match[1], version: match[2] });
   }
 
-  // 1 个 CSS + 13 个 JS + 1 个品牌图标，共 15 处资产版本缓存键全部与当前版本同步。
-  assert.equal(entries.length, 15, "应为 1 个 CSS + 13 个 JS + 1 个品牌图标，共 15 处");
+  // 1 个 CSS + 14 个 JS + 1 个品牌图标，共 16 处资产版本缓存键全部与当前版本同步。
+  assert.equal(entries.length, 16, "应为 1 个 CSS + 14 个 JS + 1 个品牌图标，共 16 处");
 
   for (const asset of entries) {
     assert.equal(

@@ -249,6 +249,21 @@ test("F6 buildTestArgs applies the rar forced-type red line", () => {
   assert.ok(!args.some((arg) => arg.startsWith("-t")));
 });
 
+test("password verification can test one selected encrypted member", () => {
+  const args = buildTestArgs(
+    { type: "zip", format: "zip" },
+    {
+      archivePath: "/data/file.zip",
+      password: "secret",
+      codePage: "auto",
+      selectionFile: "/runtime/verify-1/selection.txt",
+    },
+  );
+  assert.ok(args.includes("-spd"));
+  assert.ok(args.includes("-i@/runtime/verify-1/selection.txt"));
+  assert.ok(!args.some((arg) => arg.startsWith("-o")));
+});
+
 // ------------------------------------------------------------ 归因解析
 
 test("F6 extractTestFailures parses Data error and CRC failed lines", () => {

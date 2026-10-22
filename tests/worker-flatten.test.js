@@ -231,7 +231,11 @@ test("F2 runWorker flattens a matching single root on success", async () => {
   fs.mkdirSync(path.join(outputDir, "archive"), { recursive: true });
   fs.writeFileSync(path.join(outputDir, "archive", "a.txt"), "hello");
 
-  const store = createMemoryStore({ outputDir, outputStem: "archive" });
+  const store = createMemoryStore({
+    outputDir,
+    outputStem: "archive",
+    outputOwned: true,
+  });
   const result = await runWorker(JOB_ID, {
     store,
     runtimeRoot,
@@ -253,7 +257,11 @@ test("F2 flatten result rides on the success-terminal update", async () => {
   fs.mkdirSync(path.join(outputDir, "archive"), { recursive: true });
   fs.writeFileSync(path.join(outputDir, "archive", "a.txt"), "hello");
 
-  const store = createMemoryStore({ outputDir, outputStem: "archive" });
+  const store = createMemoryStore({
+    outputDir,
+    outputStem: "archive",
+    outputOwned: true,
+  });
   await runWorker(JOB_ID, {
     store,
     runtimeRoot,

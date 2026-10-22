@@ -21,7 +21,13 @@
 
         function openCommentDialog() {
             const els = state.elements;
-            if (!state.info) {
+            if (
+                !state.info
+                || state.running
+                || state.previewing
+                || (state.info.partCount || 1) > 1
+                || !["zip", "7z"].includes(state.info.selection?.format)
+            ) {
                 return;
             }
             els.commentError.textContent = "";
@@ -53,6 +59,11 @@
         async function saveComment() {
             const els = state.elements;
             const comment = els.commentTextarea.value;
+            if (state.running || state.previewing) {
+                els.commentError.textContent = "解压或体检进行中，暂时不能修改压缩包注释。";
+                els.commentError.hidden = false;
+                return;
+            }
 
             els.saveCommentBtn.disabled = true;
             els.saveCommentBtn.textContent = "保存中...";
@@ -68,7 +79,7 @@
                 els.commentError.textContent = error.message || "保存失败";
                 els.commentError.hidden = false;
             } finally {
-                els.saveCommentBtn.disabled = false;
+                els.saveCommentBtn.disabled = state.running || state.previewing;
                 els.saveCommentBtn.textContent = "保存";
             }
         }

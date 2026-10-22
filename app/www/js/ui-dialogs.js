@@ -59,20 +59,29 @@
             : 2;
         const pad = (value) => String(value).padStart(width, "0");
         const pad2 = (value) => String(value).padStart(Math.max(width, 2), "0");
+        let names;
         switch (details.kind) {
         case "split":
-            return details.missingParts.map((n) => `${stem}.${pad(n)}`);
+            names = details.missingParts.map((n) => `${stem}.${pad(n)}`);
+            break;
         case "rar-parts":
-            return details.missingParts.map(
+            names = details.missingParts.map(
                 (n) => `${stem}.part${pad(n)}.rar`,
             );
+            break;
         case "zip-z":
-            return details.missingParts.map((n) => `${stem}.z${pad2(n)}`);
+            names = details.missingParts.map((n) => `${stem}.z${pad2(n)}`);
+            break;
         case "rar-old":
-            return details.missingParts.map((n) => `${stem}.r${pad2(n)}`);
+            names = details.missingParts.map((n) => `${stem}.r${pad2(n)}`);
+            break;
         default:
-            return [];
+            names = [];
         }
+        if (details.missingFirstVolume && details.firstVolumeName) {
+            names.unshift(details.firstVolumeName);
+        }
+        return Array.from(new Set(names));
     }
 
     function closeMissingPartsDialog(state) {
@@ -214,23 +223,28 @@
         const els = state.elements;
         state.info = info;
         state.filePath = info.filePath;
-        els.archiveType.textContent = archiveTypeLabel(info);
-        els.archiveTitle.textContent = info.fileName;
-        els.filePath.textContent = info.filePath;
-        els.partCount.textContent = String(info.partCount || 1);
-        renderWarnings(info.warnings, state);
-        renderVolumes(info.parts, state);
-        if (info.tool) {
-            const sourceMap = {
-                bundled: "内置 7-Zip 就绪",
-                system: "系统 7-Zip 就绪",
-                env: "指定 7-Zip 就绪",
-            };
-            setToolStatus(sourceMap[info.tool.source] || "7-Zip 就绪", "ok", state);
-        } else {
-            setToolStatus("缺少 7-Zip", "fail", state);
-        }
-        updateOutputPreview(state);
+        // 逐项兜底：任何一个字段渲染抛错都不应该让其他字段留白，
+        // 避免 toolStatus 已变「缺少 7-Zip」但标题还停在占位文案的
+        // 自相矛盾中间态。
+        try { els.archiveType.textContent = archiveTypeLabel(info); } catch { /* 单项失败不影响其他字段 */ }
+        try { els.archiveTitle.textContent = info.fileName || "-"; } catch { /* 单项失败不影响其他字段 */ }
+        try { els.filePath.textContent = info.filePath || "-"; } catch { /* 单项失败不影响其他字段 */ }
+        try { els.partCount.textContent = String(info.partCount || 1); } catch { /* 单项失败不影响其他字段 */ }
+        try { renderWarnings(info.warnings, state); } catch { /* 单项失败不影响其他字段 */ }
+        try { renderVolumes(info.parts, state); } catch { /* 单项失败不影响其他字段 */ }
+        try {
+            if (info.tool) {
+                const sourceMap = {
+                    bundled: "内置 7-Zip 就绪",
+                    system: "系统 7-Zip 就绪",
+                    env: "指定 7-Zip 就绪",
+                };
+                setToolStatus(sourceMap[info.tool.source] || "7-Zip 就绪", "ok", state);
+            } else {
+                setToolStatus("缺少 7-Zip", "fail", state);
+            }
+        } catch { /* 单项失败不影响其他字段 */ }
+        try { updateOutputPreview(state); } catch { /* 单项失败不影响其他字段 */ }
     }
 
     function updateOutputPreview(state) {
@@ -240,10 +254,13 @@
         els.selectedDirectoryPath.title = directory || "-";
         if (!directory || !state.info) {
             els.outputPreview.textContent = "-";
+            els.outputPreview.title = "-";
             return;
         }
         const separator = directory.endsWith("/") ? "" : "/";
-        els.outputPreview.textContent = `${directory}${separator}${state.info.outputStem}`;
+        const outputPath = `${directory}${separator}${state.info.outputStem}`;
+        els.outputPreview.textContent = outputPath;
+        els.outputPreview.title = outputPath;
     }
 
     function pathWithin(root, candidate) {

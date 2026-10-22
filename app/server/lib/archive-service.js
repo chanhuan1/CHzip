@@ -42,11 +42,6 @@ function inspectArchive(selectedPath, options = {}) {
   }
 
   const directory = path.dirname(selectedRealPath);
-  const firstVolumePath = path.join(directory, selection.firstVolumeName);
-  const firstSource = selectedRealPath === firstVolumePath
-    ? selectedSource
-    : inspectSource(firstVolumePath);
-  const archivePath = firstSource.path;
   let directoryNames;
   try {
     directoryNames = fsModule.readdirSync(directory);
@@ -54,33 +49,49 @@ function inspectArchive(selectedPath, options = {}) {
     throw classifySourceError(error, directory, "parent");
   }
   const volumeInfo = collectVolumeNames(selection, directoryNames);
+  const firstVolumePath = path.join(directory, volumeInfo.firstVolumeName);
+  const firstVolumeExists = directoryNames.some(
+    (name) => name.toLowerCase() === volumeInfo.firstVolumeName.toLowerCase(),
+  );
+  const firstSource = selectedRealPath === firstVolumePath
+    ? selectedSource
+    : (firstVolumeExists ? inspectSource(firstVolumePath) : null);
+  const archivePath = firstSource?.path || firstVolumePath;
   const volumePaths = volumeInfo.names.map((name) => path.join(directory, name));
   const volumeSources = volumePaths.map((filePath) => (
     filePath === archivePath ? firstSource : inspectSource(filePath)
   ));
+  const missingFirstVolume = !firstVolumeExists
+    && (selection.kind === "zip-z" || selection.kind === "rar-old");
   const missingParts = volumeInfo.missingParts;
+  const missingTotal = volumeInfo.missingTotal + (missingFirstVolume ? 1 : 0);
+  const missingLabels = [
+    ...(missingFirstVolume ? [volumeInfo.firstVolumeName] : []),
+    ...missingParts,
+  ];
   // F12：分卷缺失引导卡需要的结构化信息。此前 missingTotal/missingTruncated
   // 只折进 warnings 文案，前端拿不到；kind/seriesStem/partWidth 是前端按四种
   // 命名规则（.001/.z01/.partN.rar/.rNN）还原缺失文件名所必需的。
-  const missingDetails = missingParts.length
+  const missingDetails = (missingTotal || missingFirstVolume)
     ? {
       missingParts,
-      missingTotal: volumeInfo.missingTotal,
+      missingTotal,
       missingTruncated: volumeInfo.missingTruncated,
       kind: selection.kind,
       seriesStem: selection.seriesStem || selection.outputStem,
       partWidth: selection.partWidth || 2,
       firstVolumeName: volumeInfo.firstVolumeName || selection.firstVolumeName,
       format: selection.format || "",
+      missingFirstVolume,
     }
     : null;
   const warnings = [];
-  if (missingParts.length) {
+  if (missingTotal) {
     // 缺失枚举有上界（见 archive.js 的 MAX_MISSING_ENUM / MAX_VOLUME_NUMBER）：
     // 被截断时改报总数，避免把上百个分卷号整串拼进响应。
     warnings.push(volumeInfo.missingTruncated
-      ? `检测到分卷缺失：至少 ${volumeInfo.missingTotal} 个（前 ${missingParts.length} 个：${missingParts.join(", ")}…）`
-      : `检测到分卷缺失：${missingParts.join(", ")}`);
+      ? `检测到分卷缺失：至少 ${missingTotal} 个（前 ${missingLabels.length} 个：${missingLabels.join(", ")}…）`
+      : `检测到分卷缺失：${missingLabels.join(", ")}`);
   }
 
   return {
@@ -97,7 +108,7 @@ function inspectArchive(selectedPath, options = {}) {
     // 复用构造源文件指纹，避免对同一批分卷再跑一遍 realpath+stat。
     sources: volumeSources,
     missingParts,
-    missingTotal: volumeInfo.missingTotal,
+    missingTotal,
     missingTruncated: volumeInfo.missingTruncated,
     missingDetails,
     warnings,

@@ -147,6 +147,19 @@ test("F12 buildMissingVolumeNames pads to the selected file's width", () => {
   assert.deepEqual(names, ["big.zip.0007"]);
 });
 
+test("F12 buildMissingVolumeNames includes a missing zip main volume", () => {
+  const names = buildMissingVolumeNames({
+    kind: "zip-z",
+    seriesStem: "photos",
+    partWidth: 2,
+    missingParts: [],
+    firstVolumeName: "photos.zip",
+    missingFirstVolume: true,
+  });
+
+  assert.deepEqual(names, ["photos.zip"]);
+});
+
 test("F12 buildMissingVolumeNames degrades gracefully on unknown kind", () => {
   assert.deepEqual(buildMissingVolumeNames({ kind: "single", missingParts: [1] }), []);
   assert.deepEqual(buildMissingVolumeNames(null), []);

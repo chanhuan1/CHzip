@@ -1,5 +1,6 @@
 "use strict";
 
+const crypto = require("node:crypto");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
@@ -17,11 +18,11 @@ const {
 } = require("./jobs");
 const {
   createAuthorizedDirectory,
-  createUniqueOutputDir,
   discoverAuthorizedRoots,
   getDirectoryCapabilities,
   isPathInside,
   listAuthorizedDirectory,
+  prepareConflictAwareOutputDir,
   resolveAuthorizedDirectory,
 } = require("./paths");
 const {
@@ -45,6 +46,8 @@ const {
   buildListArgs,
   buildReadCommentArgs,
   buildStdoutExtractArgs,
+  buildTestArgs,
+  normalizeConflictPolicy,
   passwordNeedsArgv,
 } = require("./sevenzip");
 const {
@@ -58,6 +61,7 @@ const {
   inspectSourceFile,
 } = require("./source-access");
 const {
+  acquireFileLock,
   overwriteFileSync,
 } = require("./fs-utils");
 const {
@@ -183,6 +187,203 @@ function createServices(options = {}) {
     return child;
   });
 
+  function makeBusyError(message, code = "ARCHIVE_BUSY") {
+    const error = new Error(message);
+    error.code = code;
+    return error;
+  }
+
+  function withFileOperationLock(
+    lockPath,
+    callback,
+    busyMessage,
+    busyCode = "ARCHIVE_BUSY",
+    staleMs = TIMEOUTS.STALE_LOCK_MS,
+  ) {
+    let lock;
+    try {
+      lock = acquireFileLock(lockPath, {
+        maxAttempts: TIMEOUTS.LOCK_MAX_ATTEMPTS,
+        retryMs: TIMEOUTS.LOCK_RETRY_MS,
+        staleMs,
+      });
+    } catch (error) {
+      if (error.code === "LOCK_BUSY") {
+        throw makeBusyError(busyMessage, busyCode);
+      }
+      throw error;
+    }
+    try {
+      return callback();
+    } finally {
+      try {
+        lock.release();
+      } catch (error) {
+        safeDiagnosticWrite(logger, {
+          event: "lock_release_error",
+          lockPath,
+          message: error.message,
+        });
+      }
+    }
+  }
+
+  function hashedLockPath(prefix, value) {
+    const lockDir = path.join(runtimeRoot, "locks");
+    fs.mkdirSync(lockDir, { recursive: true, mode: PERMISSIONS.MODE_DIR });
+    const key = crypto.createHash("sha256")
+      .update(path.resolve(value))
+      .digest("hex")
+      .slice(0, 32);
+    return path.join(lockDir, `${prefix}-${key}.lock`);
+  }
+
+  function sourceLockPath(archivePath) {
+    return hashedLockPath("source", archivePath);
+  }
+
+  function withSourceLock(archivePath, callback) {
+    return withFileOperationLock(
+      sourceLockPath(archivePath),
+      callback,
+      "压缩包正在被其它操作使用，请稍后重试",
+      "ARCHIVE_BUSY",
+      TIMEOUTS.SOURCE_LOCK_STALE_MS,
+    );
+  }
+
+  function withLaunchLock(callback) {
+    return withFileOperationLock(
+      path.join(runtimeRoot, "launch.lock"),
+      callback,
+      "任务调度正忙，请稍后重试",
+      "QUEUE_BUSY",
+    );
+  }
+
+  function withOutputLock(outputDir, callback) {
+    return withFileOperationLock(
+      hashedLockPath("output", outputDir),
+      callback,
+      "输出目录正在被其它任务使用，请稍后重试",
+      "OUTPUT_BUSY",
+    );
+  }
+
+  function sourceSnapshotChanged(archive) {
+    for (const source of archive?.sources || []) {
+      if (!source?.path || !source.stat) {
+        return true;
+      }
+      let current;
+      try {
+        current = fs.statSync(source.path);
+      } catch (error) {
+        return true;
+      }
+      if (
+        current.dev !== source.stat.dev
+        || current.ino !== source.stat.ino
+        || current.size !== source.stat.size
+        || current.mtimeMs !== source.stat.mtimeMs
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function ensureFreshArchive(archive, input) {
+    if (!sourceSnapshotChanged(archive)) {
+      return archive;
+    }
+    const fresh = info(input);
+    if (fresh.filePath !== archive.filePath) {
+      const error = new Error("源压缩包路径在操作期间发生变化");
+      error.code = "SOURCE_CHANGED";
+      throw error;
+    }
+    return fresh;
+  }
+
+  function activeJobsForArchive(archive) {
+    const canonicalPath = (value) => {
+      try {
+        return fs.realpathSync(value);
+      } catch (error) {
+        return path.resolve(value);
+      }
+    };
+    const sourcePaths = new Set([
+      archive.archivePath || archive.filePath,
+      archive.filePath,
+      ...(archive.parts || []).map((part) => part.path),
+      ...(archive.sources || []).map((source) => source.path),
+    ].filter(Boolean).map(canonicalPath));
+    const active = [];
+    for (const name of fs.readdirSync(store.jobsDir)) {
+      if (!/^[a-f0-9]{32}\.json$/.test(name)) {
+        continue;
+      }
+      let job;
+      try {
+        job = store.read(name.slice(0, -5));
+      } catch (error) {
+        continue;
+      }
+      if (!job || TERMINAL_STATUSES.has(job.status)) {
+        continue;
+      }
+      const jobPaths = [
+        job.archivePath,
+        ...(job.sourceFingerprint || []).map((source) => source.path),
+      ].filter(Boolean).map(canonicalPath);
+      if (jobPaths.some((jobPath) => sourcePaths.has(jobPath))) {
+        active.push(job);
+      }
+    }
+    return active;
+  }
+
+  function activeJobsForOutputDir(outputDir) {
+    const expected = (() => {
+      try {
+        return fs.realpathSync(outputDir);
+      } catch (error) {
+        return path.resolve(outputDir);
+      }
+    })();
+    const active = [];
+    for (const name of fs.readdirSync(store.jobsDir)) {
+      if (!/^[a-f0-9]{32}\.json$/.test(name)) {
+        continue;
+      }
+      let job;
+      try {
+        job = store.read(name.slice(0, -5));
+      } catch (error) {
+        continue;
+      }
+      if (
+        !job
+        || TERMINAL_STATUSES.has(job.status)
+        || !job.outputDir
+      ) {
+        continue;
+      }
+      let current;
+      try {
+        current = fs.realpathSync(job.outputDir);
+      } catch (error) {
+        current = path.resolve(job.outputDir);
+      }
+      if (current === expected) {
+        active.push(job);
+      }
+    }
+    return active;
+  }
+
   // 统一的「为一个已创建 job 启动 worker」入口（F7 排队唤起复用）。
   // extract 满员时不调用，由后续请求的 spawnQueued() 在腾出名额时唤起。
   // 返回最新写入的 job（成功时已带真实 workerPid）。
@@ -242,7 +443,16 @@ function createServices(options = {}) {
         }
       }
       if (current.outputOwned && current.outputDir) {
-        fs.rmSync(current.outputDir, { recursive: true, force: true });
+        try {
+          fs.rmSync(current.outputDir, { recursive: true, force: true });
+        } catch (cleanupError) {
+          safeDiagnosticWrite(logger, {
+            event: "worker_output_cleanup_error",
+            jobId,
+            path: current.outputDir,
+            message: cleanupError.message,
+          });
+        }
       }
       store.update(jobId, (latest) => ({
         ...latest,
@@ -309,45 +519,47 @@ function createServices(options = {}) {
   // 单个任务的启动失败只影响它自己，不能拖垮用户的轮询请求。
   function spawnQueued() {
     try {
-      const pending = [];
-      for (const name of fs.readdirSync(store.jobsDir)) {
-        if (!/^[a-f0-9]{32}\.json$/.test(name)) {
-          continue;
+      withLaunchLock(() => {
+        const pending = [];
+        for (const name of fs.readdirSync(store.jobsDir)) {
+          if (!/^[a-f0-9]{32}\.json$/.test(name)) {
+            continue;
+          }
+          let job = null;
+          try {
+            job = store.read(name.slice(0, -5));
+          } catch (readError) {
+            continue;
+          }
+          if (!job) {
+            continue;
+          }
+          if (job.status !== "queued" || job.workerPid || job.cancelRequestedAt) {
+            continue;
+          }
+          pending.push(job);
         }
-        let job = null;
-        try {
-          job = store.read(name.slice(0, -5));
-        } catch (readError) {
-          continue;
-        }
-        if (!job) {
-          continue;
-        }
-        if (job.status !== "queued" || job.workerPid || job.cancelRequestedAt) {
-          continue;
-        }
-        pending.push(job);
-      }
-      if (!pending.length) {
-        return;
-      }
-      pending.sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")));
-      for (const job of pending) {
-        if (store.countActive({
-          includeStartingQueued: false,
-        }) >= LIMITS.MAX_CONCURRENT_EXTRACTS) {
+        if (!pending.length) {
           return;
         }
-        try {
-          launchWorker(job.id);
-        } catch (launchError) {
-          safeDiagnosticWrite(logger, {
-            event: "queue_launch_error",
-            jobId: job.id,
-            message: launchError.message,
-          });
+        pending.sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")));
+        for (const job of pending) {
+          if (store.countActive({
+            includeStartingQueued: false,
+          }) >= LIMITS.MAX_CONCURRENT_EXTRACTS) {
+            return;
+          }
+          try {
+            launchWorker(job.id);
+          } catch (launchError) {
+            safeDiagnosticWrite(logger, {
+              event: "queue_launch_error",
+              jobId: job.id,
+              message: launchError.message,
+            });
+          }
         }
-      }
+      });
     } catch (error) {
       // 整体兜底：spawnQueued 是顺手做的事，任何意外都不能冒到调用方。
       safeDiagnosticWrite(logger, {
@@ -438,9 +650,76 @@ function createServices(options = {}) {
     return error;
   }
 
+  function archiveHasMissingVolumes(archive) {
+    return Boolean(
+      archive?.missingTotal
+      || archive?.missingParts?.length
+      || archive?.missingDetails?.missingFirstVolume,
+    );
+  }
+
+  function verifyEncryptedPassword(archive, input, entries, selection = archive.selection) {
+    const encryptedFiles = entries
+      .filter((entry) => entry.type === "file" && entry.encrypted)
+      .sort((a, b) => (Number(a.size) || 0) - (Number(b.size) || 0));
+    if (!encryptedFiles.length) {
+      // 加密目录头在无正确密码时连列表都无法完成，能走到这里说明列表
+      // 已经用该密码成功解析；没有可测试的数据成员时只能以此为准。
+      return true;
+    }
+
+    const verifyDir = fs.mkdtempSync(path.join(runtimeRoot, "verify-"));
+    const selectionFile = path.join(verifyDir, "selection.txt");
+    fs.writeFileSync(selectionFile, `${encryptedFiles[0].path}\n`, {
+      encoding: "utf8",
+      mode: PERMISSIONS.MODE_FILE_SECRET,
+    });
+    try {
+      runSyncWithZipPasswordFallback(
+        archive.tool,
+        buildTestArgs(selection, {
+          archivePath: archive.filePath,
+          password: input.password || "",
+          codePage: input.codePage || "auto",
+          selectionFile,
+        }),
+        {
+          cwd: archive.directory,
+          maxBuffer: LIMITS.MAX_PREVIEW_OUTPUT_BYTES,
+          timeout: TIMEOUTS.PASSWORD_VERIFY_MS,
+          passwordProvided: true,
+          password: input.password || "",
+          phase: "password-verify",
+        },
+        selection.format,
+        input.password || "",
+      );
+      return true;
+    } catch (error) {
+      if (error?.code === "ETIMEDOUT") {
+        const timeoutError = new Error(
+          `密码验证超过 ${Math.round(TIMEOUTS.PASSWORD_VERIFY_MS / 1000)} 秒，请先整包解压或稍后重试`,
+        );
+        timeoutError.code = "PASSWORD_VERIFY_TIMEOUT";
+        throw timeoutError;
+      }
+      throw error;
+    } finally {
+      try {
+        fs.rmSync(verifyDir, { recursive: true, force: true });
+      } catch (error) {
+        safeDiagnosticWrite(logger, {
+          event: "verify_cleanup_error",
+          path: verifyDir,
+          message: error.message,
+        });
+      }
+    }
+  }
+
   function preview(input, providedArchive = null) {
     const archive = providedArchive || info(input);
-    if (archive.missingParts.length) {
+    if (archiveHasMissingVolumes(archive)) {
       const error = new Error(archive.warnings[0]);
       error.code = "MISSING_VOLUME";
       throw attachMissingDetails(error, archive);
@@ -499,15 +778,23 @@ function createServices(options = {}) {
       // 固实标记随列表一起返回：前端据此在预览单文件前给出预警。
       // 固实包取出任一文件都要先解压整包，是"预览小文件却跑满一个核"的根因。
       const properties = detectTechnicalListProperties(result.stdout);
+      const passwordVerified = !passwordRequired
+        ? true
+        : (input.password
+          ? verifyEncryptedPassword(
+            listingArchive,
+            input,
+            parsed.entries,
+            effectiveSelection,
+          )
+          : false);
       return {
         ...parsed,
         format: detectedFormat || effectiveSelection.format,
         type: effectiveSelection.type,
         parts: archive.parts,
         passwordRequired,
-        passwordVerified: passwordRequired
-          ? Boolean(input.password)
-          : true,
+        passwordVerified,
         solid: properties.solid,
       };
     });
@@ -556,8 +843,8 @@ function createServices(options = {}) {
   }
 
   function extract(input) {
-    const archive = info(input);
-    if (archive.missingParts.length) {
+    let archive = info(input);
+    if (archiveHasMissingVolumes(archive)) {
       const error = new Error(archive.warnings[0]);
       error.code = "MISSING_VOLUME";
       throw attachMissingDetails(error, archive);
@@ -574,95 +861,120 @@ function createServices(options = {}) {
       input.destinationRoot || archive.directory,
       roots,
     );
-    const outputDir = createUniqueOutputDir(destinationRoot, archive.outputStem);
+    const conflictPolicy = normalizeConflictPolicy(
+      input.conflictPolicy || "rename",
+    ).id;
+    const outputPlan = prepareConflictAwareOutputDir(
+      destinationRoot,
+      archive.outputStem,
+      conflictPolicy,
+    );
+    const outputDir = outputPlan.path;
+    const outputOwned = outputPlan.owned;
     let job;
 
     try {
-      const jobSelection = isNestedTar(archive.selection)
-        ? archive.selection
-        : {
-          ...archive.selection,
-          format: previewResult?.format
-            || archive.selection.format,
-          type: previewResult?.type
-            ?? archive.selection.type,
-        };
-      const extractFingerprint = (archive.sources && archive.sources.length
-        ? archive.sources
-        : [{ path: archive.filePath, stat: null }]).map((source) => (
-        source.stat
-          ? {
-            path: source.path,
-            dev: source.stat.dev,
-            ino: source.stat.ino,
-            size: source.stat.size,
-            mtimeMs: source.stat.mtimeMs,
+      job = withSourceLock(archive.filePath, () => {
+        archive = ensureFreshArchive(archive, input);
+        if (archiveHasMissingVolumes(archive)) {
+          const error = new Error(archive.warnings[0]);
+          error.code = "MISSING_VOLUME";
+          throw attachMissingDetails(error, archive);
+        }
+        if (Array.isArray(input.selectedPaths)) {
+          previewResult = preview(input, archive);
+        }
+
+        return withOutputLock(outputDir, () => {
+          if (activeJobsForOutputDir(outputDir).length) {
+            throw makeBusyError(
+              "相同输出目录已有解压任务，请等待其结束或选择其它目录",
+              "OUTPUT_BUSY",
+            );
           }
-          : fingerprintFiles([source.path])[0]));
-      job = store.create({
-        requestId: input.requestId || "",
-        archivePath: archive.filePath,
-        outputDir,
-        outputOwned: true,
-        // 压缩包总字节数：worker 估算吞吐用（百分比 × 总大小 / 耗时）。
-        sizeBytes: extractFingerprint.reduce(
-          (sum, entry) => sum + (Number(entry?.size) || 0),
-          0,
-        ),
-        // F2 智能拍平：inspectArchive 已产出 outputStem（archive-service.js
-        // 透传自 archive.js classifyArchive），交给 worker 收尾时和 outputDir
-        // 下唯一目录名做大小写不敏感比较。
-        outputStem: archive.outputStem || "",
-        selection: jobSelection,
-        sevenZipPath: archive.tool.path,
-        sevenZipSource: archive.tool.source,
-        codePage: input.codePage || "auto",
-        conflictPolicy: input.conflictPolicy || "rename",
-        deleteSource: Boolean(input.deleteSource),
-        partCount: archive.partCount,
-        // info() 已对每卷跑过 realpath+stat（结果在 archive.sources 的
-        // .stat 上），直接复用构造指纹；只对没有 stat 的退化路径才
-        // 回退 fingerprintFiles（单文件且无 sources 时）。
-        sourceFingerprint: extractFingerprint,
+
+          const jobSelection = isNestedTar(archive.selection)
+            ? archive.selection
+            : {
+              ...archive.selection,
+              format: previewResult?.format
+                || archive.selection.format,
+              type: previewResult?.type
+                ?? archive.selection.type,
+            };
+          const extractFingerprint = (archive.sources && archive.sources.length
+            ? archive.sources
+            : [{ path: archive.filePath, stat: null }]).map((source) => (
+            source.stat
+              ? {
+                path: source.path,
+                dev: source.stat.dev,
+                ino: source.stat.ino,
+                size: source.stat.size,
+                mtimeMs: source.stat.mtimeMs,
+              }
+              : fingerprintFiles([source.path])[0]));
+          let created = store.create({
+            requestId: input.requestId || "",
+            archivePath: archive.filePath,
+            outputDir,
+            outputOwned,
+            // 压缩包总字节数：worker 估算吞吐用（百分比 × 总大小 / 耗时）。
+            sizeBytes: extractFingerprint.reduce(
+              (sum, entry) => sum + (Number(entry?.size) || 0),
+              0,
+            ),
+            outputStem: archive.outputStem || "",
+            selection: jobSelection,
+            sevenZipPath: archive.tool.path,
+            sevenZipSource: archive.tool.source,
+            codePage: input.codePage || "auto",
+            conflictPolicy,
+            deleteSource: Boolean(input.deleteSource),
+            partCount: archive.partCount,
+            sourceFingerprint: extractFingerprint,
+          });
+
+          let selectionFile = "";
+          if (Array.isArray(input.selectedPaths)) {
+            const selectedPaths = validateSelectedPaths(
+              input.selectedPaths,
+              previewResult.entries,
+            );
+            selectionFile = writeSelectionFile(store.dataDir(created.id), selectedPaths);
+          }
+
+          let passwordFile = "";
+          if (input.password) {
+            passwordFile = path.join(store.dataDir(created.id), "password.txt");
+            fs.writeFileSync(passwordFile, input.password, {
+              encoding: "utf8",
+              mode: PERMISSIONS.MODE_FILE_SECRET,
+            });
+          }
+
+          return store.update(created.id, (current) => ({
+            ...current,
+            selectionFile,
+            passwordFile,
+          }));
+        });
       });
 
-      let selectionFile = "";
-      if (Array.isArray(input.selectedPaths)) {
-        const selectedPaths = validateSelectedPaths(
-          input.selectedPaths,
-          previewResult.entries,
-        );
-        selectionFile = writeSelectionFile(store.dataDir(job.id), selectedPaths);
-      }
-
-      let passwordFile = "";
-      if (input.password) {
-        passwordFile = path.join(store.dataDir(job.id), "password.txt");
-        fs.writeFileSync(passwordFile, input.password, {
-          encoding: "utf8",
-          mode: PERMISSIONS.MODE_FILE_SECRET,
-        });
-      }
-
-      job = store.update(job.id, (current) => ({
-        ...current,
-        selectionFile,
-        passwordFile,
-      }));
-
-      // F7：不再 429 硬拒绝。countActive 未满立刻启动；满员则保持 queued，
-      // 由后续请求（status/jobs/extract）的 spawnQueued 在腾出名额时唤起。
-      // 返回体多带 queued/queueAhead 让前端任务中心能显示「排队中，前面还有 N 个」。
+      // F7：不再 429 硬拒绝。计数和占位必须在同一把跨进程锁内完成，
+      // 否则两个并发请求都可能看到最后一个空位。
       let queued = false;
-      if (
-        store.countActive({
-          excludeJobId: job.id,
-        }) < LIMITS.MAX_CONCURRENT_EXTRACTS
-      ) {
-        job = launchWorker(job.id);
-      } else {
+      job = withLaunchLock(() => {
+        if (
+          store.countActive({
+            excludeJobId: job.id,
+          }) < LIMITS.MAX_CONCURRENT_EXTRACTS
+        ) {
+          return launchWorker(job.id);
+        }
         queued = true;
-      }
+        return job;
+      });
 
       const result = {
         jobId: job.id,
@@ -675,28 +987,50 @@ function createServices(options = {}) {
       }
       return result;
     } catch (error) {
-      fs.rmSync(outputDir, { recursive: true, force: true });
+      if (outputOwned) {
+        try {
+          fs.rmSync(outputDir, { recursive: true, force: true });
+        } catch (cleanupError) {
+          safeDiagnosticWrite(logger, {
+            event: "start_output_cleanup_error",
+            path: outputDir,
+            message: cleanupError.message,
+          });
+        }
+      }
       if (job) {
-        const current = store.read(job.id);
-        if (current?.passwordFile) {
-          overwriteFileSync(current.passwordFile);
-        }
-        for (const filePath of [current?.passwordFile, current?.selectionFile]) {
-          if (filePath) {
-            fs.rmSync(filePath, { force: true });
+        try {
+          const current = store.read(job.id);
+          if (current?.passwordFile) {
+            overwriteFileSync(current.passwordFile);
           }
+          for (const filePath of [current?.passwordFile, current?.selectionFile]) {
+            if (filePath) {
+              try {
+                fs.rmSync(filePath, { force: true });
+              } catch (cleanupError) {
+                // 临时文件清理失败不能覆盖原始启动错误。
+              }
+            }
+          }
+          store.update(job.id, (current) => ({
+            ...current,
+            status: "failed",
+            passwordFile: "",
+            selectionFile: "",
+            error: {
+              code: error.code || "START_FAILED",
+              message: error.message,
+            },
+            finishedAt: new Date().toISOString(),
+          }));
+        } catch (finalizeError) {
+          safeDiagnosticWrite(logger, {
+            event: "start_failure_finalize_error",
+            jobId: job.id,
+            message: finalizeError.message,
+          });
         }
-        store.update(job.id, (current) => ({
-          ...current,
-          status: "failed",
-          passwordFile: "",
-          selectionFile: "",
-          error: {
-            code: error.code || "START_FAILED",
-            message: error.message,
-          },
-          finishedAt: new Date().toISOString(),
-        }));
       }
       throw error;
     }
@@ -713,71 +1047,80 @@ function createServices(options = {}) {
   // 并发模型：与 extract 共用 LIMITS.MAX_CONCURRENT_EXTRACTS 同一池，满员保持
   // queued 由 spawnQueued 唤起（F7 机制原样复用）。
   function test(input) {
-    const archive = info(input);
-    if (archive.missingParts.length) {
+    let archive = info(input);
+    if (archiveHasMissingVolumes(archive)) {
       const error = new Error(archive.warnings[0]);
       error.code = "MISSING_VOLUME";
-      throw error;
+      throw attachMissingDetails(error, archive);
     }
 
     let job;
     try {
-      const testFingerprint = (archive.sources && archive.sources.length
-        ? archive.sources
-        : [{ path: archive.filePath, stat: null }]).map((source) => (
-        source.stat
-          ? {
-            path: source.path,
-            dev: source.stat.dev,
-            ino: source.stat.ino,
-            size: source.stat.size,
-            mtimeMs: source.stat.mtimeMs,
-          }
-          : fingerprintFiles([source.path])[0]));
-      job = store.create({
-        requestId: input.requestId || "",
-        kind: "test",
-        archivePath: archive.filePath,
-        sizeBytes: testFingerprint.reduce(
-          (sum, entry) => sum + (Number(entry?.size) || 0),
-          0,
-        ),
-        // 不写盘是 test 的安全红线：outputDir 为空串 + outputOwned=false，
-        // worker 失败路径的 cleanupOutput 与 jobs.js 过期清理都据此跳过 rm。
-        outputDir: "",
-        outputOwned: false,
-        selection: archive.selection,
-        sevenZipPath: archive.tool.path,
-        sevenZipSource: archive.tool.source,
-        codePage: input.codePage || "auto",
-        partCount: archive.partCount,
-        sourceFingerprint: testFingerprint,
-      });
-
-      let passwordFile = "";
-      if (input.password) {
-        passwordFile = path.join(store.dataDir(job.id), "password.txt");
-        fs.writeFileSync(passwordFile, input.password, {
-          encoding: "utf8",
-          mode: PERMISSIONS.MODE_FILE_SECRET,
+      job = withSourceLock(archive.filePath, () => {
+        archive = ensureFreshArchive(archive, input);
+        if (archiveHasMissingVolumes(archive)) {
+          const error = new Error(archive.warnings[0]);
+          error.code = "MISSING_VOLUME";
+          throw attachMissingDetails(error, archive);
+        }
+        const testFingerprint = (archive.sources && archive.sources.length
+          ? archive.sources
+          : [{ path: archive.filePath, stat: null }]).map((source) => (
+          source.stat
+            ? {
+              path: source.path,
+              dev: source.stat.dev,
+              ino: source.stat.ino,
+              size: source.stat.size,
+              mtimeMs: source.stat.mtimeMs,
+            }
+            : fingerprintFiles([source.path])[0]));
+        let created = store.create({
+          requestId: input.requestId || "",
+          kind: "test",
+          archivePath: archive.filePath,
+          sizeBytes: testFingerprint.reduce(
+            (sum, entry) => sum + (Number(entry?.size) || 0),
+            0,
+          ),
+          outputDir: "",
+          outputOwned: false,
+          selection: archive.selection,
+          sevenZipPath: archive.tool.path,
+          sevenZipSource: archive.tool.source,
+          codePage: input.codePage || "auto",
+          partCount: archive.partCount,
+          sourceFingerprint: testFingerprint,
         });
-        job = store.update(job.id, (current) => ({
-          ...current,
-          passwordFile,
-        }));
-      }
+
+        let passwordFile = "";
+        if (input.password) {
+          passwordFile = path.join(store.dataDir(created.id), "password.txt");
+          fs.writeFileSync(passwordFile, input.password, {
+            encoding: "utf8",
+            mode: PERMISSIONS.MODE_FILE_SECRET,
+          });
+          created = store.update(created.id, (current) => ({
+            ...current,
+            passwordFile,
+          }));
+        }
+        return created;
+      });
 
       // 与 extract 同一并发池：有名额立刻启动，满员留 queued 等 spawnQueued。
       let queued = false;
-      if (
-        store.countActive({
-          excludeJobId: job.id,
-        }) < LIMITS.MAX_CONCURRENT_EXTRACTS
-      ) {
-        job = launchWorker(job.id);
-      } else {
+      job = withLaunchLock(() => {
+        if (
+          store.countActive({
+            excludeJobId: job.id,
+          }) < LIMITS.MAX_CONCURRENT_EXTRACTS
+        ) {
+          return launchWorker(job.id);
+        }
         queued = true;
-      }
+        return job;
+      });
 
       const result = {
         jobId: job.id,
@@ -790,21 +1133,33 @@ function createServices(options = {}) {
       return result;
     } catch (error) {
       if (job) {
-        const current = store.read(job.id);
-        if (current?.passwordFile) {
-          overwriteFileSync(current.passwordFile);
-          fs.rmSync(current.passwordFile, { force: true });
+        try {
+          const current = store.read(job.id);
+          if (current?.passwordFile) {
+            overwriteFileSync(current.passwordFile);
+            try {
+              fs.rmSync(current.passwordFile, { force: true });
+            } catch (cleanupError) {
+              // 清理失败不覆盖启动错误。
+            }
+          }
+          store.update(job.id, (current) => ({
+            ...current,
+            status: "failed",
+            passwordFile: "",
+            error: {
+              code: error.code || "START_FAILED",
+              message: error.message,
+            },
+            finishedAt: new Date().toISOString(),
+          }));
+        } catch (finalizeError) {
+          safeDiagnosticWrite(logger, {
+            event: "test_failure_finalize_error",
+            jobId: job.id,
+            message: finalizeError.message,
+          });
         }
-        store.update(job.id, (current) => ({
-          ...current,
-          status: "failed",
-          passwordFile: "",
-          error: {
-            code: error.code || "START_FAILED",
-            message: error.message,
-          },
-          finishedAt: new Date().toISOString(),
-        }));
       }
       throw error;
     }
@@ -824,7 +1179,15 @@ function createServices(options = {}) {
   }
 
   async function cancel(input) {
-    return requestCancellation(store, input.jobId, options.cancellationDependencies);
+    const job = await requestCancellation(
+      store,
+      input.jobId,
+      options.cancellationDependencies,
+    );
+    if (!job) {
+      throw new Error("任务不存在或已过期");
+    }
+    return toJobView(job);
   }
 
   const diagnosticService = createDiagnosticService({
@@ -840,22 +1203,53 @@ function createServices(options = {}) {
   }
 
   function comment(input) {
-    const archive = info(input);
+    let archive = info(input);
     if (input.comment !== undefined) {
-      const commentDir = fs.mkdtempSync(path.join(runtimeRoot, "comment-"));
-      const commentFile = path.join(commentDir, "comment.txt");
-      fs.writeFileSync(commentFile, input.comment, { encoding: "utf8", mode: 0o600 });
-      try {
-        runSync(archive.tool, buildCommentArgs(archive.selection, {
-          archivePath: archive.filePath,
-          commentFile,
-        }), {
-          cwd: archive.directory,
-        });
-      } finally {
-        fs.rmSync(commentDir, { recursive: true, force: true });
-      }
-      return { success: true };
+      return withSourceLock(archive.filePath, () => {
+        archive = ensureFreshArchive(archive, input);
+        if (archiveHasMissingVolumes(archive)) {
+          const error = new Error(archive.warnings[0]);
+          error.code = "MISSING_VOLUME";
+          throw attachMissingDetails(error, archive);
+        }
+        if (
+          (archive.partCount || 1) > 1
+          || !["zip", "7z"].includes(archive.selection.format)
+        ) {
+          throw makeBusyError(
+            "只有单文件 ZIP / 7Z 支持安全修改注释",
+            "COMMENT_UNSUPPORTED",
+          );
+        }
+        if (activeJobsForArchive(archive).length) {
+          throw makeBusyError(
+            "压缩包正在解压或体检，暂时不能修改注释",
+          );
+        }
+
+        const commentDir = fs.mkdtempSync(path.join(runtimeRoot, "comment-"));
+        const commentFile = path.join(commentDir, "comment.txt");
+        fs.writeFileSync(commentFile, input.comment, { encoding: "utf8", mode: 0o600 });
+        try {
+          runSync(archive.tool, buildCommentArgs(archive.selection, {
+            archivePath: archive.filePath,
+            commentFile,
+          }), {
+            cwd: archive.directory,
+          });
+        } finally {
+          try {
+            fs.rmSync(commentDir, { recursive: true, force: true });
+          } catch (error) {
+            safeDiagnosticWrite(logger, {
+              event: "comment_cleanup_error",
+              path: commentDir,
+              message: error.message,
+            });
+          }
+        }
+        return { success: true };
+      });
     }
     const listResult = runSync(archive.tool, buildReadCommentArgs(archive.selection, {
       archivePath: archive.filePath,

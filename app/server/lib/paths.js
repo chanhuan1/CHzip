@@ -245,6 +245,68 @@ function createUniqueOutputDir(destinationRoot, outputStem, options = {}) {
   throw new Error("无法生成唯一的解压目录名称");
 }
 
+/**
+ * 按冲突策略准备输出目录：
+ *   - rename：创建 "<stem>"、"<stem> (2)"… 等独占新目录；
+ *   - overwrite / skip / keepnew：复用同名目录，让 7-Zip 的 -ao* 真正处理
+ *     已存在文件。
+ *
+ * 复用目录时 owned=false，失败清理不能递归删除用户原本就存在的目录。
+ */
+function prepareConflictAwareOutputDir(
+  destinationRoot,
+  outputStem,
+  conflictPolicy,
+) {
+  assertUsableDirectory(destinationRoot);
+  const safeStem = sanitizeOutputStem(outputStem);
+  if (conflictPolicy === "rename") {
+    return {
+      path: createUniqueOutputDir(destinationRoot, safeStem),
+      owned: true,
+      reused: false,
+    };
+  }
+  if (!["overwrite", "skip", "keepnew"].includes(conflictPolicy)) {
+    throw new Error("不支持的解压冲突策略");
+  }
+
+  const candidate = path.join(destinationRoot, safeStem);
+  try {
+    fs.mkdirSync(candidate, { mode: PERMISSIONS.MODE_DIR_OUTPUT });
+    return { path: candidate, owned: true, reused: false };
+  } catch (error) {
+    if (error.code !== "EEXIST") {
+      throw new Error(`无法创建解压目录：${error.message}`);
+    }
+  }
+
+  let stat;
+  try {
+    stat = fs.lstatSync(candidate);
+  } catch (error) {
+    throw new Error("同名输出目录不存在或无法访问");
+  }
+  if (!stat.isDirectory() || stat.isSymbolicLink()) {
+    throw new Error("同名输出路径已存在，但不是可安全复用的目录");
+  }
+  try {
+    assertUsableDirectory(candidate);
+  } catch (error) {
+    throw new Error("同名输出目录不可写");
+  }
+  const resolvedRoot = fs.realpathSync(destinationRoot);
+  const resolvedCandidate = fs.realpathSync(candidate);
+  if (!isPathInside(resolvedRoot, resolvedCandidate)) {
+    throw new Error("同名输出目录超出授权目标范围");
+  }
+  return {
+    path: resolvedCandidate,
+    owned: false,
+    reused: true,
+  };
+}
+
 function defaultRootCandidates(
   archivePath,
   options = {},
@@ -429,6 +491,7 @@ module.exports = {
   getDirectoryCapabilities,
   isPathInside,
   listAuthorizedDirectory,
+  prepareConflictAwareOutputDir,
   resolveAuthorizedDirectory,
   sanitizeOutputStem,
   validateDirectoryName,

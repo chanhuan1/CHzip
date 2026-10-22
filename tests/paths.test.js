@@ -2,8 +2,12 @@
 
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
 const {
   findArchiveAccessibleRoot,
+  prepareConflictAwareOutputDir,
   sanitizeOutputStem,
   validateDirectoryName,
 } = require("../app/server/lib/paths");
@@ -66,4 +70,41 @@ test("findArchiveAccessibleRoot climbs to the fnOS share root", () => {
     },
   );
   assert.equal(root, "/vol1/share");
+});
+
+test("rename policy creates a fresh output directory", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "chzip-output-policy-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(root, "archive"));
+
+  const result = prepareConflictAwareOutputDir(root, "archive", "rename");
+
+  assert.equal(result.path, path.join(root, "archive (2)"));
+  assert.equal(result.owned, true);
+  assert.equal(result.reused, false);
+});
+
+test("overwrite, skip and keepnew reuse the same output directory", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "chzip-output-policy-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const outputDir = path.join(root, "archive");
+  fs.mkdirSync(outputDir);
+
+  for (const policy of ["overwrite", "skip", "keepnew"]) {
+    const result = prepareConflictAwareOutputDir(root, "archive", policy);
+    assert.equal(result.path, fs.realpathSync(outputDir));
+    assert.equal(result.owned, false);
+    assert.equal(result.reused, true);
+  }
+});
+
+test("conflict-aware output refuses a non-directory collision", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "chzip-output-policy-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(root, "archive"), "not a directory");
+
+  assert.throws(
+    () => prepareConflictAwareOutputDir(root, "archive", "overwrite"),
+    /不是可安全复用的目录/,
+  );
 });

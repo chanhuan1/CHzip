@@ -200,3 +200,43 @@ test("A2 inspectArchive rejects a backup name that only looks like a split volum
     /当前文件类型不支持/,
   );
 });
+
+test("inspectArchive resolves the first volume with its real case", (t) => {
+  const names = ["ARCHIVE.PART1.RAR", "ARCHIVE.PART2.RAR"];
+  const dir = makeArchiveDir(names);
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const exactNames = new Set(names);
+  const inspectSource = (filePath) => {
+    const name = path.basename(filePath);
+    if (!exactNames.has(name)) {
+      const error = new Error("not found");
+      error.code = "SOURCE_NOT_FOUND";
+      throw error;
+    }
+    return {
+      path: path.join(dir, name),
+      stat: fs.statSync(path.join(dir, name)),
+    };
+  };
+
+  const archive = inspectArchive(path.join(dir, "ARCHIVE.PART2.RAR"), {
+    sevenZip: SEVEN_ZIP_STUB,
+    inspectSource,
+  });
+
+  assert.equal(archive.filePath, path.join(dir, "ARCHIVE.PART1.RAR"));
+  assert.deepEqual(archive.parts.map((part) => part.name), names);
+});
+
+test("inspectArchive reports a missing zip main volume instead of throwing", (t) => {
+  const dir = makeArchiveDir(["ARCHIVE.Z01", "ARCHIVE.Z02"]);
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  const archive = inspectArchive(path.join(dir, "ARCHIVE.Z01"), {
+    sevenZip: SEVEN_ZIP_STUB,
+  });
+
+  assert.equal(archive.missingDetails.missingFirstVolume, true);
+  assert.equal(archive.missingTotal, 1);
+  assert.match(archive.warnings[0], /ARCHIVE\.zip/);
+});

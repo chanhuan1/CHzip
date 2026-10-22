@@ -121,6 +121,10 @@
     box-sizing: border-box;
 }
 
+html {
+    scroll-padding-bottom: 96px;
+}
+
 body {
     margin: 0;
     min-height: 100vh;
@@ -183,7 +187,7 @@ dd {
 
 .app-shell {
     min-height: 100vh;
-    padding: 22px;
+    padding: 22px 22px calc(22px + env(safe-area-inset-bottom, 0px));
 }
 
 .workspace {
@@ -289,22 +293,31 @@ dd {
 
 .archive-summary {
     display: grid;
-    grid-template-columns: 76px minmax(0, 1fr) auto;
-    gap: 20px;
+    grid-template-columns: 56px minmax(0, 1fr) auto;
+    gap: 8px 16px;
     align-items: center;
-    padding: 20px;
+    padding: 14px 16px;
+    /* 与下方 work-grid 之间留出空隙，避免「压缩包内容」面板贴住上方卡片 */
+    margin-bottom: 14px;
+}
+
+.archive-notice-row {
+    grid-column: 1 / -1;
+    margin: 0;
+    /* grid 子项默认 min-width:auto，会让内部 notice 撑破容器；显式归零 */
+    min-width: 0;
 }
 
 .archive-type {
     display: grid;
     place-items: center;
-    width: 68px;
-    height: 68px;
+    width: 52px;
+    height: 52px;
     border: 2px solid var(--accent);
-    border-radius: var(--radius-lg);
+    border-radius: var(--radius-md);
     color: var(--accent-dark);
     background: var(--accent-soft);
-    font-size: 16px;
+    font-size: 13px;
     font-weight: 700;
 }
 
@@ -318,9 +331,9 @@ dd {
 }
 
 .archive-copy h2 {
-    margin: 5px 0 7px;
+    margin: 3px 0 4px;
     overflow-wrap: anywhere;
-    font-size: 21px;
+    font-size: 17px;
     font-weight: 600;
     line-height: 1.25;
 }
@@ -331,30 +344,30 @@ dd {
     color: var(--muted);
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 13px;
-    line-height: 1.55;
+    font-size: 12px;
+    line-height: 1.4;
 }
 
 .archive-metrics {
     display: grid;
-    grid-template-columns: repeat(3, minmax(74px, auto));
-    gap: 8px;
+    grid-template-columns: repeat(3, minmax(60px, auto));
+    gap: 4px;
 }
 
 .archive-metrics div {
-    min-width: 74px;
-    padding: 10px;
+    min-width: 60px;
+    padding: 6px 10px;
     border-left: 1px solid var(--line);
 }
 
 .archive-metrics dt {
     color: var(--muted);
-    font-size: 11px;
+    font-size: 10px;
 }
 
 .archive-metrics dd {
-    margin-top: 5px;
-    font-size: 16px;
+    margin-top: 2px;
+    font-size: 15px;
     font-weight: 600;
 }
 
@@ -377,19 +390,22 @@ dd {
     gap: 8px;
     align-items: stretch;
     width: 100%;
-    margin: 12px 0;
+    margin: 8px 0 0;
 }
 
 .notice {
     flex: 1;
     min-width: 0;
-    min-height: 38px;
-    padding: 10px 13px;
+    min-height: 32px;
+    padding: 7px 11px;
     border: 1px solid var(--line);
     border-radius: var(--radius-md);
     color: var(--muted);
-    background: rgba(255, 255, 255, 0.7);
-    font-size: 13px;
+    background: var(--surface-soft);
+    font-size: 12px;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    line-height: 1.5;
 }
 
 .notice-row > button {
@@ -570,12 +586,47 @@ dd {
 .search-field {
     margin-left: auto;
     width: clamp(140px, 26vw, 240px);
+    position: relative;
+    display: inline-flex;
+    align-items: center;
 }
 
 .search-field input {
     width: 100%;
     box-sizing: border-box;
     min-height: 30px;
+    padding-right: 26px;
+}
+
+/* 搜索框右侧的清除按钮，仅在有内容时显示 */
+.tree-search-clear {
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--muted);
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.tree-search-clear:hover {
+    background: var(--accent-soft);
+    color: var(--accent);
+}
+
+/* 搜索结果计数（匹配 N/M），只在有查询时显示 */
+.tree-search-summary {
+    align-self: center;
+    color: var(--muted);
+    font-size: 12px;
+    white-space: nowrap;
 }
 
 .search-field input:focus,
@@ -585,9 +636,46 @@ dd {
     box-shadow: 0 0 0 3px rgba(39, 134, 220, 0.14);
 }
 
+/* 深色模式下 focus 光晕柔化，避免在暗背景上刺眼 */
+[data-theme="dark"] .search-field input:focus,
+[data-theme="dark"] .field select:focus,
+[data-theme="dark"] .field input:focus,
+[data-theme="dark"] textarea:focus {
+    box-shadow: 0 0 0 3px rgba(77, 163, 255, 0.22);
+}
+
+/* 深色模式下树列头分隔线略加亮，避免几乎看不见 */
+[data-theme="dark"] .tree-column-header {
+    border-top-color: var(--line-strong);
+}
+
+.tree-column-header {
+    display: grid;
+    grid-template-columns: var(--tree-cols, 26px 20px 20px 18px minmax(0, 1fr) 92px 64px 128px 22px);
+    gap: 6px;
+    align-items: center;
+    min-height: 28px;
+    padding: 4px 18px 5px;
+    border-top: 1px solid var(--line);
+    color: var(--muted);
+    background: var(--surface-soft);
+    font-size: 10px;
+    font-weight: 600;
+}
+
+.tree-column-header > span {
+    min-width: 0;
+}
+
+.tree-col-size {
+    text-align: right;
+}
+
 .file-tree {
-    height: 400px;
+    height: clamp(280px, 48vh, 520px);
+    height: clamp(280px, 48dvh, 520px);
     overflow: auto;
+    overscroll-behavior-y: auto;
     padding: 8px 10px 14px;
 }
 
@@ -602,7 +690,7 @@ dd {
 
 .tree-row {
     display: grid;
-    grid-template-columns: 26px 20px 20px auto minmax(0, 1fr) auto auto;
+    grid-template-columns: var(--tree-cols, 26px 20px 20px 18px minmax(0, 1fr) 92px 64px 128px 22px);
     gap: 6px;
     align-items: center;
     min-height: 32px;
@@ -626,8 +714,8 @@ dd {
         to right,
         transparent,
         transparent 17px,
-        rgba(0, 0, 0, 0.08) 17px,
-        rgba(0, 0, 0, 0.08) 18px
+        rgba(0, 0, 0, 0.18) 17px,
+        rgba(0, 0, 0, 0.18) 18px
     );
 }
 
@@ -636,8 +724,8 @@ dd {
         to right,
         transparent,
         transparent 17px,
-        rgba(255, 255, 255, 0.09) 17px,
-        rgba(255, 255, 255, 0.09) 18px
+        rgba(255, 255, 255, 0.22) 17px,
+        rgba(255, 255, 255, 0.22) 18px
     );
 }
 
@@ -701,6 +789,7 @@ dd {
 
 .tree-row:hover {
     background: var(--accent-soft);
+    box-shadow: inset 2px 0 0 var(--accent);
 }
 
 .tree-toggle {
@@ -827,20 +916,46 @@ dd {
     font-size: 13px;
 }
 
-.tree-size {
-    color: var(--muted);
-    font-size: 11px;
-    white-space: nowrap;
-}
-
-/* 压缩率列：右对齐、等宽数字、弱化色，避免与文件名抢视觉焦点。 */
-.tree-ratio {
+.tree-modified {
     color: var(--muted);
     font-size: 11px;
     font-variant-numeric: tabular-nums;
     font-feature-settings: "tnum" 1;
-    text-align: right;
     white-space: nowrap;
+}
+
+.tree-type {
+    overflow: hidden;
+    color: var(--muted);
+    font-size: 11px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.tree-size {
+    min-width: 128px;
+    color: var(--ink);
+    font-size: 11px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+    white-space: nowrap;
+}
+
+/* 大小列：数字用主色、单位用 muted，单位视觉上更弱 */
+.tree-size-unit {
+    color: var(--muted);
+    font-size: 10px;
+    margin-left: 2px;
+    letter-spacing: 0.02em;
+}
+
+.tree-row-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
 }
 
 /* 加密锁标：始终渲染一个 span（空表示未加密），便于 grid 列对齐；
@@ -855,7 +970,7 @@ dd {
 }
 
 .tree-lock:empty {
-    display: none;
+    visibility: hidden;
 }
 
 .tree-lock svg {
@@ -976,10 +1091,13 @@ dd {
 .password-manager-summary {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
-    gap: 10px;
+    gap: 8px;
     align-items: center;
+    box-sizing: border-box;
+    width: 100%;
+    height: 46px;
     min-width: 0;
-    padding: 9px;
+    padding: 6px 8px;
     border: 1px solid var(--line);
     border-radius: var(--radius-md);
     background: var(--surface-soft);
@@ -998,12 +1116,15 @@ dd {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 13px;
+    font-size: 12px;
+    line-height: 1.25;
     font-weight: 600;
 }
 
 .password-manager-summary small {
-    margin-top: 4px;
+    margin-top: 2px;
+    font-size: 11px;
+    line-height: 1.3;
 }
 
 .code-page-field {
@@ -1012,13 +1133,66 @@ dd {
     border-top: 1px solid var(--line);
 }
 
-.volume-details[open] + .code-page-field {
-    margin-top: auto;
+.advanced-options {
+    border-top: 1px solid var(--line);
+    padding-top: 13px;
+}
+
+.advanced-options summary {
+    cursor: pointer;
+    color: var(--ink);
+    font-size: 13px;
+    font-weight: 600;
+    user-select: none;
+}
+
+.advanced-options summary:hover {
+    color: var(--accent);
+}
+
+.advanced-options-body {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin-top: 12px;
+    padding-top: 4px;
+}
+
+/* 字段说明行：图标 + 短文案，把长说明收进 tooltip */
+.field-hint {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.field-hint-toggle {
+    display: inline-grid;
+    place-items: center;
+    width: 15px;
+    height: 15px;
+    padding: 0;
+    border: 1px solid var(--line-strong);
+    border-radius: 50%;
+    background: transparent;
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1;
+    cursor: help;
+    transition: all 0.15s ease;
+}
+
+.field-hint-toggle:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: var(--accent-soft);
 }
 
 #openPasswordManagerBtn {
-    min-height: 34px;
-    padding: 0 12px;
+    min-height: 30px;
+    padding: 0 10px;
     font-size: 12px;
 }
 
@@ -1028,13 +1202,21 @@ dd {
 }
 
 .settings-panel .directory-picker-summary .secondary-button {
-    min-height: 36px;
-    padding: 0 12px;
+    min-height: 30px;
+    padding: 0 10px;
     font-size: 12px;
 }
 
 .settings-panel .output-preview {
-    padding: 8px 9px;
+    display: flex;
+    align-items: center;
+    box-sizing: border-box;
+    width: 100%;
+    height: 46px;
+    overflow: hidden;
+    padding: 6px 8px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .show-password-control {
@@ -1046,8 +1228,11 @@ dd {
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 7px;
     align-items: center;
+    box-sizing: border-box;
+    width: 100%;
+    height: 46px;
     min-width: 0;
-    padding: 8px 9px;
+    padding: 6px 8px;
     border: 1px solid var(--line);
     border-radius: var(--radius-md);
     background: var(--surface-soft);
@@ -1125,8 +1310,7 @@ dd {
 }
 
 .job-bar {
-    position: sticky;
-    bottom: 12px;
+    position: static;
     z-index: 10;
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
@@ -1134,6 +1318,13 @@ dd {
     align-items: center;
     margin-top: 14px;
     padding: 15px 17px;
+}
+
+@media (min-height: 900px) {
+    .job-bar {
+        position: sticky;
+        bottom: max(12px, env(safe-area-inset-bottom, 0px));
+    }
 }
 
 .job-line {
@@ -1203,6 +1394,23 @@ dd {
 @keyframes progress-busy {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.55; }
+}
+
+/* 固实压缩包确认弹窗正文：样式收敛到样式表，便于跟随主题变量 */
+.solid-confirm-body {
+    padding: 16px;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--ink);
+}
+
+.solid-confirm-lead {
+    margin: 0 0 10px 0;
+}
+
+.solid-confirm-note {
+    margin: 0;
+    color: var(--muted);
 }
 
 @keyframes mini-flow {
@@ -1453,10 +1661,15 @@ dd {
     border: 1px solid var(--accent);
     color: #fff;
     background: var(--accent);
+    transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.08s ease;
 }
 
 .primary-button:hover:not(:disabled) {
     background: var(--accent-dark);
+}
+
+.primary-button:active:not(:disabled) {
+    transform: translateY(1px);
 }
 
 .secondary-button,
@@ -1464,6 +1677,12 @@ dd {
     border: 1px solid var(--line-strong);
     color: var(--ink);
     background: var(--control-bg);
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.08s ease;
+}
+
+.secondary-button:active:not(:disabled),
+.icon-text-button:active:not(:disabled) {
+    transform: translateY(1px);
 }
 
 .icon-text-button {
@@ -1478,6 +1697,11 @@ dd {
     border: 1px solid #e4a79e;
     color: var(--danger);
     background: var(--danger-soft);
+    transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.08s ease;
+}
+
+.danger-button:active:not(:disabled) {
+    transform: translateY(1px);
 }
 
 .dialog-backdrop {
@@ -1488,6 +1712,7 @@ dd {
     place-items: center;
     padding: 20px;
     background: rgba(21, 32, 36, 0.52);
+    animation: backdrop-fade-in 0.15s ease;
 }
 
 .dialog {
@@ -1498,6 +1723,37 @@ dd {
     border-radius: var(--radius-lg);
     background: var(--surface);
     box-shadow: 0 24px 70px rgba(18, 31, 36, 0.24);
+    animation: dialog-pop-in 0.18s cubic-bezier(0.34, 1.2, 0.64, 1);
+}
+
+@keyframes backdrop-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes dialog-pop-in {
+    from {
+        opacity: 0;
+        transform: scale(0.96) translateY(6px);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .dialog-backdrop,
+    .dialog {
+        animation: none;
+    }
+
+    /* 进度条 sheen / busy 动画在 reduced-motion 下关闭 */
+    .progress-fill.is-running::after,
+    .progress-track.is-busy,
+    .tree-row.is-extracting {
+        animation: none !important;
+    }
 }
 
 .dialog-head {
@@ -1872,18 +2128,42 @@ dd {
         grid-template-columns: 1fr;
     }
 
-    .settings-panel {
-        order: -1;
+    .file-panel {
+        order: 0;
     }
 
-    .file-tree {
-        height: 380px;
+    .settings-panel {
+        order: 1;
+    }
+
+    .file-tree,
+    .thumb-wall {
+        height: clamp(260px, 46vh, 440px);
+        height: clamp(260px, 46dvh, 440px);
+    }
+}
+
+@media (max-width: 1050px) {
+    :root {
+        --tree-cols: 26px 20px 20px 18px minmax(0, 1fr) 92px 72px 22px;
+    }
+
+    .tree-col-type {
+        display: none;
+    }
+
+    .tree-type {
+        display: none;
+    }
+
+    .tree-size {
+        min-width: 72px;
     }
 }
 
 @media (max-width: 680px) {
     .app-shell {
-        padding: 13px;
+        padding: 13px 13px calc(13px + env(safe-area-inset-bottom, 0px));
     }
 
     .app-header,
@@ -1903,12 +2183,14 @@ dd {
 
     .archive-summary {
         display: grid;
-        gap: 13px;
+        gap: 8px;
+        padding: 12px 14px;
     }
 
     .archive-type {
-        width: 56px;
-        height: 56px;
+        width: 44px;
+        height: 44px;
+        font-size: 12px;
     }
 
     .archive-metrics {
@@ -1917,20 +2199,48 @@ dd {
 
     .archive-metrics div {
         min-width: 0;
+        padding: 5px 8px;
         border-top: 1px solid var(--line);
         border-left: 0;
+    }
+
+    /* 窄屏下压缩包卡片更紧凑：标题/路径/提示都略缩 */
+    .archive-copy h2 {
+        font-size: 15px;
+        margin: 2px 0 3px;
+    }
+
+    .path-text {
+        font-size: 11px;
     }
 
     .tree-toolbar {
         flex-wrap: wrap;
     }
 
-    .tree-row {
-        grid-template-columns: 25px 19px 18px auto minmax(0, 1fr);
+    /* 窄屏：搜索框独占一行，避免与视图切换挤在一行导致 placeholder 被裁 */
+    .search-field {
+        order: 5;
+        flex: 1 1 100%;
+        margin-left: 0;
+        width: 100%;
     }
 
-    .tree-size,
-    .tree-ratio {
+    :root {
+        --tree-cols: 25px 19px 18px auto minmax(0, 1fr) 72px 22px;
+    }
+
+    .tree-column-header {
+        padding-right: 18px;
+    }
+
+    .tree-col-modified,
+    .tree-col-type {
+        display: none;
+    }
+
+    .tree-modified,
+    .tree-type {
         display: none;
     }
 
@@ -1946,14 +2256,43 @@ dd {
 
     .notice-row {
         flex-direction: column;
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+    /* 窄屏：notice 独占整行，必须允许收缩并换行，否则长句右侧被裁 */
+    .notice {
+        flex: none;
+        display: block;
+        width: 100%;
+        box-sizing: border-box;
     }
 
     .notice-row > button {
         width: 100%;
     }
 
+    /* 窄屏：主题按钮只留图标，文字隐藏，避免「深色/浅色」两字竖排 */
+    .theme-toggle {
+        flex-shrink: 0;
+        padding: 0 10px;
+    }
+
+    .theme-toggle .theme-label {
+        display: none;
+    }
+
+    /* 状态徽标一行展示，过长时省略号而不是挤爆布局 */
+    .status-badge {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
     .password-manager-summary {
         grid-template-columns: 1fr;
+        height: auto;
+        min-height: 46px;
     }
 
     .password-manager-summary .secondary-button {
@@ -2061,6 +2400,7 @@ dd {
     justify-content: center;
     z-index: 1000;
     padding: 20px;
+    animation: backdrop-fade-in 0.15s ease;
 }
 
 .preview-dialog {
@@ -2073,6 +2413,7 @@ dd {
     flex-direction: column;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
     overflow: hidden;
+    animation: dialog-pop-in 0.18s cubic-bezier(0.34, 1.2, 0.64, 1);
 }
 
 .preview-header {
@@ -2309,8 +2650,10 @@ dd {
     grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
     gap: 10px;
     padding: 12px;
-    height: 400px;
+    height: clamp(280px, 48vh, 520px);
+    height: clamp(280px, 48dvh, 520px);
     overflow: auto;
+    overscroll-behavior-y: auto;
     align-content: start;
 }
 

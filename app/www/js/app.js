@@ -24,10 +24,34 @@
     // 主题按钮的图标与文案由 [data-theme] 纯 CSS 驱动，这里只负责应用主题。
     uiTheme.initTheme();
 
+    // 模态弹窗的焦点陷阱与原焦点还原（打开记录、关闭还原、Tab 循环）。
+    if (window.CHzipFocus) {
+        window.CHzipFocus.initFocusManagement();
+    }
+
+    // 品牌版本号与发行版本实时同步：从 <head> 里 CSS 资源的 ?v= 缓存键推导
+    // （该缓存键随 manifest 版本由打包门禁同步，永远等于当前发行版本），
+    // 覆盖 HTML 里的硬编码占位。原本内联在 index.html 里，挪到这里以便
+    // 页面 CSP 不必放行 unsafe-inline。
+    (function syncBrandVersion() {
+        const link = document.querySelector('link[rel="stylesheet"][href*="?v="]');
+        const span = document.querySelector(".brand-version");
+        if (!link || !span) {
+            return;
+        }
+        const match = link.getAttribute("href").match(/[?&]v=([^&"]+)/);
+        if (match && match[1]) {
+            span.textContent = `v${match[1]}`;
+        }
+    }());
+
     state.onPreviewFile = previewFile;
     state.onAvailabilityChange = updateActionAvailability;
 
     const els = state.elements;
+    uiTree.enableVerticalWheelChaining(els.fileTree);
+    uiTree.enableVerticalWheelChaining(els.thumbWall);
+    uiTree.enableVerticalWheelChaining(els.volumeList);
 
     const searchScheduler = treeApi.createSearchScheduler({ delay: 180 });
 
@@ -169,6 +193,11 @@
             state.allFilePaths = state.entries
                 .filter((entry) => entry.type === "file")
                 .map((entry) => entry.path);
+            state.fileSizeByPath = new Map(
+                state.entries
+                    .filter((entry) => entry.type === "file")
+                    .map((entry) => [entry.path, Number(entry.size) || 0]),
+            );
             state.selectedPaths = new Set(state.allFilePaths);
             state.expandedPaths = new Set(
                 state.tree
@@ -230,6 +259,7 @@
                 state.entries = [];
                 state.tree = [];
                 state.allFilePaths = [];
+                state.fileSizeByPath.clear();
                 state.selectedPaths.clear();
             }
             if (error.code === "PREVIEW_LIMIT") {
@@ -810,6 +840,15 @@
         els.recordLabelInput.disabled = state.running || state.previewing;
         els.confirmPasswordRecordBtn.disabled = state.running || state.previewing;
         els.openDirectoryPickerBtn.disabled = state.running || !state.info;
+        const canEditComment = Boolean(
+            state.info
+            && (state.info.partCount || 1) === 1
+            && ["zip", "7z"].includes(state.info.selection?.format),
+        );
+        els.openCommentBtn.disabled = state.running
+            || state.previewing
+            || !canEditComment;
+        els.saveCommentBtn.disabled = state.running || state.previewing;
         passwordManagerApi.updatePasswordManagerStatus();
     }
 
@@ -932,9 +971,55 @@
     });
     if (els.treeSearchInput) {
         els.treeSearchInput.addEventListener("input", () => {
+            syncTreeSearchClearVisibility();
             state.searchRenderId += 1;
             searchScheduler.schedule(() => uiTree.renderTree(state, treeApi));
         });
+        els.treeSearchInput.addEventListener("keydown", (event) => {
+            if (event.key === "Escape" && els.treeSearchInput.value) {
+                els.treeSearchInput.value = "";
+                syncTreeSearchClearVisibility();
+                state.searchRenderId += 1;
+                uiTree.renderTree(state, treeApi);
+                event.stopPropagation();
+            }
+        });
+    }
+    if (els.treeSearchClearBtn) {
+        els.treeSearchClearBtn.addEventListener("click", () => {
+            if (!els.treeSearchInput || els.treeSearchInput.disabled) {
+                return;
+            }
+            els.treeSearchInput.value = "";
+            syncTreeSearchClearVisibility();
+            state.searchRenderId += 1;
+            uiTree.renderTree(state, treeApi);
+            els.treeSearchInput.focus();
+        });
+    }
+    // 「/」快捷键聚焦搜索框（与多数文件管理器一致）。
+    // 只在焦点不在输入控件上时响应，避免抢输入。
+    document.addEventListener("keydown", (event) => {
+        if (event.key !== "/" || event.ctrlKey || event.metaKey || event.altKey) {
+            return;
+        }
+        const target = event.target;
+        const tag = target && target.tagName ? target.tagName.toLowerCase() : "";
+        if (tag === "input" || tag === "textarea" || tag === "select" || target?.isContentEditable) {
+            return;
+        }
+        if (!els.treeSearchInput || els.treeSearchInput.disabled) {
+            return;
+        }
+        event.preventDefault();
+        els.treeSearchInput.focus();
+        els.treeSearchInput.select();
+    });
+    function syncTreeSearchClearVisibility() {
+        if (!els.treeSearchClearBtn || !els.treeSearchInput) {
+            return;
+        }
+        els.treeSearchClearBtn.hidden = !els.treeSearchInput.value;
     }
     els.selectAllInput.addEventListener("change", () => {
         state.selectedPaths = els.selectAllInput.checked

@@ -314,7 +314,7 @@ class JobStore {
     for (const entry of fsModule.readdirSync(this.runtimeRoot, { withFileTypes: true })) {
       if (
         !entry.isDirectory()
-        || !/^(?:nested|validate)-/.test(entry.name)
+        || !/^(?:nested|validate|verify|comment|preview)-/.test(entry.name)
       ) {
         continue;
       }

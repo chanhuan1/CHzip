@@ -28,31 +28,13 @@
                         <h1>CHzip<span class="brand-version">v4.3</span></h1>
                         <p>飞牛智能分卷解压</p>
                     </div>
-                    <script>
-                        // 品牌版本号与真实版本实时同步：从 <head> 里 CSS 资源的
-                        // ?v= 缓存键推导（该缓存键随 manifest 版本由打包门禁同步，
-                        // 永远等于当前发行版本），覆盖这里的硬编码占位值。
-                        // 这样今后发版只改 ?v= 一处，顶栏版本号自动跟随，
-                        // 不会再出现「版本号忘了改」的漂移（此 span 曾停在 v3.7）。
-                        (function () {
-                            var link = document.querySelector('link[rel="stylesheet"][href*="?v="]');
-                            var span = document.querySelector(".brand-version");
-                            if (!link || !span) {
-                                return;
-                            }
-                            var match = link.getAttribute("href").match(/[?&]v=([^&"]+)/);
-                            if (match && match[1]) {
-                                span.textContent = "v" + match[1];
-                            }
-                        }());
-                    </script>
                 </div>
                 <div class="header-right">
                     <button id="historyBtn" class="secondary-button task-center-btn header-btn" type="button" title="查看任务中心与历史">
                         <svg class="btn-icon" viewBox="0 0 16 16" focusable="false" aria-hidden="true"><path d="M8 2.5a5.5 5.5 0 1 0 5.5 5.5A5.5 5.5 0 0 0 8 2.5Zm0 1.2a4.3 4.3 0 1 1-4.3 4.3A4.3 4.3 0 0 1 8 3.7Zm-.6 1.8v3.1l2.2 1.3.6-1-1.6-.9V5.5Z" fill="currentColor"/></svg>
                         <span>历史</span>
                     </button>
-                    <button id="themeToggle" class="theme-toggle" type="button" aria-label="切换主题">
+                    <button id="themeToggle" class="theme-toggle" type="button" aria-label="切换主题" aria-pressed="false">
                         <span class="theme-icon" aria-hidden="true">
                             <svg class="theme-icon-moon" viewBox="0 0 16 16" focusable="false"><path d="M12.55 3.2A5.82 5.82 0 1 0 12.55 12.8A4.9 4.9 0 0 1 12.55 3.2Z"/></svg>
                             <svg class="theme-icon-sun" viewBox="0 0 16 16" focusable="false"><circle cx="8" cy="8" r="3.1"/><path d="M8 1.4V3.5M8 12.5V14.6M1.4 8H3.5M12.5 8H14.6M3.34 3.34L4.83 4.83M11.17 11.17L12.66 12.66M12.66 3.34L11.17 4.83M4.83 11.17L3.34 12.66"/></svg>
@@ -90,15 +72,14 @@
                         <dd id="totalSize">-</dd>
                     </div>
                 </dl>
+                <div class="notice-row archive-notice-row">
+                    <div id="notice" class="notice" role="status">正在读取压缩包信息...</div>
+                    <button id="diagnosticsBtn" class="secondary-button icon-text-button" type="button" hidden>
+                        <svg class="btn-icon" viewBox="0 0 16 16" focusable="false" aria-hidden="true"><path d="M13.2 2.8a3.5 3.5 0 0 0-4.4-.3L6.4 4.9 7 7 4.9 6.4 2.5 8.8a3.5 3.5 0 0 0 4.4 4.4l4.5-4.5a3.5 3.5 0 0 0 1.8-5.9Zm-1 4.9-4.8 4.8a2.3 2.3 0 0 1-2.9-2.9l1.8-1.8 1.8.5.5-1.8 1.8-1.8a2.3 2.3 0 0 1 2.9 2.9l-.9.1Z" fill="currentColor"/></svg>
+                        <span>查看诊断</span>
+                    </button>
+                </div>
             </section>
-
-            <div class="notice-row">
-                <div id="notice" class="notice" role="status">正在读取压缩包信息...</div>
-                <button id="diagnosticsBtn" class="secondary-button icon-text-button" type="button" hidden>
-                    <svg class="btn-icon" viewBox="0 0 16 16" focusable="false" aria-hidden="true"><path d="M13.2 2.8a3.5 3.5 0 0 0-4.4-.3L6.4 4.9 7 7 4.9 6.4 2.5 8.8a3.5 3.5 0 0 0 4.4 4.4l4.5-4.5a3.5 3.5 0 0 0 1.8-5.9Zm-1 4.9-4.8 4.8a2.3 2.3 0 0 1-2.9-2.9l1.8-1.8 1.8.5.5-1.8 1.8-1.8a2.3 2.3 0 0 1 2.9 2.9l-.9.1Z" fill="currentColor"/></svg>
-                    <span>查看诊断</span>
-                </button>
-            </div>
 
             <section class="work-grid">
                 <section class="file-panel" aria-labelledby="fileTreeTitle">
@@ -131,7 +112,10 @@
                         <label class="search-field">
                             <span class="sr-only">搜索文件</span>
                             <input id="treeSearchInput" type="search" placeholder="搜索文件" disabled>
+                            <button id="treeSearchClearBtn" class="tree-search-clear" type="button"
+                                aria-label="清除搜索" hidden>×</button>
                         </label>
+                        <span id="treeSearchSummary" class="tree-search-summary" role="status" aria-live="polite" hidden></span>
                         <div class="view-switch" role="tablist" aria-label="视图切换">
                             <button id="viewListBtn" class="view-switch-btn is-active" type="button" aria-pressed="true" title="列表视图">
                                 <svg viewBox="0 0 16 16" focusable="false" aria-hidden="true"><path d="M2 3.5h12M2 8h12M2 12.5h12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
@@ -149,6 +133,17 @@
                         <span id="mojibakeBannerActions" class="mojibake-banner-actions"></span>
                     </div>
 
+                    <div class="tree-column-header" aria-hidden="true">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                        <span class="tree-col-name">名称</span>
+                        <span class="tree-col-modified">修改时间</span>
+                        <span class="tree-col-type">类型</span>
+                        <span class="tree-col-size">大小</span>
+                        <span></span>
+                    </div>
                     <div id="fileTree" class="file-tree" aria-label="压缩包文件树">
                         <div class="tree-empty">尚未载入压缩包目录</div>
                     </div>
@@ -165,8 +160,8 @@
                     </div>
 
                     <div class="settings-form">
-                        <div class="field password-manager-field">
-                            <span>密码管理器</span>
+                        <div class="field password-manager-field" role="group" aria-labelledby="passwordManagerFieldLabel">
+                            <span id="passwordManagerFieldLabel">密码管理器</span>
                             <div class="password-manager-summary">
                                 <div>
                                     <strong id="passwordManagerStatus">未检测到加密</strong>
@@ -179,8 +174,8 @@
                             </div>
                         </div>
 
-                        <div class="field directory-picker-field">
-                            <span>选择解压路径</span>
+                        <div class="field directory-picker-field" role="group" aria-labelledby="directoryPickerFieldLabel">
+                            <span id="directoryPickerFieldLabel">选择解压路径</span>
                             <div class="directory-picker-summary">
                                 <div id="selectedDirectoryPath" title="-">-</div>
                                 <button id="openDirectoryPickerBtn" class="secondary-button icon-text-button btn-sm" type="button" disabled>
@@ -190,10 +185,15 @@
                             </div>
                         </div>
 
-                        <div class="field">
-                            <span>输出位置预览</span>
+                        <div class="field" role="group" aria-labelledby="outputPreviewFieldLabel">
+                            <span id="outputPreviewFieldLabel">输出位置预览</span>
                             <div id="outputPreview" class="output-preview">-</div>
-                            <small>解压到压缩包同名目录；若已存在则自动创建新名称。</small>
+                            <small class="field-hint">
+                                同名文件冲突策略的说明
+                                <button type="button" class="field-hint-toggle"
+                                    aria-label="查看冲突策略说明"
+                                    title="自动重命名会创建新目录；覆盖、跳过和保留较新会复用同名目录处理已有文件。">?</button>
+                            </small>
                         </div>
 
                         <details class="volume-details">
@@ -201,38 +201,43 @@
                             <div id="volumeList" class="volume-list"></div>
                         </details>
 
-                        <div class="field comment-field">
-                            <span>压缩包注释</span>
-                            <div class="comment-summary">
-                                <div id="commentStatus" class="comment-status">无注释</div>
-                                <button id="openCommentBtn" class="secondary-button icon-text-button btn-sm" type="button">
-                                    <svg class="btn-icon" viewBox="0 0 16 16" focusable="false" aria-hidden="true"><path d="M3 3h10v7H5.5L3 12.5V3Z" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linejoin="round"/></svg>
-                                    <span>查看/编辑</span>
-                                </button>
+                        <details class="advanced-options">
+                            <summary>高级选项</summary>
+                            <div class="advanced-options-body">
+                                <div class="field comment-field" role="group" aria-labelledby="commentFieldLabel">
+                                    <span id="commentFieldLabel">压缩包注释</span>
+                                    <div class="comment-summary">
+                                        <div id="commentStatus" class="comment-status">无注释</div>
+                                        <button id="openCommentBtn" class="secondary-button icon-text-button btn-sm" type="button">
+                                            <svg class="btn-icon" viewBox="0 0 16 16" focusable="false" aria-hidden="true"><path d="M3 3h10v7H5.5L3 12.5V3Z" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linejoin="round"/></svg>
+                                            <span>查看/编辑</span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <label class="field code-page-field">
+                                    <span>文件名代码页</span>
+                                    <select id="codePageSelect">
+                                        <option value="auto">默认（自动识别）</option>
+                                        <option value="utf8">UTF-8</option>
+                                        <option value="gbk">简体中文（GBK / 936）</option>
+                                        <option value="big5">繁体中文（Big5 / 950）</option>
+                                        <option value="shift_jis">日文（Shift-JIS / 932）</option>
+                                        <option value="korean">韩文（949）</option>
+                                    </select>
+                                </label>
+
+                                <label class="field conflict-policy-field">
+                                    <span>同名文件冲突时</span>
+                                    <select id="conflictPolicySelect">
+                                        <option value="rename">自动重命名（新目录）</option>
+                                        <option value="overwrite">覆盖已存在文件</option>
+                                        <option value="skip">跳过已存在文件</option>
+                                        <option value="keepnew">保留较新文件</option>
+                                    </select>
+                                </label>
                             </div>
-                        </div>
-
-                        <label class="field code-page-field">
-                            <span>文件名代码页</span>
-                            <select id="codePageSelect">
-                                <option value="auto">默认（自动识别）</option>
-                                <option value="utf8">UTF-8</option>
-                                <option value="gbk">简体中文（GBK / 936）</option>
-                                <option value="big5">繁体中文（Big5 / 950）</option>
-                                <option value="shift_jis">日文（Shift-JIS / 932）</option>
-                                <option value="korean">韩文（949）</option>
-                            </select>
-                        </label>
-
-                        <label class="field conflict-policy-field">
-                            <span>同名文件冲突时</span>
-                            <select id="conflictPolicySelect">
-                                <option value="rename">自动重命名新文件</option>
-                                <option value="overwrite">覆盖已存在文件</option>
-                                <option value="skip">跳过已存在文件</option>
-                                <option value="keepnew">保留较新文件</option>
-                            </select>
-                        </label>
+                        </details>
 
                         <label class="check-control delete-source-control" title="所选文件解压成功后自动清理源压缩包文件（若为分卷则清理全部卷）">
                             <input id="deleteSourceInput" type="checkbox">
@@ -251,7 +256,8 @@
                             <span id="progressText">0%</span>
                         </span>
                     </div>
-                    <div class="progress-track" id="progressTrack" aria-label="解压进度">
+                    <div class="progress-track" id="progressTrack" role="progressbar"
+                        aria-label="解压进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
                         <div id="progressFill" class="progress-fill"></div>
                     </div>
                     <p id="currentFile">选择文件和目标目录后即可开始。</p>
@@ -281,7 +287,7 @@
                     <h3 id="directoryDialogTitle">选择解压路径</h3>
                     <p id="directoryDialogPath">-</p>
                 </div>
-                <button id="closeDirectoryDialogBtn" class="dialog-close" type="button" aria-label="关闭">×</button>
+                <button id="closeDirectoryDialogBtn" class="dialog-close" type="button" aria-label="关闭目录选择">×</button>
             </div>
             <div class="directory-toolbar">
                 <button id="directoryUpBtn" class="secondary-button" type="button">上一级</button>
@@ -327,7 +333,7 @@
                     <h3 id="passwordPromptDialogTitle">输入密码</h3>
                     <p>输入加密文件的密码，或从已保存密码中选择。</p>
                 </div>
-                <button id="closePasswordPromptDialogBtn" class="dialog-close" type="button" aria-label="关闭">×</button>
+                <button id="closePasswordPromptDialogBtn" class="dialog-close" type="button" aria-label="关闭密码输入">×</button>
             </div>
             <div class="password-prompt-body">
                 <div class="field">
@@ -361,7 +367,7 @@
                     <h3 id="passwordManagerDialogTitle">密码管理器</h3>
                     <p>管理当前浏览器中保存的解压密码。</p>
                 </div>
-                <button id="closePasswordManagerDialogBtn" class="dialog-close" type="button" aria-label="关闭">×</button>
+                <button id="closePasswordManagerDialogBtn" class="dialog-close" type="button" aria-label="关闭密码管理器">×</button>
             </div>
             <div class="password-manager-body">
                 <div class="password-record-table">
@@ -391,7 +397,7 @@
                     <h3 id="passwordRecordDialogTitle">密码信息</h3>
                     <p>保存后可在输入密码窗口中快速选择。</p>
                 </div>
-                <button id="closePasswordRecordDialogBtn" class="dialog-close" type="button" aria-label="关闭">×</button>
+                <button id="closePasswordRecordDialogBtn" class="dialog-close" type="button" aria-label="关闭密码编辑">×</button>
             </div>
             <div class="password-record-body">
                 <label class="field">
@@ -418,7 +424,7 @@
                     <h3 id="missingPartsDialogTitle">分卷缺失</h3>
                     <p id="missingPartsHint">压缩包分卷不完整。</p>
                 </div>
-                <button id="closeMissingPartsBtn" class="dialog-close" type="button" aria-label="关闭">×</button>
+                <button id="closeMissingPartsBtn" class="dialog-close" type="button" aria-label="关闭分卷缺失提示">×</button>
             </div>
             <ul id="missingPartsList" class="missing-parts-list"></ul>
             <div class="dialog-actions">
@@ -434,7 +440,7 @@
                     <h3 id="permissionDialogTitle">CHzip 无法读取此文件</h3>
                     <p>共享目录已授权，但现有文件权限仍可能阻止应用读取。</p>
                 </div>
-                <button id="closePermissionDialogBtn" class="dialog-close" type="button" aria-label="关闭">×</button>
+                <button id="closePermissionDialogBtn" class="dialog-close" type="button" aria-label="关闭权限提示">×</button>
             </div>
             <div class="permission-dialog-body">
                 <p id="permissionDialogMessage"></p>
@@ -459,7 +465,7 @@
                     <h3 id="resultDialogTitle">解压完成</h3>
                     <p>文件已写入以下目录</p>
                 </div>
-                <button id="closeResultDialogBtn" class="dialog-close" type="button" aria-label="关闭">×</button>
+                <button id="closeResultDialogBtn" class="dialog-close" type="button" aria-label="关闭解压结果">×</button>
             </div>
             <div id="resultOutputDir" class="result-path">-</div>
             <div class="dialog-actions">
@@ -475,7 +481,7 @@
                     <h3 id="diagnosticsDialogTitle">诊断信息</h3>
                     <p>报告包含路径权限、应用身份、引擎状态和脱敏日志。</p>
                 </div>
-                <button id="closeDiagnosticsDialogBtn" class="dialog-close" type="button" aria-label="关闭">×</button>
+                <button id="closeDiagnosticsDialogBtn" class="dialog-close" type="button" aria-label="关闭诊断信息">×</button>
             </div>
             <pre id="diagnosticsContent" class="diagnostics-content">正在生成诊断报告...</pre>
             <div class="dialog-actions diagnostics-actions">
@@ -492,11 +498,11 @@
                     <h3 id="solidConfirmDialogTitle">固实压缩包提示</h3>
                     <p>此文件处于固实（Solid）压缩块中。</p>
                 </div>
-                <button id="closeSolidConfirmBtn" class="dialog-close" type="button" aria-label="关闭">×</button>
+                <button id="closeSolidConfirmBtn" class="dialog-close" type="button" aria-label="关闭固实压缩包提示">×</button>
             </div>
-            <div class="solid-confirm-body" style="padding: 16px; font-size: 13px; line-height: 1.6; color: var(--ink);">
-                <p style="margin: 0 0 10px 0;">当前压缩包为<strong>固实压缩（Solid Archive）</strong>。从固实包中单独提取预览任意文件，均需顺序解压前面的数据块，<strong>耗时与压缩包整体大小成正比</strong>，且会占用较多 CPU 资源。</p>
-                <p style="margin: 0; color: var(--muted);">若压缩包体积较大，建议取消单文件预览，直接进行<strong>整包解压</strong>。</p>
+            <div class="solid-confirm-body">
+                <p class="solid-confirm-lead">当前压缩包为<strong>固实压缩（Solid Archive）</strong>。从固实包中单独提取预览任意文件，均需顺序解压前面的数据块，<strong>耗时与压缩包整体大小成正比</strong>，且会占用较多 CPU 资源。</p>
+                <p class="solid-confirm-note">若压缩包体积较大，建议取消单文件预览，直接进行<strong>整包解压</strong>。</p>
             </div>
             <div class="dialog-actions">
                 <button id="cancelSolidConfirmBtn" class="secondary-button" type="button">取消</button>
@@ -515,7 +521,7 @@
                     </span>
                     <span id="previewFileName">file.txt</span>
                 </h3>
-                <button id="closePreviewBtn" class="preview-close" type="button" aria-label="关闭">×</button>
+                <button id="closePreviewBtn" class="preview-close" type="button" aria-label="关闭预览">×</button>
             </div>
             <div id="previewBody" class="preview-body">
                 <div class="preview-loading">正在加载预览...</div>
@@ -536,7 +542,7 @@
                     <h3 id="taskCenterDialogTitle">后台解压任务</h3>
                     <p>解压在后台进行，关闭本页面不会中断；重新打开时会自动恢复显示。</p>
                 </div>
-                <button id="closeTaskCenterBtn" class="dialog-close" type="button" aria-label="关闭">×</button>
+                <button id="closeTaskCenterBtn" class="dialog-close" type="button" aria-label="关闭后台任务">×</button>
             </div>
             <div id="taskCenterList" class="task-center-list"></div>
             <div class="dialog-actions">
@@ -552,7 +558,7 @@
                     <h3 id="historyDialogTitle">解压历史</h3>
                     <p>最近 20 条解压记录，新的会覆盖最旧的。</p>
                 </div>
-                <button id="closeHistoryBtn" class="dialog-close" type="button" aria-label="关闭">×</button>
+                <button id="closeHistoryBtn" class="dialog-close" type="button" aria-label="关闭解压历史">×</button>
             </div>
             <div id="historyList" class="task-center-list"></div>
             <div class="dialog-actions">
@@ -569,7 +575,7 @@
                     <h3 id="commentDialogTitle">压缩包注释</h3>
                     <p>查看或编辑压缩包注释信息</p>
                 </div>
-                <button id="closeCommentDialogBtn" class="dialog-close" type="button" aria-label="关闭">×</button>
+                <button id="closeCommentDialogBtn" class="dialog-close" type="button" aria-label="关闭压缩包注释">×</button>
             </div>
             <div class="comment-body">
                 <textarea id="commentTextarea" class="comment-textarea" placeholder="输入压缩包注释..." maxlength="65536"></textarea>
@@ -597,6 +603,7 @@
     <script defer src="./index.cgi/js/ui-thumbs.js?v=4.3"></script>
     <script defer src="./index.cgi/js/ui-theme.js?v=4.3"></script>
     <script defer src="./index.cgi/js/ui-comment.js?v=4.3"></script>
+    <script defer src="./index.cgi/js/ui-focus.js?v=4.3"></script>
     <script defer src="./index.cgi/js/app.js?v=4.3"></script>
 </body>
 </html>

@@ -33,6 +33,24 @@
         } else {
             root.removeAttribute("data-theme");
         }
+        syncThemeToggleA11y(theme);
+    }
+
+    // 让屏幕阅读器知道当前主题：aria-pressed=true 表示当前是深色。
+    // CSS 侧的图标/文案切换已由 data-theme 驱动，这里只补 a11y 语义。
+    function syncThemeToggleA11y(theme) {
+        const btn = typeof document !== "undefined"
+            ? document.getElementById("themeToggle")
+            : null;
+        if (!btn) {
+            return;
+        }
+        const isDark = theme === "dark";
+        btn.setAttribute("aria-pressed", String(isDark));
+        btn.setAttribute(
+            "aria-label",
+            isDark ? "切换主题（当前为深色）" : "切换主题（当前为浅色）",
+        );
     }
 
     function getCurrentTheme() {

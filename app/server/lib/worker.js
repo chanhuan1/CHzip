@@ -381,9 +381,16 @@ function readAndRemoveSecret(filePath) {
   }
 }
 
-function cleanupOutput(job) {
-  if (job.outputOwned && job.outputDir) {
-    fs.rmSync(job.outputDir, { recursive: true, force: true });
+function cleanupOutput(job, options = {}) {
+  if (!job.outputOwned || !job.outputDir) {
+    return null;
+  }
+  const remove = options.remove || fs.rmSync;
+  try {
+    remove(job.outputDir, { recursive: true, force: true });
+    return null;
+  } catch (error) {
+    return error;
   }
 }
 
@@ -635,21 +642,32 @@ function removeSourceArchive(job, options = {}) {
   }
 
   let count = 0;
+  const failures = [];
   for (const filePath of targets) {
     try {
       if (fsModule.existsSync(filePath)) {
         fsModule.rmSync(filePath, { force: true });
         count += 1;
+      } else {
+        failures.push(filePath);
       }
     } catch (err) {
-      // 删除失败静默处理
+      failures.push(filePath);
     }
   }
-  if (count > 0) {
-    result.deletedCount = count;
+  result.deletedCount = count;
+  if (count > 0 && failures.length) {
+    result.deleteNote = targets.size > 1
+      ? `已清理 ${count} 个源分卷文件，另有 ${failures.length} 个未能删除`
+      : "源压缩包未能完整删除，请检查文件权限";
+  } else if (count > 0) {
     result.deleteNote = targets.size > 1
       ? `已自动清理 ${count} 个源分卷文件`
       : "已自动清理源压缩包";
+  } else if (failures.length) {
+    result.deleteNote = targets.size > 1
+      ? `源分卷未能删除，请检查 ${failures.length} 个文件的权限`
+      : "源压缩包未能删除，请检查文件权限";
   }
   return result;
 }
@@ -657,7 +675,7 @@ function removeSourceArchive(job, options = {}) {
 function flattenSingleRootDirectory(job, options = {}) {
   const fsModule = options.fsModule || fs;
   const result = { flattened: false, flattenNote: "" };
-  if (!job || !job.outputDir) {
+  if (!job || !job.outputDir || job.outputOwned === false) {
     return result;
   }
   const stem = String(job.outputStem || "").trim();
@@ -801,6 +819,7 @@ async function runWorker(jobId, options = {}) {
   const rescueLongNames = options.rescueLongNames || rescueTooLongNameFiles;
   // 删除函数可注入，供单测制造「某一步删除失败」的场景。
   const remove = options.remove || fs.rmSync;
+  const removeOutput = options.removeOutput || remove;
   const logger = options.logger || createDiagnosticLogger({
     rootDirs: [
       process.env.TRIM_PKGVAR
@@ -1121,9 +1140,9 @@ async function runWorker(jobId, options = {}) {
     const isExtractKind = (job.kind || "extract") === "extract";
     const keepPartial = isExtractKind
       && (cancelled || PARTIAL_KEEP_CODES.has(error.code));
-    if (!keepPartial) {
-      cleanupOutput(job);
-    }
+    const outputCleanupError = keepPartial
+      ? null
+      : cleanupOutput(job, { remove: removeOutput });
     const finalOk = rescueAttempted
       && Boolean(rescuedNote)
       && rescueFailedCount === 0
@@ -1132,6 +1151,18 @@ async function runWorker(jobId, options = {}) {
     // - finalOk（救援成功→success）不算部分成果，整体已成功；
     // - test kind 不进入此逻辑（isExtractKind 已过滤）。
     const partialSuccess = !finalOk && keepPartial;
+    const cleanupNote = outputCleanupError
+      ? "；输出目录未能自动清理，请稍后手动检查"
+      : "";
+    if (outputCleanupError) {
+      safeDiagnosticWrite(logger, {
+        event: "worker_output_cleanup_error",
+        requestId: job.requestId || "",
+        jobId,
+        path: job.outputDir,
+        message: outputCleanupError.message,
+      });
+    }
     store.update(jobId, (current) => ({
       ...current,
       status: cancelled ? "cancelled" : finalOk ? "success" : "failed",
@@ -1147,7 +1178,7 @@ async function runWorker(jobId, options = {}) {
         ? null
         : {
           code: error.code || "ENGINE",
-          message: error.message || "解压失败",
+          message: `${error.message || "解压失败"}${cleanupNote}`,
         },
     }));
     safeDiagnosticWrite(logger, {

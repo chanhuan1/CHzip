@@ -54,6 +54,7 @@ All responses use `Content-Type: application/json; charset=utf-8`.
 | `MISSING_VOLUME` | 500 | Split archive has missing parts |
 | `PASSWORD_REQUIRED` | 500 | Archive needs a password |
 | `PASSWORD` | 500 | Wrong password provided |
+| `PASSWORD_VERIFY_TIMEOUT` | 500 | Password verification of an encrypted member timed out |
 | `PERMISSION` | 500 | OS-level permission denied |
 | `UNSUPPORTED` | 500 | Archive format not supported |
 | `DAMAGED` | 500 | Archive is corrupt |
@@ -79,6 +80,10 @@ All responses use `Content-Type: application/json; charset=utf-8`.
 | `SOURCE_NOT_FILE` | 500 | Source path is not a regular file |
 | `SOURCE_REALPATH_FAILED` | 500 | Could not resolve the source path's real path |
 | `SOURCE_DIAGNOSTIC_FAILED` | 500 | Failed to build the diagnostic report |
+| `ARCHIVE_BUSY` | 500 | Archive is in use or being modified by another task |
+| `QUEUE_BUSY` | 500 | Global task scheduling lock could not be acquired |
+| `OUTPUT_BUSY` | 500 | Another active job is already using the same output directory |
+| `COMMENT_UNSUPPORTED` | 500 | Comment editing is only supported for single-file ZIP / 7Z |
 | `LOCK_BUSY` | 500 | Job state file lock could not be acquired in time |
 | `INTERNAL` | 500 | Catch-all for unexpected server errors |
 
@@ -146,6 +151,9 @@ Lists the contents of an archive as a file tree.
 
 `solid` marks a solid archive (common for 7z / RAR): extracting any single member
 requires decompressing from the start, so single-file previews can be very slow.
+When an encrypted archive is listed with a supplied password, the backend tests
+one encrypted member before returning `passwordVerified: true`; directory listing
+success alone is not treated as proof that the password is correct.
 
 ### `comment`
 
@@ -170,7 +178,8 @@ field writes.
 ```
 
 The comment is handed to 7-Zip through a temporary file, never on the command
-line. Only formats whose comment 7-Zip can update (ZIP / 7Z) are meaningful.
+line. Editing is limited to single-file ZIP / 7Z and is rejected with
+`ARCHIVE_BUSY` while the same archive is used by an extraction or integrity job.
 
 ### `preview-file`
 
@@ -255,6 +264,10 @@ Starts an asynchronous extraction job.
 - `destinationRoot` (string, required): Output directory root
 - `selectedPaths` (string[], optional): Specific files to extract (null = all)
 - `deleteSource` (boolean, optional): Whether to delete the source archive (all volumes for split archives) after all selected files extract successfully (default false). Also supported with `selectedPaths`; unselected files will not be retained. Failed or cancelled tasks never delete the source.
+
+`rename` creates a new output directory (`file`, `file (2)`, ...).
+`overwrite`, `skip`, and `keepnew` reuse the same-named output directory and
+apply the corresponding 7-Zip conflict strategy to existing files.
 
 **Response**:
 ```json

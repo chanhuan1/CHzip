@@ -185,6 +185,8 @@
         const safePercent = Math.max(0, Math.min(100, Number(percent) || 0));
         els.progressFill.style.width = `${safePercent}%`;
         els.progressText.textContent = `${Math.round(safePercent)}%`;
+        // 测试环境的元素 mock 不一定有 setAttribute，用可选调用保持兼容
+        els.progressTrack.setAttribute?.("aria-valuenow", String(Math.round(safePercent)));
         els.jobState.textContent = status;
         const fileText = PERCENT_RUN_ONLY.test(String(currentFile || ""))
             ? ""
@@ -295,6 +297,18 @@
         return `${Math.max(1, Math.round(bytesPerSec))} B/s`;
     }
 
+    function partialOutputSuffix(job) {
+        if (
+            !job
+            || job.kind === "test"
+            || !job.partialSuccess
+            || !job.outputDir
+        ) {
+            return "";
+        }
+        return `；已解压的文件保留在：${job.outputDir}`;
+    }
+
     function finishPolling(state) {
         if (state.pollTimer) {
             state.pollTimer.stop();
@@ -349,6 +363,7 @@
             state.onAvailabilityChange?.();
             state.etaTracker = null;
             els.outputPreview.textContent = result.outputDir;
+            els.outputPreview.title = result.outputDir;
             setJobProgress(0, "任务已排队", "等待 7-Zip 启动...", state);
             ensureMiniPoll(state, api);
             await pollStatus(state, api);
@@ -417,7 +432,7 @@
             } else if (job.status === "failed") {
                 finishPolling(state);
                 const failLabel = job.kind === "test" ? "体检失败" : "解压失败";
-                const message = job.error?.message || failLabel;
+                const message = `${job.error?.message || failLabel}${partialOutputSuffix(job)}`;
                 const requestSuffix = job.requestId
                     ? `（请求 ID：${job.requestId}）`
                     : "";
@@ -430,10 +445,14 @@
                 finishPolling(state);
                 const stopDetail = job.kind === "test"
                     ? "体检任务已停止。"
-                    : (job.outputDir ? `已停止，已解压的文件已保留至：${job.outputDir}` : "解压任务已停止。");
+                    : (partialOutputSuffix(job)
+                        ? `已停止${partialOutputSuffix(job)}`
+                        : "解压任务已停止。");
                 setJobProgress(job.progress, "已停止", stopDetail, state, job);
                 setNotice(
-                    job.kind === "test" ? "体检任务已停止。" : "解压任务已停止，已解压的文件已保留。",
+                    job.kind === "test"
+                        ? "体检任务已停止。"
+                        : `解压任务已停止${partialOutputSuffix(job)}。`,
                     "",
                     state,
                 );
@@ -854,25 +873,37 @@
                 } else {
                     // F2：拍平过就换文案，让用户一眼看出少了一层壳。
                     const prefix = job.flattened ? "已拍平到：" : "已解压到：";
+                    const sourceNote = job.deleteSourceNote
+                        ? `；${job.deleteSourceNote}`
+                        : "";
                     appendTaskMeta(
                         main,
                         finished,
                         timeTitle,
-                        `${prefix}${job.outputDir || ""}`,
-                        job.outputDir || "",
+                        `${prefix}${job.outputDir || ""}${sourceNote}`,
+                        `${job.outputDir || ""}${sourceNote}`,
                     );
                 }
             } else if (job.status === "failed") {
+                const failureMessage = `${job.error?.message || (job.kind === "test" ? "体检失败" : "解压失败")}${partialOutputSuffix(job)}`;
                 appendTaskMeta(
                     main,
                     finished,
                     timeTitle,
-                    job.error?.message || (job.kind === "test" ? "体检失败" : "解压失败"),
+                    failureMessage,
                     "",
                 );
             } else {
-                const stopMsg = job.outputDir ? `已停止（已保留输出）` : "已停止";
-                appendTaskMeta(main, finished, timeTitle, stopMsg, job.outputDir || "");
+                const stopMsg = partialOutputSuffix(job)
+                    ? `已停止${partialOutputSuffix(job)}`
+                    : "已停止";
+                appendTaskMeta(
+                    main,
+                    finished,
+                    timeTitle,
+                    stopMsg,
+                    job.partialSuccess ? (job.outputDir || "") : "",
+                );
             }
         }
 
@@ -1132,6 +1163,7 @@
         formatTaskDateTime,
         openHistory,
         openTaskCenter,
+        partialOutputSuffix,
         pollHistory,
         pollStatus,
         pollTaskCenter,

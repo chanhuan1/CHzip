@@ -148,6 +148,13 @@ function buildReadCommentArgs(selection, options) {
 function buildTestArgs(selection, options = {}) {
   const args = ["t", "-y", "-bsp1", "-bb1", "-sccUTF-8"];
   appendArchiveOptions(args, selection, options);
+  if (options.selectionFile) {
+    args.push(
+      "-scsUTF-8",
+      "-spd",
+      `-i@${options.selectionFile}`,
+    );
+  }
   args.push(options.archivePath);
   return args;
 }

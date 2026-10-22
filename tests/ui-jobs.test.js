@@ -11,6 +11,7 @@ const {
   cancelExtract,
   createPoller,
   formatTaskDateTime,
+  partialOutputSuffix,
   setJobProgress,
 } = globalThis.CHzipUiJobs;
 
@@ -378,4 +379,24 @@ test("setJobProgress appends the speed to the ETA line for running jobs", () => 
     "30 秒",
   );
   assert.equal(state.elements.progressEta.textContent, "剩余约 30 秒");
+});
+
+test("partialOutputSuffix only claims a preserved directory for partial extracts", () => {
+  assert.equal(partialOutputSuffix({
+    kind: "extract",
+    partialSuccess: true,
+    outputDir: "/vol1/share/archive",
+  }), "；已解压的文件保留在：/vol1/share/archive");
+
+  assert.equal(partialOutputSuffix({
+    kind: "extract",
+    partialSuccess: false,
+    outputDir: "/vol1/share/archive",
+  }), "");
+
+  assert.equal(partialOutputSuffix({
+    kind: "test",
+    partialSuccess: true,
+    outputDir: "/vol1/share/archive",
+  }), "");
 });

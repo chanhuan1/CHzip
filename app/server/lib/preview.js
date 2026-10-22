@@ -233,6 +233,8 @@ function buildEntry(record) {
     packedSize: toNumber(record["Packed Size"]),
     modified: record.Modified || "",
     encrypted: record.Encrypted === "+",
+    method: record.Method || "",
+    attributes: attributes || "",
   };
 }
 

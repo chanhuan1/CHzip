@@ -51,6 +51,8 @@ test("parseTechnicalList parses valid output", () => {
 Path = foo.txt
 Size = 1024
 Attributes = A
+Method = Deflate
+Modified = 2025-09-18 14:22:13
 
 Path = bar
 Size = 0
@@ -61,6 +63,9 @@ Attributes = D
   assert.equal(result.summary.fileCount, 1);
   assert.equal(result.summary.directoryCount, 1);
   assert.equal(result.summary.totalSize, 1024);
+  assert.equal(result.entries[0].modified, "2025-09-18 14:22:13");
+  assert.equal(result.entries[0].method, "Deflate");
+  assert.equal(result.entries[0].attributes, "A");
 });
 
 test("parseTechnicalList handles empty archive", () => {
