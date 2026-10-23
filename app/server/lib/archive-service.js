@@ -5,6 +5,8 @@ const path = require("node:path");
 const {
   classifyArchive,
   collectVolumeNames,
+  createDetectedSelection,
+  detectArchiveFormatByHeader,
 } = require("./archive");
 const {
   classifySourceError,
@@ -19,6 +21,41 @@ function toClientFile(source, index) {
     size: source.stat.size,
     modified: source.stat.mtime.toISOString(),
   };
+}
+
+const HEADER_SNIFF_BYTES = 512;
+
+function readArchiveHeader(filePath, fsModule) {
+  let fd = null;
+  try {
+    fd = fsModule.openSync(filePath, "r");
+    const header = Buffer.alloc(HEADER_SNIFF_BYTES);
+    const bytesRead = fsModule.readSync(
+      fd,
+      header,
+      0,
+      HEADER_SNIFF_BYTES,
+      0,
+    );
+    return header.subarray(0, bytesRead);
+  } catch (error) {
+    // 文件头探测是增强能力，不能因为它失败而阻断原有后缀识别流程。
+    return Buffer.alloc(0);
+  } finally {
+    if (fd !== null) {
+      try {
+        fsModule.closeSync(fd);
+      } catch (error) {
+        // 关闭失败没有可恢复动作，源文件可读性已由 inspectSourceFile 校验。
+      }
+    }
+  }
+}
+
+function formatLabel(format) {
+  return format === "bzip2"
+    ? "BZ2"
+    : String(format || "未知").toUpperCase();
 }
 
 function inspectArchive(selectedPath, options = {}) {
@@ -36,9 +73,29 @@ function inspectArchive(selectedPath, options = {}) {
     }));
   const selectedSource = inspectSource(selectedPath);
   const selectedRealPath = selectedSource.path;
-  const selection = classifyArchive(selectedRealPath);
+  const detected = detectArchiveFormatByHeader(
+    readArchiveHeader(selectedRealPath, fsModule),
+  );
+  let selection = classifyArchive(selectedRealPath);
+  if (!selection && detected) {
+    selection = createDetectedSelection(selectedRealPath, detected);
+  }
   if (!selection) {
     throw new Error("当前文件类型不支持");
+  }
+  let formatMismatch = null;
+  if (detected && detected.format !== selection.format) {
+    formatMismatch = {
+      declaredFormat: selection.format,
+      detectedFormat: detected.format,
+    };
+    selection = {
+      ...selection,
+      format: detected.format,
+      type: detected.type || null,
+      innerFormat: detected.innerFormat || null,
+      detectedBy: "header",
+    };
   }
 
   const directory = path.dirname(selectedRealPath);
@@ -86,6 +143,12 @@ function inspectArchive(selectedPath, options = {}) {
     }
     : null;
   const warnings = [];
+  if (formatMismatch) {
+    warnings.push(
+      `扩展名与实际格式不一致：后缀对应 ${formatLabel(formatMismatch.declaredFormat)}`
+      + `，已按 ${formatLabel(formatMismatch.detectedFormat)} 识别`,
+    );
+  }
   if (missingTotal) {
     // 缺失枚举有上界（见 archive.js 的 MAX_MISSING_ENUM / MAX_VOLUME_NUMBER）：
     // 被截断时改报总数，避免把上百个分卷号整串拼进响应。
@@ -111,6 +174,7 @@ function inspectArchive(selectedPath, options = {}) {
     missingTotal,
     missingTruncated: volumeInfo.missingTruncated,
     missingDetails,
+    formatMismatch,
     warnings,
     tool: options.sevenZip || null,
   };

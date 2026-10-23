@@ -33,6 +33,24 @@ const ENCRYPTED_LISTING = [
   "",
 ].join("\n");
 
+const SOLID_ENCRYPTED_LISTING = [
+  "Path = archive.rar",
+  "Type = rar",
+  "Solid = +",
+  "",
+  "----------",
+  "Path = first-large.bin",
+  "Size = 1000",
+  "Attributes = A",
+  "Encrypted = +",
+  "",
+  "Path = last-tiny.txt",
+  "Size = 1",
+  "Attributes = A",
+  "Encrypted = +",
+  "",
+].join("\n");
+
 function makeRoot(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "chzip-bugfix-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -102,6 +120,51 @@ test("preview verifies an encrypted member before reporting password success", (
   assert.ok(calls[1].includes("-spd"));
   assert.ok(calls[1].some((arg) => arg.startsWith("-i@")));
   assert.match(calls[1].find((arg) => arg.startsWith("-i@")), /verify-/);
+});
+
+test("preview probes the first member of a solid archive to avoid scanning the tail", (t) => {
+  const root = makeRoot(t);
+  const archivePath = makeArchive(root, "solid.rar");
+  const selectedPaths = [];
+  const services = makeServices(root, {
+    runSync(tool, args) {
+      if (args[0] === "l") {
+        return { exitCode: 0, log: "", stdout: SOLID_ENCRYPTED_LISTING, stderr: "" };
+      }
+      const selectionArg = args.find((arg) => arg.startsWith("-i@"));
+      selectedPaths.push(fs.readFileSync(selectionArg.slice(3), "utf8").trim());
+      return { exitCode: 0, log: "", stdout: "", stderr: "" };
+    },
+  });
+
+  const result = services.preview({ path: archivePath, password: "correct" });
+
+  assert.equal(result.passwordVerified, true);
+  assert.deepEqual(selectedPaths, ["first-large.bin"]);
+});
+
+test("password verification timeout offers direct extraction fallback", (t) => {
+  const root = makeRoot(t);
+  const archivePath = makeArchive(root);
+  let calls = 0;
+  const services = makeServices(root, {
+    runSync() {
+      calls += 1;
+      if (calls === 1) {
+        return { exitCode: 0, log: "", stdout: ENCRYPTED_LISTING, stderr: "" };
+      }
+      throw Object.assign(new Error("spawnSync ETIMEDOUT"), { code: "ETIMEDOUT" });
+    },
+  });
+
+  assert.throws(
+    () => services.preview({ path: archivePath, password: "slow" }),
+    (error) => {
+      assert.equal(error.code, "PASSWORD_VERIFY_TIMEOUT");
+      assert.match(error.message, /直接整包解压/);
+      return true;
+    },
+  );
 });
 
 test("preview propagates PASSWORD when the encrypted member rejects the password", (t) => {
@@ -209,6 +272,33 @@ test("extract evaluates the concurrency count while holding the launch lock", (t
   services.extract({ path: archivePath, destinationRoot: root });
 
   assert.equal(observedLock, true);
+});
+
+test("selective extraction performs one preview inside the source lock", (t) => {
+  const root = makeRoot(t);
+  const archivePath = makeArchive(root);
+  let listCalls = 0;
+  const services = makeServices(root, {
+    runSync(tool, args) {
+      if (args[0] === "l") {
+        listCalls += 1;
+      }
+      return {
+        exitCode: 0,
+        log: "",
+        stdout: "Type = zip\n----------\nPath = test.txt\nSize = 1\nAttributes = A\n\n",
+        stderr: "",
+      };
+    },
+  });
+
+  services.extract({
+    path: archivePath,
+    destinationRoot: root,
+    selectedPaths: ["test.txt"],
+  });
+
+  assert.equal(listCalls, 1);
 });
 
 test("extract refuses to race a comment write holding the source lock", (t) => {

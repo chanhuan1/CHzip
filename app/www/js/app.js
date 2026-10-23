@@ -146,6 +146,7 @@
             expandedPaths: new Set(state.expandedPaths),
         } : null;
         state.previewing = true;
+        state.passwordVerificationTimedOut = false;
         if (!preserveExisting) {
             state.previewReady = false;
             state.previewLimited = false;
@@ -213,6 +214,7 @@
             state.previewSolid = Boolean(preview.solid);
             state.passwordRequired = Boolean(preview.passwordRequired);
             state.passwordVerified = preview.passwordVerified !== false;
+            state.passwordVerificationTimedOut = false;
             els.fileCount.textContent = String(preview.summary?.fileCount || 0);
             els.totalSize.textContent = uiTree.formatSize(preview.summary?.totalSize || 0);
             setPreviewControls(true);
@@ -262,7 +264,18 @@
                 state.fileSizeByPath.clear();
                 state.selectedPaths.clear();
             }
-            if (error.code === "PREVIEW_LIMIT") {
+            if (error.code === "PASSWORD_VERIFY_TIMEOUT") {
+                state.previewLimited = true;
+                state.passwordRequired = true;
+                state.passwordVerified = false;
+                state.passwordVerificationTimedOut = true;
+                uiDialogs.setNotice(
+                    "密码验证超时，未完成预验证。可以重试，或直接整包解压由后台继续校验。",
+                    "",
+                    state,
+                );
+                passwordManagerApi.closePasswordPrompt(true);
+            } else if (error.code === "PREVIEW_LIMIT") {
                 state.previewLimited = true;
                 uiDialogs.setNotice("压缩包内容超过预览限制，仍可整包解压。", "", state);
             } else if (error.code === "PREVIEW_INTERRUPTED") {
@@ -786,13 +799,18 @@
         const hasPreview = state.previewReady || state.previewLimited;
         const hasSelection = state.previewLimited || state.selectedPaths.size > 0;
         const passwordReady = !state.passwordRequired || state.passwordVerified;
+        // 大型固实包的成员校验可能超过 60 秒。超时后允许用户跳过同步预验证，
+        // 直接创建整包解压任务；Worker 会再次列表校验，错误密码不会产出结果。
+        const canExtractAfterVerifyTimeout = state.passwordVerificationTimedOut
+            && state.previewLimited;
+        const extractPasswordReady = passwordReady || canExtractAfterVerifyTimeout;
         const ready = Boolean(
             state.info
             && state.info.tool
             && state.selectedDirectory
             && hasPreview
             && hasSelection
-            && passwordReady
+            && extractPasswordReady
             && !state.running,
         );
         els.extractBtn.disabled = !ready;

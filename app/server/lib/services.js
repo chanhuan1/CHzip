@@ -658,19 +658,26 @@ function createServices(options = {}) {
     );
   }
 
-  function verifyEncryptedPassword(archive, input, entries, selection = archive.selection) {
+  function verifyEncryptedPassword(archive, input, entries, selection = archive.selection, options = {}) {
     const encryptedFiles = entries
-      .filter((entry) => entry.type === "file" && entry.encrypted)
-      .sort((a, b) => (Number(a.size) || 0) - (Number(b.size) || 0));
+      .filter((entry) => entry.type === "file" && entry.encrypted);
     if (!encryptedFiles.length) {
       // 加密目录头在无正确密码时连列表都无法完成，能走到这里说明列表
       // 已经用该密码成功解析；没有可测试的数据成员时只能以此为准。
       return true;
     }
 
+    // 非固实包只需解出目标成员，选最小文件最便宜。固实包则必须从固实块
+    // 开头顺序解压到目标位置；此时选体积最小但排在包尾的文件，反而会扫过
+    // 几乎整个压缩包。按归档顺序验证第一个加密文件，累计解压量最小。
+    const probeFile = options.solid
+      ? encryptedFiles[0]
+      : encryptedFiles.sort(
+        (a, b) => (Number(a.size) || 0) - (Number(b.size) || 0),
+      )[0];
     const verifyDir = fs.mkdtempSync(path.join(runtimeRoot, "verify-"));
     const selectionFile = path.join(verifyDir, "selection.txt");
-    fs.writeFileSync(selectionFile, `${encryptedFiles[0].path}\n`, {
+    fs.writeFileSync(selectionFile, `${probeFile.path}\n`, {
       encoding: "utf8",
       mode: PERMISSIONS.MODE_FILE_SECRET,
     });
@@ -698,7 +705,8 @@ function createServices(options = {}) {
     } catch (error) {
       if (error?.code === "ETIMEDOUT") {
         const timeoutError = new Error(
-          `密码验证超过 ${Math.round(TIMEOUTS.PASSWORD_VERIFY_MS / 1000)} 秒，请先整包解压或稍后重试`,
+          `密码验证超过 ${Math.round(TIMEOUTS.PASSWORD_VERIFY_MS / 1000)} 秒，`
+          + "未完成预验证。可重试，或直接整包解压由后台继续校验。",
         );
         timeoutError.code = "PASSWORD_VERIFY_TIMEOUT";
         throw timeoutError;
@@ -786,6 +794,7 @@ function createServices(options = {}) {
             input,
             parsed.entries,
             effectiveSelection,
+            { solid: properties.solid },
           )
           : false);
       return {
@@ -851,10 +860,6 @@ function createServices(options = {}) {
     }
 
     let previewResult = null;
-    if (Array.isArray(input.selectedPaths)) {
-      // 复用上面已经解析好的 archive，别再 inspectArchive 一遍。
-      previewResult = preview(input, archive);
-    }
 
     const roots = discoverRoots(archive.filePath);
     const destinationRoot = resolveAuthorizedDirectory(
@@ -882,6 +887,8 @@ function createServices(options = {}) {
           throw attachMissingDetails(error, archive);
         }
         if (Array.isArray(input.selectedPaths)) {
+          // 在源文件锁内做唯一一次选择性解压预检，确保 entries 与即将写入
+          // 任务的 selectionFile 来自同一份源文件快照。
           previewResult = preview(input, archive);
         }
 

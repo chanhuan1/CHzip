@@ -206,6 +206,7 @@
                 return;
             }
             state.passwordVerified = false;
+            state.passwordVerificationTimedOut = false;
             updatePasswordManagerStatus();
         }
 

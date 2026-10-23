@@ -30,6 +30,125 @@ const SINGLE_FORMATS = [
   { pattern: /\.dmg$/i, format: "dmg" },
 ];
 
+const HEADER_FORMATS = [
+  {
+    format: "7z",
+    type: "7z",
+    signature: [0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c],
+  },
+  {
+    format: "rar",
+    type: "rar",
+    signatures: [
+      [0x52, 0x61, 0x72, 0x21, 0x1a, 0x07, 0x00],
+      [0x52, 0x61, 0x72, 0x21, 0x1a, 0x07, 0x01, 0x00],
+    ],
+  },
+  {
+    format: "zip",
+    type: "zip",
+    signatures: [
+      [0x50, 0x4b, 0x03, 0x04],
+      [0x50, 0x4b, 0x05, 0x06],
+      [0x50, 0x4b, 0x07, 0x08],
+    ],
+  },
+  {
+    format: "wim",
+    type: "wim",
+    signature: [0x4d, 0x53, 0x57, 0x49, 0x4d, 0x00, 0x00, 0x00],
+  },
+  {
+    format: "cab",
+    type: "cab",
+    signature: [0x4d, 0x53, 0x43, 0x46],
+  },
+  {
+    format: "gzip",
+    signature: [0x1f, 0x8b],
+  },
+  {
+    format: "bzip2",
+    signature: [0x42, 0x5a, 0x68],
+  },
+  {
+    format: "xz",
+    signature: [0xfd, 0x37, 0x7a, 0x58, 0x5a, 0x00],
+  },
+  {
+    format: "zstd",
+    signature: [0x28, 0xb5, 0x2f, 0xfd],
+  },
+  {
+    format: "arj",
+    type: "arj",
+    signature: [0x60, 0xea],
+  },
+];
+
+function startsWithBytes(buffer, signature, offset = 0) {
+  if (buffer.length < offset + signature.length) {
+    return false;
+  }
+  return signature.every((value, index) => buffer[offset + index] === value);
+}
+
+/**
+ * 根据强文件头签名判断真实容器格式。
+ *
+ * 只识别不会与普通文件轻易冲突的签名；无法确认时返回 null，继续交给后缀
+ * 和 7-Zip 自身识别。扩展名写错（例如 RAR5 被命名成 .wim）时，调用方可以
+ * 用这里的返回值纠正 selection，避免继续用错误的 -t 类型参数打开。
+ */
+function detectArchiveFormatByHeader(header) {
+  const bytes = Buffer.isBuffer(header)
+    ? header
+    : Buffer.from(header || []);
+
+  for (const candidate of HEADER_FORMATS) {
+    const signatures = candidate.signatures || [candidate.signature];
+    if (signatures.some((signature) => startsWithBytes(bytes, signature))) {
+      return {
+        format: candidate.format,
+        type: candidate.type || null,
+        innerFormat: candidate.innerFormat || null,
+      };
+    }
+  }
+
+  // TAR 的魔数不在文件开头；512 字节文件头中的偏移 257 足以判断。
+  if (bytes.length >= 262 && bytes.toString("ascii", 257, 262) === "ustar") {
+    return { format: "tar", type: "tar", innerFormat: null };
+  }
+
+  // LZH 的 method 字段位于偏移 2，形如 "-lh" / "-lz"。
+  if (
+    bytes.length >= 5
+    && bytes[2] === 0x2d
+    && (bytes[3] === 0x6c)
+    && (bytes[4] === 0x68 || bytes[4] === 0x7a)
+  ) {
+    return { format: "lzh", type: "lzh", innerFormat: null };
+  }
+
+  return null;
+}
+
+function createDetectedSelection(filePath, detected) {
+  const basename = path.basename(filePath);
+  return {
+    kind: "single",
+    format: detected.format,
+    type: detected.type || null,
+    innerFormat: detected.innerFormat || null,
+    basename,
+    outputStem: path.parse(basename).name || basename,
+    partNumber: 1,
+    firstVolumeName: basename,
+    detectedBy: "header",
+  };
+}
+
 function stripKnownExtension(name) {
   for (const entry of SINGLE_FORMATS) {
     if (entry.pattern.test(name)) {
@@ -356,6 +475,8 @@ module.exports = {
   SINGLE_FORMATS,
   classifyArchive,
   collectVolumeNames,
+  createDetectedSelection,
+  detectArchiveFormatByHeader,
   missingRange,
   stripKnownExtension,
 };

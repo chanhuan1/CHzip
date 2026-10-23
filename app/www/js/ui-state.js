@@ -42,6 +42,9 @@
             previewAbortController: null,
             passwordRequired: false,
             passwordVerified: true,
+            // 密码成员校验超时后，只允许跳过预验证做整包解压；后台 Worker
+            // 仍会读取密码并执行列表校验与正式解压。
+            passwordVerificationTimedOut: false,
             diagnosticsReport: null,
             lastRequestId: "",
             activeSavedPasswordId: "",

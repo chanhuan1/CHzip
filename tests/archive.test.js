@@ -10,10 +10,12 @@ const {
   MAX_VOLUME_NUMBER,
   classifyArchive,
   collectVolumeNames,
+  detectArchiveFormatByHeader,
   missingRange,
   stripKnownExtension,
 } = require("../app/server/lib/archive");
 const { inspectArchive } = require("../app/server/lib/archive-service");
+const { buildListArgs } = require("../app/server/lib/sevenzip");
 
 test("classifyArchive recognizes single formats", () => {
   assert.equal(classifyArchive("/data/file.zip").format, "zip");
@@ -73,6 +75,25 @@ test("classifyArchive handles additional single formats", () => {
   assert.equal(classifyArchive("/data/win.wim").format, "wim");
   assert.equal(classifyArchive("/data/win.swm").format, "wim");
   assert.equal(classifyArchive("/data/mac.dmg").format, "dmg");
+});
+
+test("detectArchiveFormatByHeader recognizes strong archive signatures", () => {
+  assert.equal(
+    detectArchiveFormatByHeader(Buffer.from("Rar!\x1a\x07\x01\x00", "latin1"))?.format,
+    "rar",
+  );
+  assert.equal(
+    detectArchiveFormatByHeader(Buffer.from([0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c]))?.format,
+    "7z",
+  );
+  assert.equal(
+    detectArchiveFormatByHeader(Buffer.from("MSWIM\0\0\0", "latin1"))?.format,
+    "wim",
+  );
+  assert.equal(
+    detectArchiveFormatByHeader(Buffer.from([0x50, 0x4b, 0x03, 0x04]))?.format,
+    "zip",
+  );
 });
 
 test("collectVolumeNames finds split volumes", () => {
@@ -239,4 +260,56 @@ test("inspectArchive reports a missing zip main volume instead of throwing", (t)
   assert.equal(archive.missingDetails.missingFirstVolume, true);
   assert.equal(archive.missingTotal, 1);
   assert.match(archive.warnings[0], /ARCHIVE\.zip/);
+});
+
+test("inspectArchive corrects a RAR5 file mislabeled as WIM", (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "chzip-sniff-"));
+  const filePath = path.join(dir, "ukwsxc.wim");
+  fs.writeFileSync(
+    filePath,
+    Buffer.concat([
+      Buffer.from("Rar!\x1a\x07\x01\x00", "latin1"),
+      Buffer.from("test archive body"),
+    ]),
+  );
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  const archive = inspectArchive(filePath, {
+    sevenZip: SEVEN_ZIP_STUB,
+  });
+
+  assert.equal(archive.selection.format, "rar");
+  assert.equal(archive.selection.type, "rar");
+  assert.equal(archive.selection.outputStem, "ukwsxc");
+  assert.deepEqual(archive.formatMismatch, {
+    declaredFormat: "wim",
+    detectedFormat: "rar",
+  });
+  assert.match(archive.warnings[0], /已按 RAR 识别/);
+  const args = buildListArgs(archive.selection, {
+    archivePath: filePath,
+    codePage: "auto",
+  });
+  assert.equal(args.includes("-twim"), false);
+});
+
+test("inspectArchive detects a supported archive with an unknown extension", (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "chzip-sniff-unknown-"));
+  const filePath = path.join(dir, "payload.bin");
+  fs.writeFileSync(
+    filePath,
+    Buffer.concat([
+      Buffer.from("Rar!\x1a\x07\x01\x00", "latin1"),
+      Buffer.from("test archive body"),
+    ]),
+  );
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  const archive = inspectArchive(filePath, {
+    sevenZip: SEVEN_ZIP_STUB,
+  });
+
+  assert.equal(archive.selection.format, "rar");
+  assert.equal(archive.selection.outputStem, "payload");
+  assert.equal(archive.formatMismatch, null);
 });

@@ -197,3 +197,53 @@ test("delete source: selection changes preserve an enabled checked option", () =
   update();
   assert.equal(elements.openCommentBtn.disabled, true, "运行中必须禁止修改注释");
 });
+
+test("password verification timeout enables full extraction but not integrity test", () => {
+  const source = fs.readFileSync(path.join(__dirname, "../app/www/js/app.js"), "utf8");
+  const start = source.indexOf("    function updateActionAvailability() {");
+  const end = source.indexOf("    function setFileViewMode(", start);
+  assert.ok(start >= 0 && end > start);
+  const elements = new Proxy({}, { get(target, key) {
+    return target[key] ||= {
+      disabled: false,
+      checked: false,
+      parentElement: { setAttribute() {} },
+      classList: { add() {}, remove() {}, toggle() {} },
+      setAttribute() {},
+    };
+  } });
+  const state = {
+    elements,
+    entries: [],
+    allFilePaths: [],
+    selectedPaths: new Set(),
+    previewReady: false,
+    previewLimited: true,
+    previewSolid: false,
+    fileViewMode: "list",
+    previewing: false,
+    running: false,
+    info: { tool: {}, selection: {} },
+    selectedDirectory: "/out",
+    passwordRequired: true,
+    passwordVerified: false,
+    passwordVerificationTimedOut: true,
+  };
+  const context = vm.createContext({
+    state,
+    uiPreview: {},
+    passwordManagerApi: { updatePasswordManagerStatus() {} },
+  });
+  const update = () => vm.runInContext(
+    `${source.slice(start, end)}\nupdateActionAvailability();`,
+    context,
+  );
+
+  update();
+  assert.equal(elements.extractBtn.disabled, false);
+  assert.equal(elements.testBtn.disabled, true);
+
+  state.passwordVerificationTimedOut = false;
+  update();
+  assert.equal(elements.extractBtn.disabled, true);
+});
