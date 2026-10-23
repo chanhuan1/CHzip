@@ -25,6 +25,12 @@ All responses use `Content-Type: application/json; charset=utf-8`.
 }
 ```
 
+`selection.format` reports the interpreted container format. When the extension
+does not match a strong file signature, `formatMismatch` explains the correction
+and the open path is updated accordingly; the source file itself is never
+rewritten. Complex container and disk-image families are identified for
+explanation but intentionally opened without forcing a 7-Zip `-t` argument.
+
 ### Error
 ```json
 {
@@ -261,13 +267,18 @@ Starts an asynchronous extraction job.
 - `password` (string, optional): Decryption password
 - `codePage` (string, optional): Filename encoding
 - `conflictPolicy` (string, optional): Overwrite policy (`rename`, `overwrite`, `skip`, `keepnew`, default `rename`)
-- `destinationRoot` (string, required): Output directory root
+- `destinationRoot` (string, optional): Output directory root; defaults to the archive directory
 - `selectedPaths` (string[], optional): Specific files to extract (null = all)
+- `autoFlatten` (boolean, optional): Remove a single same-named root directory after successful extraction (default `true`)
 - `deleteSource` (boolean, optional): Whether to delete the source archive (all volumes for split archives) after all selected files extract successfully (default false). Also supported with `selectedPaths`; unselected files will not be retained. Failed or cancelled tasks never delete the source.
 
 `rename` creates a new output directory (`file`, `file (2)`, ...).
 `overwrite`, `skip`, and `keepnew` reuse the same-named output directory and
-apply the corresponding 7-Zip conflict strategy to existing files.
+apply the corresponding 7-Zip conflict strategy to existing files. When
+`autoFlatten` is enabled and successful output contains only one directory with
+the same name as the archive stem, that shell directory is removed and its
+contents move up one level. Pass `false` to preserve the original directory
+structure.
 
 **Response**:
 ```json
@@ -376,7 +387,7 @@ Generates a diagnostic report for troubleshooting.
 ```json
 {
   "generatedAt": "ISO timestamp",
-  "version": "3.1",
+  "version": "4.5",
   "requestId": "16-char-hex",
   "source": {
     "path": "/vol1/share/a.7z",

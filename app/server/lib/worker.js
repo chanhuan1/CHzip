@@ -29,6 +29,22 @@ const {
   openSourceDescriptors,
   verifyFingerprints,
 } = require("./source");
+
+function fingerprintMatches(expected, actual) {
+  const expectedList = Array.isArray(expected) ? expected : [];
+  const actualList = Array.isArray(actual) ? actual : [];
+  if (expectedList.length !== actualList.length) {
+    return false;
+  }
+  return expectedList.every((entry, index) => {
+    const other = actualList[index];
+    return entry?.path === other?.path
+      && entry?.dev === other?.dev
+      && entry?.ino === other?.ino
+      && entry?.size === other?.size
+      && entry?.mtimeMs === other?.mtimeMs;
+  });
+}
 const {
   createDiagnosticLogger,
   safeDiagnosticWrite,
@@ -66,6 +82,32 @@ function estimateSpeedBytesPerSec({ job, phase, percent, phaseStartedAtMs }) {
   return Math.round(processed / elapsedSec);
 }
 
+function createLogTail(maxBytes = LIMITS.MAX_LOG_TAIL_BYTES) {
+  const chunks = [];
+  let bytes = 0;
+  return {
+    append(text) {
+      const chunk = String(text || "");
+      if (!chunk) {
+        return;
+      }
+      chunks.push(chunk);
+      bytes += Buffer.byteLength(chunk, "utf8");
+      while (chunks.length > 1 && bytes > maxBytes) {
+        bytes -= Buffer.byteLength(chunks.shift(), "utf8");
+      }
+      if (bytes > maxBytes && chunks.length === 1) {
+        const buffer = Buffer.from(chunks[0], "utf8");
+        chunks[0] = buffer.subarray(Math.max(0, buffer.length - maxBytes)).toString("utf8");
+        bytes = Buffer.byteLength(chunks[0], "utf8");
+      }
+    },
+    text() {
+      return chunks.join("");
+    },
+  };
+}
+
 // 失败/取消时保留部分成果：这些错误码都属于「非源文件问题」（源文件被换 /
 // 权限被拒走 SOURCE_* 分支，不在此列），已解压出来的文件仍然有价值，
 // 终态时保留 outputDir 并把 partialSuccess 置 true，前端据此提示用户
@@ -97,7 +139,7 @@ function createProgressWriter({
   phase,
   throttleMs = PROGRESS_THROTTLE_MS,
   percentStep = PROGRESS_PERCENT_STEP,
-  getJob,
+  sizeBytes,
   phaseStartedAtMs,
 }) {
   let lastWriteMs = 0;
@@ -112,9 +154,8 @@ function createProgressWriter({
     pending = null;
     lastWriteMs = Date.now();
     lastPercent = snapshot.percent;
-    const job = typeof getJob === "function" ? getJob() : null;
     const speedBytesPerSec = estimateSpeedBytesPerSec({
-      job,
+      job: { sizeBytes },
       phase,
       percent: snapshot.percent,
       phaseStartedAtMs,
@@ -188,7 +229,7 @@ function defaultRunPhase(phase, context) {
       phase,
     }));
 
-    let log = "";
+    const logTail = createLogTail();
     // 解码器 + 增量进度解析都在 tracker 里：chunk 边界切断多字节字符时
     // 不会出现乱码（原实现用 chunk.toString("utf8")，会偶发替换字符），
     // 并且不再对整段日志重复 split/正则。
@@ -200,13 +241,13 @@ function defaultRunPhase(phase, context) {
       phase,
       throttleMs: context.progressThrottleMs,
       percentStep: context.progressPercentStep,
-      getJob: () => context.store.read(context.job.id),
+      sizeBytes: Number(context.job.sizeBytes) || 0,
       phaseStartedAtMs,
     });
     const append = (chunk) => {
       const snapshot = tracker.write(chunk);
       if (snapshot.text) {
-        log = `${log}${snapshot.text}`.slice(-LIMITS.MAX_LOG_TAIL_BYTES);
+        logTail.append(snapshot.text);
       }
       progressWriter.update(snapshot);
     };
@@ -227,11 +268,12 @@ function defaultRunPhase(phase, context) {
       // 冲刷解码器残留的半个多字节字符，并把最后一帧进度落盘。
       const tail = tracker.flush();
       if (tail.text) {
-        log = `${log}${tail.text}`.slice(-LIMITS.MAX_LOG_TAIL_BYTES);
+        logTail.append(tail.text);
       }
       progressWriter.update(tail);
       progressWriter.flush();
       clearProcessGroup();
+      const log = logTail.text();
       if (exitCode === 0) {
         resolve({ exitCode, signal, log });
         return;
@@ -795,6 +837,7 @@ function markStartupFailure(store, jobId, error) {
       phase: "failed",
       processGroupPid: null,
       workerPid: null,
+      workerClaimedAt: "",
       currentFile: "",
       passwordFile: "",
       selectionFile: "",
@@ -998,17 +1041,33 @@ async function runWorker(jobId, options = {}) {
       password: extractionPassword,
       codePage: extractionCodePage,
     });
-    let listing = await validateListingWithPasswordFallback(
-      tool,
-      listingArgs,
-      {
-        cwd: path.dirname(extractionArchivePath),
-        job,
-        store,
-        password: extractionPassword,
-      },
-      extractionSelection.format,
+    let listing;
+    const canReuseListing = Boolean(
+      job.validatedListing
+      && !isNestedTar(job.selection)
+      && fingerprintMatches(
+        job.validatedListing.sourceFingerprint,
+        job.sourceFingerprint,
+      ),
     );
+    if (canReuseListing) {
+      listing = {
+        entryCount: job.validatedListing.entryCount,
+        format: job.validatedListing.format,
+      };
+    } else {
+      listing = await validateListingWithPasswordFallback(
+        tool,
+        listingArgs,
+        {
+          cwd: path.dirname(extractionArchivePath),
+          job,
+          store,
+          password: extractionPassword,
+        },
+        extractionSelection.format,
+      );
+    }
     if (!extractionSelection.format && listing.format) {
       extractionSelection = {
         ...extractionSelection,
@@ -1056,9 +1115,12 @@ async function runWorker(jobId, options = {}) {
     });
 
     // F2 智能拍平：必须在落 success 终态**之前**尝试，把结果（flattened /
-    // flattenNote）并入同一次 store.update。flatten 内部失败已在其自带
-    // try/catch 里吞掉，这里拿到的只是 {flattened:false}，不影响终态本身。
-    const flattenResult = flattenSingleRootDirectory(job, { fsModule: fs });
+    // flattenNote）并入同一次 store.update。用户关闭时不调用，避免改动目录；
+    // flatten 内部失败已在其自带 try/catch 里吞掉，这里拿到的只是
+    // {flattened:false}，不影响终态本身。
+    const flattenResult = job.autoFlatten !== false
+      ? flattenSingleRootDirectory(job, { fsModule: fs })
+      : { flattened: false, flattenNote: "" };
     store.update(jobId, (current) => {
       if (current.status === "cancelling" || current.cancelRequestedAt) {
         throw cancellationError();
@@ -1169,6 +1231,7 @@ async function runWorker(jobId, options = {}) {
       phase: cancelled ? "cancelled" : finalOk ? "complete" : "failed",
       processGroupPid: null,
       workerPid: null,
+      workerClaimedAt: "",
       currentFile: "",
       progress: finalOk ? 100 : current.progress,
       speedBytesPerSec: 0,
@@ -1210,6 +1273,7 @@ async function runWorker(jobId, options = {}) {
 module.exports = {
   cleanupJobArtifacts,
   createProgressWriter,
+  createLogTail,
   defaultRunPhase,
   defaultValidateListing,
   estimateSpeedBytesPerSec,

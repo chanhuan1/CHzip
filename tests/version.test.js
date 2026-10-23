@@ -137,6 +137,37 @@ test("C14 audit-fpk derives the version instead of hardcoding it", () => {
   );
 });
 
+test("C14 project docs avoid known stale implementation claims", () => {
+  const readme = fs.readFileSync(readmePath, "utf8");
+  const contributing = fs.readFileSync(
+    path.join(rootDir, "CONTRIBUTING.md"),
+    "utf8",
+  );
+  const api = fs.readFileSync(path.join(rootDir, "API.md"), "utf8");
+  const docs = fs.readFileSync(path.join(rootDir, "docs", "index.html"), "utf8");
+  const commentClaim = "The comment is handed to 7-Zip through a temporary file";
+
+  assert.equal(readme.includes("492 个用例"), false);
+  assert.equal(readme.includes("（校验和/版本/架构/搜索特性）"), false);
+  assert.equal(contributing.includes("`search-fixed`"), false);
+  assert.equal(
+    contributing.includes("Passwords are never passed via command-line args"),
+    false,
+  );
+  assert.equal(
+    api.split(commentClaim).length - 1,
+    1,
+    "API 注释传递说明不应重复",
+  );
+  assert.equal(api.includes(`"version": "${version}"`), true);
+  assert.equal(docs.includes("包含 492 项严格的单元测试"), false);
+  const css = fs.readFileSync(
+    path.join(rootDir, "app", "www", "css", "style.css"),
+    "utf8",
+  );
+  assert.match(css, new RegExp(`InterVariable\\.woff2\\?v=${escapeRegExp(version)}`));
+});
+
 test("C14 packageFileName follows the fnOS naming scheme", () => {
   assert.equal(
     packageFileName("9.9", "", "x86"),

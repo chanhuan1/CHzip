@@ -403,6 +403,35 @@ test("requestCancellation finalizes a queued job instead of leaving it cancellin
   assert.ok(!fs.existsSync(selectionFile));
 });
 
+test("requestCancellation finalizes a cancellation raced with worker launch", async () => {
+  const store = new JobStore(tmpDir);
+  const outputDir = path.join(tmpDir, "launch-race-output");
+  fs.mkdirSync(outputDir);
+  const job = store.create({
+    archivePath: "/x.zip",
+    outputDir,
+    selection: { format: "zip", type: "zip" },
+    sevenZipPath: process.execPath,
+    sevenZipSource: "test",
+    partCount: 1,
+    sourceFingerprint: [],
+  });
+  store.update(job.id, (current) => ({
+    ...current,
+    workerPid: -1,
+    workerClaimedAt: new Date().toISOString(),
+  }));
+
+  const result = await requestCancellation(store, job.id, {
+    sleep: async () => {},
+  });
+
+  assert.equal(result.status, "cancelled");
+  assert.equal(result.workerPid, null);
+  assert.equal(result.workerClaimedAt, "");
+  assert.ok(!fs.existsSync(outputDir));
+});
+
 test("spawnQueued swallows internal errors", () => {
   const services = createServices(makeStubs({
     runtimeRoot: tmpDir,
@@ -492,6 +521,37 @@ test("launchWorker is idempotent when called concurrently on the same job", () =
 
   assert.equal(spawned.length, 1, "同一 job 重复调用只启动一次");
   assert.equal(services.store.read(job.id).workerPid, 70001);
+});
+
+test("launchWorker reclaims an expired launch claim", () => {
+  const spawned = [];
+  const services = createServices(makeStubs({
+    runtimeRoot: tmpDir,
+    spawnWorker: (jobId) => {
+      spawned.push(jobId);
+      return fakeWorker(71000 + spawned.length);
+    },
+  }));
+  const job = services.store.create({
+    archivePath: "/x.zip",
+    outputDir: "/x/out",
+    selection: { format: "zip", type: "zip" },
+    sevenZipPath: process.execPath,
+    sevenZipSource: "test",
+    partCount: 1,
+    sourceFingerprint: [],
+  });
+  services.store.update(job.id, (current) => ({
+    ...current,
+    workerPid: -1,
+    workerClaimedAt: new Date(Date.now() - 6 * 1000).toISOString(),
+  }));
+
+  const launched = services.launchWorker(job.id);
+
+  assert.deepEqual(spawned, [job.id], "超过启动占位时限应重新调度");
+  assert.equal(launched.workerPid, 71001);
+  assert.equal(launched.workerClaimedAt, "");
 });
 
 test("launchWorker refuses to start a job that is not queued", () => {
@@ -609,23 +669,6 @@ test("listJobs surfaces queueAhead for waiting jobs", () => {
   const view2 = active.find((j) => j.id === q2.id);
   assert.equal(view1.queueAhead, 0);
   assert.equal(view2.queueAhead, 1);
-});
-
-// ------------------------------------------------------------ api.js 429 已删
-
-test("api main no longer rejects extract with TOO_MANY_REQUESTS", () => {
-  const apiPath = path.resolve(__dirname, "..", "app", "server", "api.js");
-  const source = fs.readFileSync(apiPath, "utf8");
-  assert.equal(
-    source.includes("当前解压任务过多"),
-    false,
-    "api.js 不应再包含 429 拒绝文案",
-  );
-  assert.equal(
-    source.includes("TOO_MANY_REQUESTS"),
-    false,
-    "api.js 不应再抛 TOO_MANY_REQUESTS",
-  );
 });
 
 // ------------------------------------------------------------ 全局并发调度

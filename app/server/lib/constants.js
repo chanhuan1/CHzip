@@ -30,6 +30,10 @@ const TIMEOUTS = Object.freeze({
   // 注释写入与任务建单共用同一把源文件锁。锁持有时间最长可能覆盖一次
   // 注释回写或选择性解压列表校验，因此不能沿用普通任务状态锁的 30 秒。
   SOURCE_LOCK_STALE_MS: 11 * 60 * 1000,
+  // launchWorker 用 workerPid=-1 表示“某个 CGI 正在抢启动权”。从占位写入到
+  // spawn 返回真实 pid 只是一小段同步工作，正常远低于 5 秒；这里给中断留下
+  // 可恢复边界，避免 CGI 在这段窗口崩溃后任务永久卡在 workerPid=-1。
+  WORKER_LAUNCH_CLAIM_MS: 5 * 1000,
 });
 
 const LIMITS = Object.freeze({

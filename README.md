@@ -6,7 +6,7 @@
 
 面向 **fnOS（飞牛私有云）文件管理器右键场景**的专业压缩包处理工具 —— 解压 · 分卷 · 选择性解压 · 文件预览 · 密码管理，一键完成。
 
-[![版本](https://img.shields.io/badge/版本-v4.4-2786dc?style=flat-square)](https://github.com/chanhuan1/CHzip/releases)
+[![版本](https://img.shields.io/badge/版本-v4.5-2786dc?style=flat-square)](https://github.com/chanhuan1/CHzip/releases)
 [![平台](https://img.shields.io/badge/平台-fnOS%20(x86_64%20·%20arm64)-2786dc?style=flat-square)]()
 [![Stars](https://img.shields.io/github/stars/chanhuan1/CHzip?style=flat-square&label=Stars&color=2786dc)](https://github.com/chanhuan1/CHzip/stargazers)
 [![Forks](https://img.shields.io/github/forks/chanhuan1/CHzip?style=flat-square&label=Forks&color=2786dc)](https://github.com/chanhuan1/CHzip/forks)
@@ -35,8 +35,8 @@
 ## ✨ 功能特性
 
 **格式与分卷**
-- 主流格式全覆盖：`7Z` `ZIP` `RAR` `TAR` `GZ` `BZ2` `XZ` `ZST` `CAB` `ISO` `ARJ` `LZH` `CBZ` `CBR` `EPUB` `WIM` `DMG` 等；`tar.gz`/`tar.bz2`/`tar.xz`/`tar.zst` 等单文件压缩自动识别。
-- **文件头识别**：后缀与实际格式不一致时，自动按 RAR、ZIP、7Z、WIM 等真实容器格式打开，并明确提示后缀差异。
+- 主流格式全覆盖：`7Z` `ZIP` `RAR` `TAR` `GZ` `BZ2` `XZ` `ZST` `CAB` `ISO` `ARJ` `LZH` `CBZ` `CBR` `EPUB` `WIM` `DMG` `XAR` `CPIO` `RPM` `DEB` `MSI` `CHM` 等；`tar.gz`/`tar.bz2`/`tar.xz`/`tar.zst` 等单文件压缩自动识别。
+- **文件头识别与解释纠正**：后缀与实际格式不一致时，不改源文件，自动按 RAR、ZIP、7Z、WIM、RPM、CPIO、磁盘/文件系统镜像等真实容器打开，并明确提示后缀差异。
 - **分卷原生支持**：`.7z.001`、`.zip.001`、通用 `.001`、zip 传统分卷 `.z01`、RAR 新式 `.part1.rar` 与旧式 `.r00` **自动合并**，缺卷即时提示。
 
 **易用体验**
@@ -46,6 +46,7 @@
 - **深色模式**：自动跟随系统，可手动切换。
 - **解压进度**：实时百分比 + 当前文件 + **预计剩余时间**，随时**取消**；可恢复失败或主动取消时会保留已解压文件并明确提示位置。
 - **同名冲突策略**：自动重命名使用新目录；覆盖、跳过、保留较新会复用同名目录，并分别作用于已有文件。
+- **自动拍平**：高级选项默认开启；当输出目录只包含一个与压缩包同名的文件夹时，自动移除这层外壳。
 - **压缩包注释**：查看 ZIP / 7Z 注释；单文件 ZIP / 7Z 可在没有运行中任务时安全编辑。
 - **密码管理器**：本地保存常用解压密码，按需快速填入。
 - **内置诊断**：一键生成脱敏诊断报告，权限问题不求人。
@@ -59,7 +60,7 @@
 
 ## 🚀 快速开始
 
-1. 在飞牛应用中心手动安装 `CHzip_4.4_<架构>.fpk`（x86_64 / arm64）。
+1. 在飞牛应用中心手动安装 `CHzip_4.5_<架构>.fpk`（x86_64 / arm64）。
 2. 文件管理器右键压缩包（分卷选中首卷即可）→「使用 CHzip 打开」。
 3. 预览目录 → 选择目标路径 → 点「开始解压」。
 
@@ -109,10 +110,10 @@ CHzip/
 ## 🛠️ 开发 / 构建 / 测试
 
 ```bash
-npm test                 # node --test，492 个用例
+npm test                 # node --test 全量回归
 node --check app/server/api.js   # 语法检查
 node scripts/build-fpk.js        # 构建 dist/*.fpk（双架构，需 fnpack）
-node scripts/audit-fpk.js        # 发布审计（校验和/版本/架构/搜索特性）
+node scripts/audit-fpk.js        # 发布审计（校验和/版本/架构/关键特性标记）
 ```
 
 > 推送与 PR 会自动跑 `node --check` + `npm test`（见 `.github/workflows/ci.yml`）。

@@ -390,15 +390,29 @@ function createServices(options = {}) {
   // 并发安全：多个 CGI 进程同时进入时，先用 store.update 把 workerPid 占位
   // 为 -1 抢到启动权；没抢到的进程看到 workerPid !== -1 直接返回。
   function launchWorker(jobId) {
+    const launchClaimAge = (job) => {
+      const claimedAt = job.workerClaimedAt
+        ? new Date(job.workerClaimedAt).getTime()
+        : Date.parse(job.createdAt);
+      return Number.isFinite(claimedAt)
+        ? Date.now() - claimedAt
+        : 0;
+    };
     const claim = store.update(jobId, (current) => {
+      const claimIsStale = current.workerPid === -1
+        && launchClaimAge(current) > TIMEOUTS.WORKER_LAUNCH_CLAIM_MS;
       if (
         current.status !== "queued"
-        || current.workerPid
         || current.cancelRequestedAt
+        || (current.workerPid && !claimIsStale)
       ) {
         return current;
       }
-      return { ...current, workerPid: -1 };
+      return {
+        ...current,
+        workerPid: -1,
+        workerClaimedAt: new Date().toISOString(),
+      };
     });
     if (claim.workerPid !== -1) {
       return claim;
@@ -412,7 +426,7 @@ function createServices(options = {}) {
       try {
         store.update(jobId, (current) => (
           current.workerPid === -1
-            ? { ...current, workerPid: null }
+            ? { ...current, workerPid: null, workerClaimedAt: "" }
             : current
         ));
       } catch (revertError) {
@@ -425,10 +439,16 @@ function createServices(options = {}) {
       });
       throw spawnError;
     }
-    const job = store.update(jobId, (current) => ({
-      ...current,
-      workerPid: worker.pid || null,
-    }));
+    const job = store.update(jobId, (current) => {
+      if (TERMINAL_STATUSES.has(current.status)) {
+        return current;
+      }
+      return {
+        ...current,
+        workerPid: worker.pid || null,
+        workerClaimedAt: "",
+      };
+    });
     const failWorker = (workerError, code) => {
       const current = store.read(jobId);
       if (!current || TERMINAL_STATUSES.has(current.status)) {
@@ -461,6 +481,7 @@ function createServices(options = {}) {
         passwordFile: "",
         selectionFile: "",
         workerPid: null,
+        workerClaimedAt: "",
         finishedAt: new Date().toISOString(),
         error: {
           code,
@@ -673,7 +694,8 @@ function createServices(options = {}) {
     const probeFile = options.solid
       ? encryptedFiles[0]
       : encryptedFiles.sort(
-        (a, b) => (Number(a.size) || 0) - (Number(b.size) || 0),
+        (a, b) => (Number(a.packedSize) || Number(a.size) || 0)
+          - (Number(b.packedSize) || Number(b.size) || 0),
       )[0];
     const verifyDir = fs.mkdtempSync(path.join(runtimeRoot, "verify-"));
     const selectionFile = path.join(verifyDir, "selection.txt");
@@ -937,9 +959,19 @@ function createServices(options = {}) {
             sevenZipSource: archive.tool.source,
             codePage: input.codePage || "auto",
             conflictPolicy,
+            autoFlatten: input.autoFlatten !== false,
             deleteSource: Boolean(input.deleteSource),
             partCount: archive.partCount,
             sourceFingerprint: extractFingerprint,
+            // undefined 保持 JobStore 的默认 null；只在选择性解压时携带。
+            validatedListing: Array.isArray(input.selectedPaths)
+              ? {
+                sourceFingerprint: extractFingerprint,
+                entryCount: previewResult.entries.length,
+                format: previewResult.format,
+                entryPaths: previewResult.entries.map((entry) => entry.path),
+              }
+              : undefined,
           });
 
           let selectionFile = "";

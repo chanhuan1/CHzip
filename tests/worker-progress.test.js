@@ -5,6 +5,7 @@ const { test } = require("node:test");
 const { EventEmitter } = require("node:events");
 
 const {
+  createLogTail,
   createProgressWriter,
   defaultRunPhase,
   defaultValidateListing,
@@ -118,6 +119,34 @@ test("B1 createProgressWriter keeps the previous file name when the snapshot has
 
   writer.update({ percent: 10, currentFile: "" });
   assert.equal(store.writes[0].currentFile, "keep.txt");
+});
+
+test("B1 createProgressWriter does not re-read the job for throughput", () => {
+  const store = createMemoryStore({ sizeBytes: 100 * 1024 * 1024 });
+  let reads = 0;
+  const wrappedStore = {
+    ...store,
+    read: () => {
+      reads += 1;
+      return store.read();
+    },
+  };
+  const startedAt = Date.now() - 10 * 1000;
+  const writer = createProgressWriter({
+    store: wrappedStore,
+    jobId: JOB_ID,
+    phase: "extracting",
+    sizeBytes: 100 * 1024 * 1024,
+    throttleMs: 0,
+    phaseStartedAtMs: startedAt,
+  });
+
+  writer.update({ percent: 10, currentFile: "a" });
+  writer.update({ percent: 20, currentFile: "b" });
+
+  assert.equal(store.writes.length, 2);
+  assert.equal(reads, 0, "flush 只需固定 sizeBytes，不应再读完整 job JSON");
+  assert.ok(store.writes[1].speedBytesPerSec > 0);
 });
 
 // ------------------------------------------------------------ B1：取消红线
@@ -237,6 +266,26 @@ test("B2 defaultRunPhase merges stdout and stderr into one log", async () => {
 
   const result = await phasePromise;
   assert.equal(result.log, "  10% a.txt\rWARN x\r");
+});
+
+test("B2 log tail keeps only bounded bytes across many chunks", () => {
+  const tail = createLogTail(64);
+  for (let index = 0; index < 1000; index += 1) {
+    tail.append(`chunk-${index};`);
+  }
+  const text = tail.text();
+  assert.ok(Buffer.byteLength(text, "utf8") <= 64);
+  assert.match(text, /chunk-999;/);
+  assert.doesNotMatch(text, /chunk-0;/);
+});
+
+test("B2 log tail preserves UTF-8 text after trimming", () => {
+  const tail = createLogTail(12);
+  tail.append("前缀".repeat(100));
+  tail.append("中文OK");
+  const text = tail.text();
+  assert.ok(Buffer.byteLength(text, "utf8") <= 12);
+  assert.equal(text.includes("中文OK"), true);
 });
 
 test("B2 defaultRunPhase rejects with a classified error carrying the log", async () => {

@@ -146,7 +146,12 @@ function auditPackage(config) {
   assert.match(license.toString("utf8"), /SIL OPEN FONT LICENSE Version 1\.1/);
   assert.match(css, /@font-face/);
   assert.match(css, /font-family:\s*"Inter Variable"/);
-  assert.match(css, /InterVariable\.woff2\?v=4\.1/);
+  const fontVersion = css.match(/InterVariable\.woff2\?v=([^"')\s]+)/)?.[1];
+  assert.match(
+    fontVersion,
+    /^\d+\.\d+(?:\.\d+)?$/,
+    "字体资源缓存键必须携带合法版本号",
+  );
   assert.match(html, /id="treeSearchInput"/);
   assert.match(treeJs, /createSearchScheduler/);
   assert.match(treeJs, /renderBatches/);

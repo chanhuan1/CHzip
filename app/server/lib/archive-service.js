@@ -24,23 +24,48 @@ function toClientFile(source, index) {
 }
 
 const HEADER_SNIFF_BYTES = 512;
+const HEADER_SNIFF_LARGE_BYTES = 64 * 1024;
+const TAIL_SNIFF_BYTES = 512;
 
 function readArchiveHeader(filePath, fsModule) {
   let fd = null;
   try {
     fd = fsModule.openSync(filePath, "r");
-    const header = Buffer.alloc(HEADER_SNIFF_BYTES);
-    const bytesRead = fsModule.readSync(
+    const stat = fsModule.fstatSync(fd);
+    const headerLength = Math.min(
+      stat.size,
+      HEADER_SNIFF_LARGE_BYTES,
+    );
+    const tailLength = Math.min(
+      stat.size,
+      TAIL_SNIFF_BYTES,
+    );
+    const header = Buffer.alloc(headerLength);
+    const tail = Buffer.alloc(tailLength);
+    const headerBytesRead = fsModule.readSync(
       fd,
       header,
       0,
-      HEADER_SNIFF_BYTES,
+      headerLength,
       0,
     );
-    return header.subarray(0, bytesRead);
+    const tailBytesRead = fsModule.readSync(
+      fd,
+      tail,
+      0,
+      tailLength,
+      Math.max(0, stat.size - tailLength),
+    );
+    return {
+      head: header.subarray(0, headerBytesRead),
+      tail: tail.subarray(0, tailBytesRead),
+    };
   } catch (error) {
     // 文件头探测是增强能力，不能因为它失败而阻断原有后缀识别流程。
-    return Buffer.alloc(0);
+    return {
+      head: Buffer.alloc(0),
+      tail: Buffer.alloc(0),
+    };
   } finally {
     if (fd !== null) {
       try {

@@ -20,7 +20,7 @@ const SINGLE_FORMATS = [
   { pattern: /\.tzst$/i, format: "zstd", innerFormat: "tar" },
   { pattern: /\.(?:zst|zstd)$/i, format: "zstd" },
   { pattern: /\.cab$/i, format: "cab", type: "cab" },
-  { pattern: /\.iso$/i, format: "iso", type: "iso" },
+  { pattern: /\.iso$/i, format: "iso" },
   { pattern: /\.arj$/i, format: "arj", type: "arj" },
   { pattern: /\.(?:lzh|lha)$/i, format: "lzh", type: "lzh" },
   { pattern: /\.cbz$/i, format: "zip", type: "zip" },
@@ -28,6 +28,29 @@ const SINGLE_FORMATS = [
   { pattern: /\.epub$/i, format: "zip", type: "zip" },
   { pattern: /\.(?:wim|swm)$/i, format: "wim", type: "wim" },
   { pattern: /\.dmg$/i, format: "dmg" },
+  { pattern: /\.xar$/i, format: "xar" },
+  { pattern: /\.cpio$/i, format: "cpio" },
+  { pattern: /\.deb$/i, format: "ar" },
+  { pattern: /\.rpm$/i, format: "rpm" },
+  { pattern: /\.msi$/i, format: "msi" },
+  { pattern: /\.chm$/i, format: "chm" },
+  { pattern: /\.z$/i, format: "z" },
+  { pattern: /\.lzma$/i, format: "lzma" },
+  { pattern: /\.squashfs$/i, format: "squashfs" },
+  { pattern: /\.qcow2$/i, format: "qcow2" },
+  { pattern: /\.vhd$/i, format: "vhd" },
+  { pattern: /\.vhdx$/i, format: "vhdx" },
+  { pattern: /\.vdi$/i, format: "vdi" },
+  { pattern: /\.vmdk$/i, format: "vmdk" },
+  { pattern: /\.hfs$/i, format: "hfs" },
+  { pattern: /\.apfs$/i, format: "apfs" },
+  { pattern: /\.ext$/i, format: "ext" },
+  { pattern: /\.fat$/i, format: "fat" },
+  { pattern: /\.gpt$/i, format: "gpt" },
+  { pattern: /\.mbr$/i, format: "mbr" },
+  { pattern: /\.ntfs$/i, format: "ntfs" },
+  { pattern: /\.udf$/i, format: "udf" },
+  { pattern: /\.cramfs$/i, format: "cramfs" },
 ];
 
 const HEADER_FORMATS = [
@@ -84,6 +107,127 @@ const HEADER_FORMATS = [
     type: "arj",
     signature: [0x60, 0xea],
   },
+  {
+    format: "xar",
+    signature: [0x78, 0x61, 0x72, 0x21],
+  },
+  {
+    format: "cpio",
+    signatures: [
+      [0x30, 0x37, 0x30, 0x37, 0x30, 0x31],
+      [0x30, 0x37, 0x30, 0x37, 0x30, 0x32],
+      [0x30, 0x37, 0x30, 0x37, 0x30, 0x37],
+    ],
+  },
+  {
+    format: "ar",
+    signature: [0x21, 0x3c, 0x61, 0x72, 0x63, 0x68, 0x3e, 0x0a],
+  },
+  {
+    format: "rpm",
+    signature: [0xed, 0xab, 0xee, 0xdb],
+  },
+  {
+    format: "squashfs",
+    signatures: [
+      [0x68, 0x73, 0x71, 0x73],
+      [0x73, 0x71, 0x73, 0x68],
+    ],
+  },
+  {
+    format: "cramfs",
+    signature: [0x28, 0xcd, 0x3d, 0x45],
+  },
+  {
+    format: "qcow2",
+    signature: [0x51, 0x46, 0x49, 0xfb],
+  },
+  {
+    format: "vhdx",
+    signature: [0x76, 0x68, 0x64, 0x78, 0x66, 0x69, 0x6c, 0x65],
+  },
+  {
+    format: "vmdk",
+    signature: [0x4b, 0x44, 0x4d, 0x56],
+  },
+  {
+    format: "vdi",
+    signature: [0x3c, 0x3c, 0x3c, 0x20, 0x4f, 0x72, 0x61, 0x63, 0x6c, 0x65],
+  },
+  {
+    format: "z",
+    signature: [0x1f, 0x9d],
+  },
+];
+
+const OFFSET_SIGNATURES = [
+  {
+    format: "iso",
+    offset: 0x8001,
+    signatures: [[0x43, 0x44, 0x30, 0x30, 0x31]],
+  },
+  {
+    format: "udf",
+    offset: 0x8001,
+    signatures: [
+      [0x42, 0x45, 0x41, 0x30, 0x31],
+      [0x4e, 0x53, 0x52, 0x30, 0x32],
+      [0x4e, 0x53, 0x52, 0x30, 0x33],
+    ],
+  },
+  {
+    format: "gpt",
+    offset: 512,
+    signature: [0x45, 0x46, 0x49, 0x20, 0x50, 0x41, 0x52, 0x54],
+  },
+  {
+    format: "fat",
+    offset: 54,
+    signatures: [
+      [0x46, 0x41, 0x54, 0x31, 0x32],
+      [0x46, 0x41, 0x54, 0x31, 0x36],
+    ],
+  },
+  {
+    format: "fat",
+    offset: 82,
+    signature: [0x46, 0x41, 0x54, 0x33, 0x32],
+  },
+  {
+    format: "ntfs",
+    offset: 3,
+    signature: [0x4e, 0x54, 0x46, 0x53],
+  },
+  {
+    format: "ext",
+    offset: 1080,
+    signature: [0x53, 0xEF],
+  },
+  {
+    format: "hfs",
+    offset: 1024,
+    signatures: [
+      [0x42, 0x44],
+      [0x48, 0x2b],
+      [0x48, 0x58],
+    ],
+  },
+  {
+    format: "apfs",
+    offset: 32,
+    signature: [0x4e, 0x58, 0x53, 0x42],
+  },
+];
+
+const TAIL_SIGNATURES = [
+  {
+    format: "dmg",
+    signature: [0x6b, 0x6f, 0x6c, 0x79],
+  },
+  {
+    format: "vhd",
+    signature: [0x63, 0x6f, 0x6e, 0x65, 0x63, 0x74, 0x69, 0x78],
+  },
 ];
 
 function startsWithBytes(buffer, signature, offset = 0) {
@@ -101,9 +245,15 @@ function startsWithBytes(buffer, signature, offset = 0) {
  * 用这里的返回值纠正 selection，避免继续用错误的 -t 类型参数打开。
  */
 function detectArchiveFormatByHeader(header) {
-  const bytes = Buffer.isBuffer(header)
-    ? header
-    : Buffer.from(header || []);
+  const input = Buffer.isBuffer(header)
+    ? { head: header, tail: Buffer.alloc(0) }
+    : (header || {});
+  const bytes = Buffer.isBuffer(input.head)
+    ? input.head
+    : Buffer.from(input.head || []);
+  const tail = Buffer.isBuffer(input.tail)
+    ? input.tail
+    : Buffer.from(input.tail || []);
 
   for (const candidate of HEADER_FORMATS) {
     const signatures = candidate.signatures || [candidate.signature];
@@ -129,6 +279,29 @@ function detectArchiveFormatByHeader(header) {
     && (bytes[4] === 0x68 || bytes[4] === 0x7a)
   ) {
     return { format: "lzh", type: "lzh", innerFormat: null };
+  }
+
+  for (const candidate of OFFSET_SIGNATURES) {
+    const signatures = candidate.signatures || [candidate.signature];
+    if (signatures.some((signature) => startsWithBytes(bytes, signature, candidate.offset))) {
+      return {
+        format: candidate.format,
+        type: candidate.type || null,
+        innerFormat: candidate.innerFormat || null,
+      };
+    }
+  }
+
+  for (const candidate of TAIL_SIGNATURES) {
+    const signature = candidate.signature;
+    const tailText = tail.toString("ascii");
+    if (tailText.includes(String.fromCharCode(...signature))) {
+      return {
+        format: candidate.format,
+        type: candidate.type || null,
+        innerFormat: candidate.innerFormat || null,
+      };
+    }
   }
 
   return null;

@@ -46,11 +46,43 @@ function appendForcedType(args, selection) {
   const forcedType = selection.type;
   const forceable = forcedType
     && forcedType !== "rar"
-    && !/\.split$/i.test(forcedType);
+    && !/\.split$/i.test(forcedType)
+    && !NON_FORCED_FORMATS.has(forcedType);
   if (forceable) {
     args.push(`-t${forcedType}`);
   }
 }
+
+// 这些格式 7-Zip 26.02 支持解包，但容器族较复杂（例如 deb 实际是 ar，
+// UDF/ISO 可能同卷共存）。识别层仍可报告真实格式，但构造参数时不强制
+// -t，交给引擎按签名自动打开，避免把可打开文件改成错误类型。
+const NON_FORCED_FORMATS = new Set([
+  "ar",
+  "apfs",
+  "cramfs",
+  "cpio",
+  "ext",
+  "fat",
+  "gpt",
+  "hfs",
+  "mbr",
+  "msi",
+  "chm",
+  "ntfs",
+  "qcow2",
+  "rpm",
+  "squashfs",
+  "udf",
+  "vdi",
+  "vhd",
+  "vhdx",
+  "vmdk",
+  "xar",
+  "z",
+  "lzma",
+  "dmg",
+  "iso",
+]);
 
 function passwordNeedsArgv(password) {
   // 7-Zip 26.x 在非 TTY stdin 下不能可靠地解码 UTF-8 中文密码；

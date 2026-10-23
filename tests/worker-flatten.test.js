@@ -34,6 +34,7 @@ function createMemoryStore(initial = {}) {
     outputDir: "/nonexistent/out",
     outputOwned: false,
     outputStem: "archive",
+    autoFlatten: true,
     flattened: false,
     flattenNote: "",
     selection: { format: "zip", type: "zip" },
@@ -249,6 +250,32 @@ test("F2 runWorker flattens a matching single root on success", async () => {
   assert.match(result.flattenNote, /archive/);
   assert.ok(fs.existsSync(path.join(outputDir, "a.txt")));
   assert.ok(!fs.existsSync(path.join(outputDir, "archive")));
+});
+
+test("F2 runWorker skips flattening when autoFlatten is disabled", async () => {
+  const runtimeRoot = fs.mkdtempSync(path.join(os.tmpdir(), "chzip-flatten-"));
+  const outputDir = path.join(runtimeRoot, "out");
+  fs.mkdirSync(path.join(outputDir, "archive"), { recursive: true });
+  fs.writeFileSync(path.join(outputDir, "archive", "a.txt"), "hello");
+
+  const store = createMemoryStore({
+    outputDir,
+    outputStem: "archive",
+    outputOwned: true,
+    autoFlatten: false,
+  });
+  const result = await runWorker(JOB_ID, {
+    store,
+    runtimeRoot,
+    validateListing: async () => ({ entryCount: 1, format: "zip" }),
+    runPhase: async () => ({ exitCode: 0, log: "" }),
+  });
+
+  assert.equal(result.status, "success");
+  assert.equal(result.flattened, false);
+  assert.equal(result.flattenNote, "");
+  assert.ok(fs.existsSync(path.join(outputDir, "archive", "a.txt")));
+  assert.ok(!fs.existsSync(path.join(outputDir, "a.txt")));
 });
 
 test("F2 flatten result rides on the success-terminal update", async () => {

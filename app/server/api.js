@@ -157,6 +157,7 @@ async function routeRequest(api, request, services) {
       password: request.body.password || "",
       codePage: request.body.codePage || "auto",
       conflictPolicy: request.body.conflictPolicy || "rename",
+      autoFlatten: request.body.autoFlatten !== false,
       deleteSource: Boolean(request.body.deleteSource),
       destinationRoot: request.body.destinationRoot || "",
       selectedPaths: request.body.selectedPaths,

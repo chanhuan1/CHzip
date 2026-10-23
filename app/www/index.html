@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CHzip - 飞牛智能分卷解压</title>
-    <link rel="stylesheet" href="./index.cgi/css/style.css?v=4.4">
+    <link rel="stylesheet" href="./index.cgi/css/style.css?v=4.5">
 </head>
 <body>
     <svg class="icon-defs" aria-hidden="true" focusable="false" width="0" height="0">
@@ -23,9 +23,9 @@
         <div class="workspace">
             <header class="app-header">
                 <div class="brand">
-                    <img class="brand-icon" src="./index.cgi/images/icon_64.png?v=4.4" alt="">
+                    <img class="brand-icon" src="./index.cgi/images/icon_64.png?v=4.5" alt="">
                     <div>
-                        <h1>CHzip<span class="brand-version">v4.4</span></h1>
+                        <h1>CHzip<span class="brand-version">v4.5</span></h1>
                         <p>飞牛智能分卷解压</p>
                     </div>
                 </div>
@@ -192,7 +192,7 @@
                                 同名文件冲突策略的说明
                                 <button type="button" class="field-hint-toggle"
                                     aria-label="查看冲突策略说明"
-                                    title="自动重命名会创建新目录；覆盖、跳过和保留较新会复用同名目录处理已有文件。">?</button>
+                                    title="自动重命名会创建新目录；覆盖、跳过和保留较新会复用同名目录处理已有文件。默认开启的自动拍平也可能调整输出目录中的同名单层结构。">?</button>
                             </small>
                         </div>
 
@@ -235,6 +235,12 @@
                                         <option value="skip">跳过已存在文件</option>
                                         <option value="keepnew">保留较新文件</option>
                                     </select>
+                                </label>
+
+                                <label class="check-control auto-flatten-control"
+                                    title="解压完成后，如果输出目录只包含一个与压缩包同名的文件夹，则自动移除这层外壳">
+                                    <input id="autoFlattenInput" type="checkbox" checked>
+                                    <span>自动拍平同名一层目录</span>
                                 </label>
                             </div>
                         </details>
@@ -591,19 +597,19 @@
         </div>
     </div>
 
-    <script defer src="./index.cgi/js/password-store.js?v=4.4"></script>
-    <script defer src="./index.cgi/js/tree.js?v=4.4"></script>
-    <script defer src="./index.cgi/js/api-client.js?v=4.4"></script>
-    <script defer src="./index.cgi/js/ui-state.js?v=4.4"></script>
-    <script defer src="./index.cgi/js/ui-tree.js?v=4.4"></script>
-    <script defer src="./index.cgi/js/ui-dialogs.js?v=4.4"></script>
-    <script defer src="./index.cgi/js/ui-jobs.js?v=4.4"></script>
-    <script defer src="./index.cgi/js/ui-passwords.js?v=4.4"></script>
-    <script defer src="./index.cgi/js/ui-preview.js?v=4.4"></script>
-    <script defer src="./index.cgi/js/ui-thumbs.js?v=4.4"></script>
-    <script defer src="./index.cgi/js/ui-theme.js?v=4.4"></script>
-    <script defer src="./index.cgi/js/ui-comment.js?v=4.4"></script>
-    <script defer src="./index.cgi/js/ui-focus.js?v=4.4"></script>
-    <script defer src="./index.cgi/js/app.js?v=4.4"></script>
+    <script defer src="./index.cgi/js/password-store.js?v=4.5"></script>
+    <script defer src="./index.cgi/js/tree.js?v=4.5"></script>
+    <script defer src="./index.cgi/js/api-client.js?v=4.5"></script>
+    <script defer src="./index.cgi/js/ui-state.js?v=4.5"></script>
+    <script defer src="./index.cgi/js/ui-tree.js?v=4.5"></script>
+    <script defer src="./index.cgi/js/ui-dialogs.js?v=4.5"></script>
+    <script defer src="./index.cgi/js/ui-jobs.js?v=4.5"></script>
+    <script defer src="./index.cgi/js/ui-passwords.js?v=4.5"></script>
+    <script defer src="./index.cgi/js/ui-preview.js?v=4.5"></script>
+    <script defer src="./index.cgi/js/ui-thumbs.js?v=4.5"></script>
+    <script defer src="./index.cgi/js/ui-theme.js?v=4.5"></script>
+    <script defer src="./index.cgi/js/ui-comment.js?v=4.5"></script>
+    <script defer src="./index.cgi/js/ui-focus.js?v=4.5"></script>
+    <script defer src="./index.cgi/js/app.js?v=4.5"></script>
 </body>
 </html>

@@ -97,6 +97,7 @@
             closeResultDialogBtn: $("closeResultDialogBtn"),
             codePageSelect: $("codePageSelect"),
             conflictPolicySelect: $("conflictPolicySelect"),
+            autoFlattenInput: $("autoFlattenInput"),
             deleteSourceInput: $("deleteSourceInput"),
             solidConfirmDialog: $("solidConfirmDialog"),
             closeSolidConfirmBtn: $("closeSolidConfirmBtn"),

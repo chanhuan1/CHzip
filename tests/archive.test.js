@@ -77,6 +77,42 @@ test("classifyArchive handles additional single formats", () => {
   assert.equal(classifyArchive("/data/mac.dmg").format, "dmg");
 });
 
+test("classifyArchive recognizes extended container formats", () => {
+  const expectations = {
+    "/data/pkg.xar": "xar",
+    "/data/root.cpio": "cpio",
+    "/data/app.deb": "ar",
+    "/data/app.rpm": "rpm",
+    "/data/app.msi": "msi",
+    "/data/help.chm": "chm",
+    "/data/legacy.z": "z",
+    "/data/data.lzma": "lzma",
+    "/data/image.squashfs": "squashfs",
+    "/data/disk.qcow2": "qcow2",
+    "/data/disk.vhd": "vhd",
+    "/data/disk.vhdx": "vhdx",
+    "/data/disk.vdi": "vdi",
+    "/data/disk.vmdk": "vmdk",
+    "/data/fs.hfs": "hfs",
+    "/data/fs.apfs": "apfs",
+    "/data/fs.ext": "ext",
+    "/data/fs.fat": "fat",
+    "/data/disk.gpt": "gpt",
+    "/data/disk.mbr": "mbr",
+    "/data/fs.ntfs": "ntfs",
+    "/data/disk.udf": "udf",
+    "/data/root.cramfs": "cramfs",
+  };
+  for (const [filePath, format] of Object.entries(expectations)) {
+    assert.equal(classifyArchive(filePath)?.format, format, filePath);
+    assert.equal(
+      classifyArchive(filePath)?.type,
+      null,
+      `${format} 不强制 -t，交给 7-Zip 自动识别`,
+    );
+  }
+});
+
 test("detectArchiveFormatByHeader recognizes strong archive signatures", () => {
   assert.equal(
     detectArchiveFormatByHeader(Buffer.from("Rar!\x1a\x07\x01\x00", "latin1"))?.format,
@@ -94,6 +130,72 @@ test("detectArchiveFormatByHeader recognizes strong archive signatures", () => {
     detectArchiveFormatByHeader(Buffer.from([0x50, 0x4b, 0x03, 0x04]))?.format,
     "zip",
   );
+});
+
+test("detectArchiveFormatByHeader recognizes extended strong signatures", () => {
+  const expectations = [
+    [Buffer.from("xar!", "latin1"), "xar"],
+    [Buffer.from("070701"), "cpio"],
+    [Buffer.from("!<arch>\n", "latin1"), "ar"],
+    [Buffer.from([0xed, 0xab, 0xee, 0xdb]), "rpm"],
+    [Buffer.from("hsqs", "latin1"), "squashfs"],
+    [Buffer.from([0x28, 0xcd, 0x3d, 0x45]), "cramfs"],
+    [Buffer.from([0x51, 0x46, 0x49, 0xfb]), "qcow2"],
+    [Buffer.from("vhdxfile", "latin1"), "vhdx"],
+    [Buffer.from("KDMV", "latin1"), "vmdk"],
+    [Buffer.from("<<< Oracle", "latin1"), "vdi"],
+    [Buffer.from([0x1f, 0x9d]), "z"],
+  ];
+  for (const [header, format] of expectations) {
+    assert.equal(detectArchiveFormatByHeader(header)?.format, format);
+  }
+});
+
+test("detectArchiveFormatByHeader recognizes offset and tail signatures", () => {
+  const head = Buffer.alloc(64 * 1024);
+  head.write("CD001", 0x8001, "ascii");
+  assert.equal(detectArchiveFormatByHeader({ head }).format, "iso");
+
+  head.fill(0);
+  head.write("BEA01", 0x8001, "ascii");
+  assert.equal(detectArchiveFormatByHeader({ head }).format, "udf");
+
+  head.fill(0);
+  head.write("EFI PART", 512, "ascii");
+  assert.equal(detectArchiveFormatByHeader({ head }).format, "gpt");
+
+  assert.equal(
+    detectArchiveFormatByHeader({
+      head: Buffer.alloc(0),
+      tail: Buffer.from("koly", "latin1"),
+    }).format,
+    "dmg",
+  );
+  assert.equal(
+    detectArchiveFormatByHeader({
+      head: Buffer.alloc(0),
+      tail: Buffer.from("conectix", "latin1"),
+    }).format,
+    "vhd",
+  );
+});
+
+test("extended signatures do not force 7-Zip type arguments", () => {
+  for (const format of [
+    "xar", "cpio", "ar", "rpm", "msi", "chm", "z", "lzma",
+    "squashfs", "qcow2", "vhd", "vhdx", "vdi", "vmdk", "hfs",
+    "apfs", "ext", "fat", "gpt", "mbr", "ntfs", "udf", "cramfs",
+  ]) {
+    const args = buildListArgs(
+      { format, type: format },
+      { archivePath: `/data/file.${format}` },
+    );
+    assert.equal(
+      args.some((arg) => arg.startsWith("-t")),
+      false,
+      `${format} 应交给 7-Zip 自动识别`,
+    );
+  }
 });
 
 test("collectVolumeNames finds split volumes", () => {
@@ -312,4 +414,55 @@ test("inspectArchive detects a supported archive with an unknown extension", (t)
   assert.equal(archive.selection.format, "rar");
   assert.equal(archive.selection.outputStem, "payload");
   assert.equal(archive.formatMismatch, null);
+});
+
+test("inspectArchive explains an unknown extension with a strong extended signature", (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "chzip-sniff-xar-"));
+  const filePath = path.join(dir, "payload.bin");
+  fs.writeFileSync(
+    filePath,
+    Buffer.concat([
+      Buffer.from("xar!", "latin1"),
+      Buffer.from("extended archive body"),
+    ]),
+  );
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  const archive = inspectArchive(filePath, {
+    sevenZip: SEVEN_ZIP_STUB,
+  });
+
+  assert.equal(archive.selection.format, "xar");
+  assert.equal(archive.selection.type, null);
+  assert.equal(archive.formatMismatch, null);
+  assert.equal(archive.warnings.length, 0);
+});
+
+test("inspectArchive corrects a mismatched extended extension without rewriting the source", (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "chzip-sniff-rpm-"));
+  const filePath = path.join(dir, "package.zip");
+  const before = Buffer.concat([
+    Buffer.from([0xed, 0xab, 0xee, 0xdb]),
+    Buffer.from("rpm body"),
+  ]);
+  fs.writeFileSync(filePath, before);
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  const archive = inspectArchive(filePath, {
+    sevenZip: SEVEN_ZIP_STUB,
+  });
+
+  assert.equal(archive.selection.format, "rpm");
+  assert.equal(archive.selection.type, null);
+  assert.deepEqual(archive.formatMismatch, {
+    declaredFormat: "zip",
+    detectedFormat: "rpm",
+  });
+  assert.match(archive.warnings[0], /已按 RPM 识别/);
+  const args = buildListArgs(archive.selection, {
+    archivePath: archive.filePath,
+    codePage: "auto",
+  });
+  assert.equal(args.some((arg) => arg.startsWith("-t")), false);
+  assert.deepEqual(fs.readFileSync(filePath), before, "解释纠正不得修改源文件");
 });

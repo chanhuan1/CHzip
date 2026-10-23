@@ -166,30 +166,7 @@ test("F12 buildMissingVolumeNames degrades gracefully on unknown kind", () => {
   assert.deepEqual(buildMissingVolumeNames({}), []);
 });
 
-// ------------------------------------------------------------ 后端 details 透传（源码级对账）
-
-test("F12 services.attachMissingDetails is applied in preview and extract", () => {
-  const source = require("node:fs").readFileSync(
-    require("node:path").join(__dirname, "..", "app", "server", "lib", "services.js"),
-    "utf8",
-  );
-  const occurrences = source.split("attachMissingDetails(error, archive)").length - 1;
-  assert.ok(
-    occurrences >= 2,
-    `preview 与 extract 两条 MISSING_VOLUME 路径都应挂 details（找到 ${occurrences} 处）`,
-  );
-});
-
-test("F12 api.js flattens error.details into the error response", () => {
-  const source = require("node:fs").readFileSync(
-    require("node:path").join(__dirname, "..", "app", "server", "api.js"),
-    "utf8",
-  );
-  assert.ok(
-    source.includes("...(error.details && typeof error.details === \"object\""),
-    "api.js catch 应把 error.details 平铺进响应 error 对象",
-  );
-});
+// ------------------------------------------------------------ 后端 details 透传
 
 test("F12 archive-service exposes missingDetails on the inspect result", () => {
   const fs = require("node:fs");

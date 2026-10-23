@@ -87,7 +87,7 @@ This runs all unit tests in the `tests/` directory using Node's built-in test ru
 # Build for current platform
 node scripts/build-fpk.js --platform x86
 
-# Build for all platforms and variants
+# Build for all platforms and the default variant
 node scripts/build-fpk.js --platform all --variant all
 
 # Build without fnpack (stage only)
@@ -99,7 +99,8 @@ on your `PATH`.
 
 ### Build Variants
 
-- `search-fixed` — Full build with file search enabled (only variant)
+- Empty string (`""`) — the default production variant currently shipped in
+  both architecture packages. `--variant all` selects every configured variant.
 
 ## Code Style
 
@@ -112,10 +113,15 @@ on your `PATH`.
 ## Security Considerations
 
 - All user-controlled paths are validated through `normalizeEntryPath()`
-- Passwords are never passed via command-line args (use password files)
+- Passwords are handed to 7-Zip through a process argument array or encoded
+  argument invocation; they are never interpolated into shell command text.
+  Temporary password files are retained only for detached worker handoff and
+  are overwritten and removed after use.
 - Passwords are masked in the UI by default
 - Request bodies are capped at 16 MiB
-- All file writes use atomic rename patterns
+- Job and authorization state use temporary files followed by rename; other
+  runtime artifacts and 7-Zip outputs use direct file operations with cleanup
+  and permission hardening.
 - Diagnostics redact sensitive values
 
 ## Adding a New Archive Format
@@ -130,7 +136,7 @@ on your `PATH`.
    and the manifest version is what actually ships:
    - `manifest` — `version = X.Y`
    - `package.json` — `"version": "X.Y"` (not read by the build, easy to miss)
-   - `app/www/index.html` — asset cache-busting `?v=X.Y` (1 CSS + 12 JS).
+   - `app/www/index.html` — asset cache-busting `?v=X.Y` (1 CSS + 14 JS).
      Leave the brand icon at `?v=1.0.0` unless that file itself changed.
    - `README.md` — the version badge and the install command. These drifted
      three times before they were gated, so do not skip them.
@@ -138,7 +144,7 @@ on your `PATH`.
    `scripts/audit-fpk.js` no longer needs editing: it derives the version,
    the package file names and the 7-Zip paths from `scripts/build-fpk.js`.
 2. Run `npm test` — `tests/version.test.js` fails when any of the places above
-   disagree (manifest, package.json, the 13 `?v=` keys, the badge and the
+   disagree (manifest, package.json, the 16 asset cache keys, the badge and the
    install command), so a missed bump is caught before packaging.
 3. Build: `node scripts/build-fpk.js --platform all --variant all`.
    Make sure `build/staging/` is empty first — the script's recursive cleanup

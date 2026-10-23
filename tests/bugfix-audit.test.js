@@ -23,11 +23,13 @@ const ENCRYPTED_LISTING = [
   "----------",
   "Path = big.txt",
   "Size = 100",
+  "Packed Size = 200",
   "Attributes = A",
   "Encrypted = +",
   "",
   "Path = small.txt",
   "Size = 10",
+  "Packed Size = 50",
   "Attributes = A",
   "Encrypted = +",
   "",
@@ -141,6 +143,33 @@ test("preview probes the first member of a solid archive to avoid scanning the t
 
   assert.equal(result.passwordVerified, true);
   assert.deepEqual(selectedPaths, ["first-large.bin"]);
+});
+
+test("preview probes the smallest encrypted member by packed size", (t) => {
+  const root = makeRoot(t);
+  const archivePath = makeArchive(root);
+  const selectedPaths = [];
+  const listing = ENCRYPTED_LISTING
+    .replace("Path = big.txt\nSize = 100\nPacked Size = 200", "Path = big.txt\nSize = 1\nPacked Size = 200")
+    .replace("Path = small.txt\nSize = 10\nPacked Size = 50", "Path = small.txt\nSize = 10\nPacked Size = 50");
+  const services = makeServices(root, {
+    runSync(tool, args) {
+      if (args[0] === "l") {
+        return { exitCode: 0, log: "", stdout: listing, stderr: "" };
+      }
+      const selectionArg = args.find((arg) => arg.startsWith("-i@"));
+      selectedPaths.push(fs.readFileSync(selectionArg.slice(3), "utf8").trim());
+      return { exitCode: 0, log: "", stdout: "", stderr: "" };
+    },
+  });
+
+  services.preview({ path: archivePath, password: "correct" });
+
+  assert.deepEqual(
+    selectedPaths,
+    ["small.txt"],
+    "非固实包应按 Packed Size 选择，而不是未压缩 Size",
+  );
 });
 
 test("password verification timeout offers direct extraction fallback", (t) => {
@@ -299,6 +328,92 @@ test("selective extraction performs one preview inside the source lock", (t) => 
   });
 
   assert.equal(listCalls, 1);
+});
+
+test("selective worker reuses the CGI-validated listing when source fingerprint matches", async (t) => {
+  const root = makeRoot(t);
+  const archivePath = makeArchive(root);
+  let listCalls = 0;
+  const services = makeServices(root, {
+    runSync(tool, args) {
+      if (args[0] === "l") {
+        listCalls += 1;
+      }
+      return {
+        exitCode: 0,
+        log: "",
+        stdout: "Type = zip\n----------\nPath = test.txt\nSize = 1\nAttributes = A\n\n",
+        stderr: "",
+      };
+    },
+  });
+  const result = services.extract({
+    path: archivePath,
+    destinationRoot: root,
+    selectedPaths: ["test.txt"],
+  });
+  const job = services.store.read(result.jobId);
+  assert.ok(job.validatedListing);
+  assert.deepEqual(job.validatedListing.sourceFingerprint, job.sourceFingerprint);
+  assert.equal(job.validatedListing.entryCount, 1);
+  assert.equal(job.validatedListing.format, "zip");
+  assert.deepEqual(job.validatedListing.entryPaths, ["test.txt"]);
+  assert.equal(listCalls, 1);
+
+  await runWorker(result.jobId, {
+    store: services.store,
+    logger: SILENT_LOGGER,
+    validateListing: async () => {
+      listCalls += 1;
+      return { entryCount: 1, format: "zip" };
+    },
+    runPhase: async () => ({ exitCode: 0, log: "" }),
+  });
+
+  assert.equal(listCalls, 1, "worker 不应重复跑 7z l");
+});
+
+test("worker revalidates listing when source fingerprint differs", async (t) => {
+  const root = makeRoot(t);
+  const archivePath = makeArchive(root);
+  let listCalls = 0;
+  const services = makeServices(root, {
+    runSync(tool, args) {
+      if (args[0] === "l") {
+        listCalls += 1;
+      }
+      return {
+        exitCode: 0,
+        log: "",
+        stdout: "Type = zip\n----------\nPath = test.txt\nSize = 1\nAttributes = A\n\n",
+        stderr: "",
+      };
+    },
+  });
+  const result = services.extract({
+    path: archivePath,
+    destinationRoot: root,
+    selectedPaths: ["test.txt"],
+  });
+  services.store.update(result.jobId, (current) => ({
+    ...current,
+    validatedListing: {
+      ...current.validatedListing,
+      sourceFingerprint: [{ path: archivePath, dev: 1, ino: 2, size: 3, mtimeMs: 4 }],
+    },
+  }));
+
+  await runWorker(result.jobId, {
+    store: services.store,
+    logger: SILENT_LOGGER,
+    validateListing: async () => {
+      listCalls += 1;
+      return { entryCount: 1, format: "zip" };
+    },
+    runPhase: async () => ({ exitCode: 0, log: "" }),
+  });
+
+  assert.equal(listCalls, 2, "指纹不一致时必须重新校验，不能复用旧列表");
 });
 
 test("extract refuses to race a comment write holding the source lock", (t) => {

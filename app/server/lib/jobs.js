@@ -110,6 +110,8 @@ class JobStore {
       outputOwned: input.outputOwned !== false,
       // 解压冲突策略（F1）：rename/overwrite/skip/keepNew，worker 映射到 -ao*。
       conflictPolicy: input.conflictPolicy || "rename",
+      // 自动拍平是用户可选项；旧任务 JSON 没有该字段时仍按原默认行为开启。
+      autoFlatten: input.autoFlatten !== false,
       // 压缩包名主干（F2）：用于「拍平同名一层目录」的比对。
       outputStem: input.outputStem || "",
       // 失败保留部分成果（F8）：非源文件问题时已解压文件保留，置 true。
@@ -127,6 +129,9 @@ class JobStore {
       codePage: input.codePage || "auto",
       selectionFile: input.selectionFile || "",
       passwordFile: input.passwordFile || "",
+      // 选择性解压在 CGI 阶段已经做过安全列表校验；worker 校验源指纹一致
+      // 后复用该摘要，避免大包/加密包重复跑一次 7z l。
+      validatedListing: input.validatedListing || null,
       partCount: input.partCount || 1,
       sourceFingerprint: input.sourceFingerprint || [],
       // 源压缩包总字节数（全卷合计）：worker 估算解压吞吐用。
@@ -134,6 +139,7 @@ class JobStore {
       sizeBytes: input.sizeBytes || 0,
       processGroupPid: null,
       workerPid: null,
+      workerClaimedAt: "",
       progress: 0,
       currentFile: "",
       log: "",
@@ -454,7 +460,7 @@ function finalizeQueuedCancellation(store, jobId) {
       if (
         !current
         || TERMINAL_STATUSES.has(current.status)
-        || current.workerPid
+        || (current.workerPid && current.workerPid !== -1)
         || current.processGroupPid
         || current.status !== "cancelling"
       ) {
@@ -486,6 +492,7 @@ function finalizeQueuedCancellation(store, jobId) {
         phase: "cancelled",
         processGroupPid: null,
         workerPid: null,
+        workerClaimedAt: "",
         currentFile: "",
         progress: 0,
         speedBytesPerSec: 0,
@@ -520,7 +527,10 @@ async function requestCancellation(store, jobId, dependencies = {}) {
     cancelRequestedAt: nowIso(),
   }));
 
-  if (!job.processGroupPid && !job.workerPid) {
+  if (
+    !job.processGroupPid
+    && (!job.workerPid || job.workerPid === -1)
+  ) {
     return finalizeQueuedCancellation(store, jobId) || job;
   }
 
@@ -533,7 +543,7 @@ async function requestCancellation(store, jobId, dependencies = {}) {
       }
     }
     if (!job.processGroupPid) {
-      if (!job.workerPid) {
+      if (!job.workerPid || job.workerPid === -1) {
         return finalizeQueuedCancellation(store, jobId) || job;
       }
       return job;

@@ -352,6 +352,9 @@
                 password: els.passwordInput.value,
                 codePage: els.codePageSelect.value,
                 conflictPolicy: els.conflictPolicySelect.value,
+                autoFlatten: els.autoFlattenInput
+                    ? Boolean(els.autoFlattenInput.checked)
+                    : true,
                 deleteSource: Boolean(els.deleteSourceInput?.checked),
                 destinationRoot: state.selectedDirectory,
                 selectedPaths,

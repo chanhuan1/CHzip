@@ -828,6 +828,9 @@
         els.refreshPreviewBtn.disabled = state.running || state.previewing || !state.info;
         els.codePageSelect.disabled = state.running || state.previewing;
         els.conflictPolicySelect.disabled = state.running || state.previewing;
+        if (els.autoFlattenInput) {
+            els.autoFlattenInput.disabled = state.running || state.previewing;
+        }
         if (els.deleteSourceInput) {
             const isPartialSelection = Boolean(
                 state.allFilePaths

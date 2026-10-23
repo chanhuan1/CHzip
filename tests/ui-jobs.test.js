@@ -2,6 +2,8 @@
 
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
+const fs = require("node:fs");
+const path = require("node:path");
 
 require("../app/www/js/ui-jobs");
 
@@ -14,6 +16,18 @@ const {
   partialOutputSuffix,
   setJobProgress,
 } = globalThis.CHzipUiJobs;
+
+test("advanced settings exposes auto-flatten enabled by default", () => {
+  const html = fs.readFileSync(
+    path.join(__dirname, "../app/www/index.html"),
+    "utf8",
+  );
+  assert.match(
+    html,
+    /<details class="advanced-options">[\s\S]*id="autoFlattenInput"[^>]*checked/,
+    "自动拍平开关必须位于高级选项内且默认开启",
+  );
+});
 
 function sleep(ms) {
   return new Promise((resolve) => {

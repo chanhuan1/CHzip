@@ -81,6 +81,7 @@ function createWorkerStore(initial = {}) {
     selection: ZIP_SELECTION,
     codePage: "auto",
     conflictPolicy: "rename",
+    autoFlatten: true,
     sourceFingerprint: [],
     sevenZipPath: "/nonexistent/7zzs",
     sevenZipSource: "bundled",
@@ -299,6 +300,7 @@ test("F1 api extract route forwards body.conflictPolicy to services.extract", as
   }, fakeServices);
   assert.equal(captured.length, 1);
   assert.equal(captured[0].conflictPolicy, "keepnew");
+  assert.equal(captured[0].autoFlatten, true);
 
   captured.length = 0;
   await routeRequest("extract", {
@@ -307,6 +309,15 @@ test("F1 api extract route forwards body.conflictPolicy to services.extract", as
     requestId: "",
   }, fakeServices);
   assert.equal(captured[0].conflictPolicy, "rename", "body 缺省时回落 rename");
+  assert.equal(captured[0].autoFlatten, true, "body 缺省时自动拍平保持开启");
+
+  captured.length = 0;
+  await routeRequest("extract", {
+    query: {},
+    body: { path: "/data/a.zip", autoFlatten: false },
+    requestId: "",
+  }, fakeServices);
+  assert.equal(captured[0].autoFlatten, false, "显式 false 才关闭自动拍平");
 });
 
 // ------------------------------------------------------------ 前端 POST body
@@ -331,6 +342,7 @@ test("F1 ui startExtract posts conflictPolicy from the settings select", async (
       passwordInput: { value: "" },
       codePageSelect: { value: "auto" },
       conflictPolicySelect: { value: "skip" },
+      autoFlattenInput: { checked: false },
       deleteSourceInput: { checked: true },
       outputPreview: { textContent: "" },
       notice: { className: "", textContent: "" },
@@ -362,6 +374,7 @@ test("F1 ui startExtract posts conflictPolicy from the settings select", async (
   const extractPost = posts.find((entry) => entry.name === "extract");
   assert.ok(extractPost, "应发出 extract 请求");
   assert.equal(extractPost.body.conflictPolicy, "skip");
+  assert.equal(extractPost.body.autoFlatten, false);
   assert.equal(extractPost.body.codePage, "auto");
   assert.equal(extractPost.body.deleteSource, true);
   assert.deepEqual(extractPost.body.selectedPaths, ["keep.txt"]);
