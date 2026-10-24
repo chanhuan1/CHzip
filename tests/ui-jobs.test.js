@@ -269,6 +269,23 @@ test("setJobProgress keeps a file name that is a single percent", () => {
   assert.equal(state.elements.currentFile.textContent, "50%");
 });
 
+test("setJobProgress hides the numeric label at zero and reveals it after progress", () => {
+    const state = { elements: createProgressStub(), running: true };
+
+    setJobProgress(0, "正在创建任务", "", state, {
+        id: "a".repeat(32),
+        status: "queued",
+    });
+    assert.equal(state.elements.progressText.hidden, true);
+
+    setJobProgress(1, "正在解压", "a.txt", state, {
+        id: "a".repeat(32),
+        status: "running",
+    });
+    assert.equal(state.elements.progressText.hidden, false);
+    assert.equal(state.elements.progressText.textContent, "1%");
+});
+
 test("setJobProgress falls back when there is no file name at all", () => {
   const state = { elements: createProgressStub() };
 
@@ -413,4 +430,81 @@ test("partialOutputSuffix only claims a preserved directory for partial extracts
     partialSuccess: true,
     outputDir: "/vol1/share/archive",
   }), "");
+});
+
+test("job progress switches mobile bar state without changing task logic", () => {
+    const state = {
+        running: true,
+        elements: {
+            ...createProgressStub(),
+            jobBar: {
+                classList: {
+                    values: new Map(),
+                    toggle(name, active) {
+                        this.values.set(name, active);
+                    },
+                },
+            },
+        },
+    };
+
+    setJobProgress(42, "正在解压", "a.txt", state, {
+        id: "a".repeat(32),
+        status: "running",
+    });
+    assert.equal(state.elements.jobBar.classList.values.get("is-job-active"), true);
+    assert.equal(state.elements.jobBar.classList.values.get("has-job-state"), true);
+
+    setJobProgress(100, "解压完成", "a.txt", state, {
+        id: "a".repeat(32),
+        status: "success",
+    });
+    assert.equal(state.elements.jobBar.classList.values.get("is-job-active"), false);
+    assert.equal(state.elements.jobBar.classList.values.get("has-job-state"), true);
+});
+
+test("mobile layout keeps bottom padding in sync with real bar height", () => {
+    const originalWindow = globalThis.window;
+    const originalDocument = globalThis.document;
+    const originalObserver = globalThis.ResizeObserver;
+    const properties = new Map();
+    globalThis.window = {
+        matchMedia: () => ({ matches: true }),
+        addEventListener() {},
+    };
+    globalThis.document = {
+        documentElement: {
+            style: {
+                setProperty(name, value) {
+                    properties.set(name, value);
+                },
+            },
+        },
+    };
+    globalThis.ResizeObserver = class {
+        constructor(callback) {
+            this.callback = callback;
+        }
+        observe() {
+            this.callback();
+        }
+    };
+
+    try {
+        const state = {
+            elements: {
+                appShell: { style: {} },
+                jobBar: {
+                    getBoundingClientRect: () => ({ height: 126.4 }),
+                },
+            },
+        };
+        globalThis.CHzipUiJobs.initJobBarLayout(state);
+        assert.equal(properties.get("--job-bar-space"), "153px");
+        assert.equal(state.elements.appShell.style.paddingBottom, "178px");
+    } finally {
+        globalThis.window = originalWindow;
+        globalThis.document = originalDocument;
+        globalThis.ResizeObserver = originalObserver;
+    }
 });

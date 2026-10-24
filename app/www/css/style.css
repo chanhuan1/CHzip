@@ -1,6 +1,6 @@
 @font-face {
     font-family: "Inter Variable";
-    src: url("../fonts/InterVariable.woff2?v=4.5") format("woff2");
+    src: url("../fonts/InterVariable.woff2?v=4.6") format("woff2");
     font-style: normal;
     font-weight: 100 900;
     font-display: swap;
@@ -15,7 +15,7 @@
     --surface: #ffffff;
     --surface-soft: #f7f9f9;
     --ink: #1d282c;
-    --muted: #68777d;
+    --muted: #5f7076;
     --line: #d7dfe1;
     --line-strong: #c4cfd2;
     --accent: #2786dc;
@@ -35,13 +35,13 @@
     --file-top: #63aeee;
     --file-bottom: #1d6cb8;
     --file-fold: #b8dcfa;
-    --radius-xs: 6px;
-    --radius-sm: 10px;
-    --radius-md: 12px;
-    --radius-lg: 16px;
-    --radius-xl: 20px;
+    --radius-xs: 5px;
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 8px;
+    --radius-xl: 8px;
     --radius-pill: 999px;
-    --shadow: 0 12px 34px rgba(31, 48, 55, 0.1);
+    --shadow: 0 4px 14px rgba(31, 48, 55, 0.055);
     --preview-bg: #1e1e1e;
     --preview-ink: #d4d4d4;
     --preview-line: #3c3c3c;
@@ -77,7 +77,7 @@
     --file-top: #74bbff;
     --file-bottom: #2b7cc4;
     --file-fold: #c5e2ff;
-    --shadow: 0 12px 34px rgba(0, 0, 0, 0.4);
+    --shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
     --preview-bg: #0d0d0d;
     --preview-ink: #e0e0e0;
     --preview-line: #2a2a2a;
@@ -252,6 +252,10 @@ dd {
     gap: 10px;
 }
 
+.archive-copy {
+    min-width: 0;
+}
+
 .status-badge {
     min-width: 116px;
     min-height: 34px;
@@ -328,6 +332,15 @@ dd {
     color: var(--muted);
     font-size: 12px;
     line-height: 1.5;
+}
+
+.job-bar:not(.has-job-state) .progress-track,
+.job-bar:not(.has-job-state) .job-copy p {
+    display: none;
+}
+
+.job-bar:not(.has-job-state) .job-line {
+    margin-bottom: 0;
 }
 
 .archive-copy h2 {
@@ -474,7 +487,7 @@ dd {
 
 .work-grid {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 360px;
+    grid-template-columns: minmax(0, 1fr) 340px;
     gap: 14px;
     align-items: stretch;
 }
@@ -1316,15 +1329,8 @@ dd {
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 20px;
     align-items: center;
-    margin-top: 14px;
+    margin-bottom: 14px;
     padding: 15px 17px;
-}
-
-@media (min-height: 900px) {
-    .job-bar {
-        position: sticky;
-        bottom: max(12px, env(safe-area-inset-bottom, 0px));
-    }
 }
 
 .job-line {
@@ -1431,7 +1437,7 @@ dd {
     font-feature-settings: "lnum" 1, "tnum" 1;
 }
 
-.task-center-btn {
+.header-right .task-center-btn {
     min-height: 34px;
     padding: 0 14px;
     font-size: 13px;
@@ -1440,7 +1446,7 @@ dd {
     gap: 7px;
 }
 
-.task-center-btn:hover:not(:disabled) {
+.header-right .task-center-btn:hover:not(:disabled) {
     border-color: var(--accent);
     background: var(--accent-soft);
 }
@@ -1643,6 +1649,113 @@ dd {
 .job-actions {
     display: flex;
     gap: 8px;
+    align-items: center;
+}
+
+.job-option {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 38px;
+    padding: 0 12px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-md);
+    color: var(--ink);
+    background: var(--surface);
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.job-option input {
+    display: grid;
+    flex: none;
+    place-content: center;
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    border: 1.5px solid var(--line-strong);
+    border-radius: 4px;
+    appearance: none;
+    background: var(--control-bg);
+    cursor: pointer;
+}
+
+.job-option input::before {
+    width: 7px;
+    height: 4px;
+    border-bottom: 1.8px solid #fff;
+    border-left: 1.8px solid #fff;
+    content: "";
+    transform: rotate(-45deg) translateY(-1px) scale(0);
+    transition: transform 0.12s ease;
+}
+
+.job-option input:checked {
+    border-color: var(--accent);
+    background: var(--accent);
+}
+
+.job-option input:checked::before {
+    transform: rotate(-45deg) translateY(-1px) scale(1);
+}
+
+.job-option-icon {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    color: var(--muted);
+}
+
+.job-option-icon svg {
+    display: block;
+    width: 14px;
+    height: 14px;
+}
+
+.job-option:hover:not(:has(input:disabled)) {
+    border-color: var(--accent);
+    color: var(--ink);
+    background: var(--surface-soft);
+    box-shadow: 0 2px 7px rgba(15, 30, 37, 0.16);
+}
+
+.job-option:has(input:checked) {
+    border-color: var(--accent);
+    color: var(--ink);
+    background: var(--surface);
+    box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.job-option:has(input:checked) .job-option-icon {
+    color: var(--accent);
+}
+
+.job-option:has(input:checked):hover:not(:has(input:disabled)) {
+    border-color: var(--accent-dark);
+    background: var(--surface-soft);
+}
+
+.job-option:has(input:focus-visible) {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.job-option:has(input:disabled) {
+    border-color: var(--line);
+    color: var(--ink);
+    background: var(--surface);
+    box-shadow: none;
+    cursor: not-allowed;
+}
+
+.job-option input:disabled {
+    cursor: not-allowed;
 }
 
 .primary-button,
@@ -1718,6 +1831,8 @@ dd {
 .dialog {
     width: min(520px, 100%);
     max-height: min(680px, calc(100vh - 40px));
+    display: flex;
+    flex-direction: column;
     overflow: hidden;
     border: 1px solid var(--line);
     border-radius: var(--radius-lg);
@@ -1927,7 +2042,7 @@ dd {
 
 .password-manager-dialog {
     display: grid;
-    grid-template-rows: auto minmax(0, 1fr) auto auto;
+    grid-template-rows: auto auto auto auto;
     width: min(700px, 100%);
 }
 
@@ -1969,7 +2084,7 @@ dd {
 }
 
 .password-record-list {
-    min-height: 250px;
+    min-height: 0;
     max-height: 380px;
     overflow: auto;
     background: var(--surface-soft);
@@ -2128,6 +2243,15 @@ dd {
         grid-template-columns: 1fr;
     }
 
+    .job-bar {
+        grid-template-columns: 1fr;
+    }
+
+    .job-actions {
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+
     .file-panel {
         order: 0;
     }
@@ -2183,6 +2307,7 @@ dd {
 
     .archive-summary {
         display: grid;
+        grid-template-columns: 44px minmax(0, 1fr);
         gap: 8px;
         padding: 12px 14px;
     }
@@ -2195,6 +2320,7 @@ dd {
 
     .archive-metrics {
         grid-template-columns: repeat(3, 1fr);
+        grid-column: 1 / -1;
     }
 
     .archive-metrics div {
@@ -2245,13 +2371,59 @@ dd {
     }
 
     .job-bar {
-        position: static;
+        position: fixed;
+        right: 13px;
+        bottom: calc(13px + env(safe-area-inset-bottom, 0px));
+        left: 13px;
+        z-index: 40;
         gap: 12px;
+        margin: 0;
+        padding: 12px;
+        box-shadow: 0 8px 32px rgba(18, 31, 36, 0.2);
     }
 
     .job-actions,
     .job-actions button {
         width: 100%;
+    }
+
+    .job-actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+    }
+
+    .job-actions .job-option {
+        grid-column: 1 / -1;
+        order: -2;
+        width: 100%;
+        min-height: 44px;
+        padding: 8px 10px;
+    }
+
+    .job-bar:not(.is-job-active) .job-actions #extractBtn {
+        grid-column: 1 / -1;
+        order: -1;
+    }
+
+    .job-bar:not(.has-job-state) .progress-track,
+    .job-bar:not(.has-job-state) .job-copy p {
+        display: none;
+    }
+
+    .job-bar .job-line {
+        margin-bottom: 0;
+    }
+
+    .job-bar.has-job-state .progress-track {
+        margin-top: 8px;
+    }
+
+    .job-bar .progress-eta {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
 
     .notice-row {
@@ -2321,8 +2493,227 @@ dd {
         grid-template-columns: repeat(3, 1fr);
     }
 
+    .dialog-backdrop {
+        align-items: end;
+        padding: 12px 12px calc(12px + env(safe-area-inset-bottom, 0px));
+    }
+
+    .dialog {
+        width: 100%;
+        max-width: none;
+        max-height: calc(100dvh - 24px - env(safe-area-inset-bottom, 0px));
+        border-radius: var(--radius-lg);
+    }
+
+    .dialog-head,
+    .dialog-actions,
+    .directory-toolbar {
+        flex-shrink: 0;
+    }
+
+    .password-manager-dialog,
+    .task-center-dialog {
+        display: flex;
+    }
+
+    .password-manager-body,
+    .task-center-list {
+        flex: 0 1 auto;
+        overflow: auto;
+    }
+
     .password-record-list {
-        min-height: 210px;
+        max-height: min(42dvh, 320px);
+    }
+
+    .directory-tree,
+    .diagnostics-content,
+    .comment-body,
+    .password-prompt-body,
+    .password-record-body,
+    .permission-dialog-body,
+    .solid-confirm-body {
+        min-height: 0;
+        overflow-y: auto;
+    }
+
+    .directory-toolbar,
+    .dialog-actions {
+        flex-wrap: wrap;
+    }
+
+    .dialog-actions > button,
+    .directory-toolbar > button {
+        min-height: 44px;
+    }
+
+    .preview-close,
+    .dialog-close {
+        width: 44px;
+        min-height: 44px;
+    }
+}
+
+/* Touch targets must remain visible without hover. Desktop keeps its dense tree. */
+@media (pointer: coarse), (max-width: 680px) {
+    .tree-row .tree-preview-btn {
+        width: 44px;
+        min-width: 44px;
+        height: 44px;
+        opacity: 1;
+    }
+
+    .tree-row-action {
+        width: 44px;
+        height: 44px;
+    }
+
+    .tree-row {
+        min-height: 44px;
+    }
+
+    .tree-tool-btn,
+    .view-switch-btn,
+    .icon-text-button,
+    .primary-button,
+    .secondary-button,
+    .danger-button,
+    #openPasswordManagerBtn,
+    .settings-panel .directory-picker-summary .secondary-button,
+    .directory-node-toggle,
+    .directory-node-label {
+        min-height: 44px;
+    }
+
+    .tree-search-clear {
+        right: 0;
+        width: 40px;
+        height: 40px;
+    }
+
+    .search-field input {
+        min-height: 44px;
+        padding-right: 40px;
+    }
+
+    .check-control {
+        min-height: 44px;
+    }
+
+    .directory-node-row {
+        min-height: 44px;
+    }
+
+    .password-record-row,
+    .password-preset-option {
+        min-height: 44px;
+    }
+}
+
+@media (max-width: 680px) {
+    :root {
+        --tree-cols: 22px 18px 18px auto minmax(0, 1fr) 64px 44px;
+    }
+
+    .tree-column-header {
+        display: none;
+    }
+
+    .tree-toolbar {
+        gap: 6px;
+        padding: 6px 10px;
+    }
+
+    .tree-tools,
+    .view-switch {
+        gap: 4px;
+    }
+
+    .tree-tool-btn,
+    .view-switch-btn {
+        padding-right: 7px;
+        padding-left: 7px;
+    }
+
+    .file-tree {
+        padding: 5px 6px 10px;
+    }
+
+    .tree-row {
+        gap: 4px;
+        padding-right: 4px;
+        padding-left: calc(4px + var(--tree-depth, 0) * 14px);
+    }
+
+    .tree-size {
+        min-width: 64px;
+    }
+
+    .tree-preview-btn {
+        color: var(--accent);
+    }
+
+    .app-header {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 12px;
+    }
+
+    .header-right {
+        display: grid;
+        grid-template-columns: auto auto minmax(0, 1fr);
+        gap: 8px;
+    }
+
+    .status-badge {
+        min-width: 0;
+        min-height: 44px;
+    }
+
+    .header-right .task-center-btn,
+    .header-right .theme-toggle {
+        min-height: 44px;
+    }
+}
+
+@media (max-width: 390px) {
+    .tree-toolbar > .check-control {
+        display: none;
+    }
+
+    .tree-tools,
+    .view-switch {
+        flex: 1;
+    }
+
+    .view-switch {
+        min-width: 0;
+    }
+
+    .tree-tool-btn,
+    .view-switch-btn {
+        flex: 1;
+        justify-content: center;
+    }
+
+    .tree-size {
+        min-width: 58px;
+        font-size: 10px;
+    }
+
+    .tree-size-unit {
+        margin-left: 1px;
+        font-size: 9px;
+    }
+}
+
+@media (max-width: 380px) {
+    .view-switch-btn span {
+        display: none;
+    }
+
+    .view-switch-btn {
+        min-width: 44px;
     }
 }
 
@@ -2427,12 +2818,25 @@ dd {
 
 .preview-header h3 {
     margin: 0;
+    min-width: 0;
+    flex: 1;
     font-size: 14px;
     font-weight: 500;
     color: var(--ink);
     display: flex;
     align-items: center;
     gap: 8px;
+}
+
+#previewFileName {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.preview-header .preview-close {
+    flex: none;
 }
 
 /* 预览弹窗标题图标：由 .is-image 切换文档/图片两种图标，不再用 emoji。 */
@@ -3006,18 +3410,59 @@ textarea:focus {
     background: var(--muted);
 }
 
-/* 快捷复选框 hover 标签体验 */
-.delete-source-control {
-    margin-top: 2px;
-    padding: 8px 10px;
-    border-radius: var(--radius-sm);
-    background: var(--surface-soft);
-    border: 1px dashed var(--line);
-    cursor: pointer;
-    transition: background-color 0.15s ease, border-color 0.15s ease;
+/* Must stay last: preview's base declarations appear above this section. */
+@media (max-width: 680px) {
+    .preview-backdrop {
+        align-items: flex-end;
+        padding: 12px 12px calc(12px + env(safe-area-inset-bottom, 0px));
+    }
+
+    .preview-dialog {
+        width: 100%;
+        max-width: none;
+        height: min(82dvh, 760px);
+        max-height: calc(100dvh - 24px - env(safe-area-inset-bottom, 0px));
+        border-radius: var(--radius-lg);
+    }
+
+    .preview-header {
+        flex-shrink: 0;
+        gap: 8px;
+        padding: 8px 12px;
+    }
+
+    .preview-header h3 {
+        align-items: center;
+    }
+
+    .preview-body {
+        min-height: 0;
+    }
+
+    .preview-footer {
+        flex-shrink: 0;
+        flex-wrap: wrap;
+        gap: 8px;
+        padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+    }
+
+    .preview-text {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        word-break: normal;
+        font-size: 12px;
+    }
 }
 
-.delete-source-control:hover {
-    background: var(--accent-soft);
-    border-color: var(--accent);
+@media (prefers-reduced-motion: reduce) {
+    .preview-backdrop,
+    .preview-dialog,
+    .dialog-backdrop,
+    .dialog {
+        animation: none;
+    }
+
+    button:not(:disabled) {
+        transition: none;
+    }
 }

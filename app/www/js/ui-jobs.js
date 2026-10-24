@@ -185,6 +185,7 @@
         const safePercent = Math.max(0, Math.min(100, Number(percent) || 0));
         els.progressFill.style.width = `${safePercent}%`;
         els.progressText.textContent = `${Math.round(safePercent)}%`;
+        els.progressText.hidden = safePercent === 0;
         // 测试环境的元素 mock 不一定有 setAttribute，用可选调用保持兼容
         els.progressTrack.setAttribute?.("aria-valuenow", String(Math.round(safePercent)));
         els.jobState.textContent = status;
@@ -194,6 +195,14 @@
         els.currentFile.textContent = fileText || "正在等待任务状态...";
         const running = Boolean(job)
             && !["success", "failed", "cancelled"].includes(job.status);
+        const jobActive = running || (!job && state.running);
+        if (els.jobBar) {
+            els.jobBar.classList.toggle(
+                "has-job-state",
+                Boolean(job) || state.running,
+            );
+            els.jobBar.classList.toggle("is-job-active", jobActive);
+        }
         // 调试：?debugHighlight=1 时在控制台打印高亮链路每一步，便于真机排查
         // 「进度推进了但树不亮」到底卡在哪一环（仅开发用，不影响生产逻辑）。
         const DEBUG_HL = typeof window !== "undefined"
@@ -318,6 +327,9 @@
         state.jobId = "";
         if (state.elements?.cancelBtn) {
             state.elements.cancelBtn.disabled = true;
+        }
+        if (state.elements?.jobBar) {
+            state.elements.jobBar.classList.remove("is-job-active");
         }
         if (typeof state.onAvailabilityChange === "function") {
             state.onAvailabilityChange();
@@ -738,6 +750,37 @@
     // 任务中心弹窗打开时由弹窗自身轮询驱动，此处让位避免重复请求。
     const IDLE_BACKOFF_MS = [5000, 15000, 30000];
     const ACTIVE_POLL_MS = 1500;
+
+    // Keep the fixed mobile action bar from covering the last controls.
+    function initJobBarLayout(state) {
+        const bar = state.elements?.jobBar;
+        if (!bar) {
+            return;
+        }
+        const sync = () => {
+            const compact = window.matchMedia("(max-width: 680px)").matches;
+            const height = compact
+                ? Math.ceil(bar.getBoundingClientRect().height + 26)
+                : 0;
+            document.documentElement.style.setProperty(
+                "--job-bar-space",
+                `${height}px`,
+            );
+            if (state.elements?.appShell) {
+                state.elements.appShell.style.paddingBottom = height
+                    ? `${height + 13 + 12}px`
+                    : "";
+            }
+        };
+        window.addEventListener("resize", sync);
+        if (typeof ResizeObserver === "function") {
+            const observer = new ResizeObserver(sync);
+            observer.observe(bar);
+            return { observer, sync };
+        }
+        sync();
+        return { sync };
+    }
 
     function startTaskWatch(state, api) {
         if (state.taskWatchTimer) {
@@ -1176,6 +1219,7 @@
         setJobProgress,
         startExtract,
         startTaskWatch,
+        initJobBarLayout,
         startTest,
         statusLabel,
     };

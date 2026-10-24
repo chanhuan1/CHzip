@@ -38,6 +38,9 @@ test("C14 package.json version matches the manifest", () => {
 test("C14 every asset cache-busting key matches the manifest version", () => {
   const html = fs.readFileSync(indexPath, "utf8");
   const pattern = /(?:src|href)="([^"]+)\?v=([^"]+)"/g;
+  const assetVersionPattern = new RegExp(
+    `^${escapeRegExp(version)}(?:-r\\d+)?$`,
+  );
   const entries = [];
   let match;
   while ((match = pattern.exec(html))) {
@@ -48,10 +51,10 @@ test("C14 every asset cache-busting key matches the manifest version", () => {
   assert.equal(entries.length, 16, "应为 1 个 CSS + 14 个 JS + 1 个品牌图标，共 16 处");
 
   for (const asset of entries) {
-    assert.equal(
+    assert.match(
       asset.version,
-      version,
-      `${asset.url} 的 ?v= 应等于 ${version}`,
+      assetVersionPattern,
+      `${asset.url} 的 ?v= 应以 ${version} 开头，并可附加 -rN 缓存修订号`,
     );
   }
 });
@@ -59,7 +62,7 @@ test("C14 every asset cache-busting key matches the manifest version", () => {
 test("C14 the brand icon cache key matches the manifest version", () => {
   const html = fs.readFileSync(indexPath, "utf8");
   const v = escapeRegExp(version);
-  assert.match(html, new RegExp(`icon_64\\.png\\?v=${v}`));
+  assert.match(html, new RegExp(`icon_64\\.png\\?v=${v}(?:-r\\d+)?`));
 });
 
 // README 的徽章与安装命令曾经两次落后于实际版本（v3.0 徽章配 3.1 版本、
@@ -165,7 +168,27 @@ test("C14 project docs avoid known stale implementation claims", () => {
     path.join(rootDir, "app", "www", "css", "style.css"),
     "utf8",
   );
-  assert.match(css, new RegExp(`InterVariable\\.woff2\\?v=${escapeRegExp(version)}`));
+  assert.match(
+    css,
+    new RegExp(`InterVariable\\.woff2\\?v=${escapeRegExp(version)}(?:-r\\d+)?`),
+  );
+});
+
+test("C14 CGI does not let browsers cache same-version stylesheet rebuilds", () => {
+  const cgi = fs.readFileSync(
+    path.join(rootDir, "app", "ui", "index.cgi"),
+    "utf8",
+  );
+  assert.match(cgi, /html\|htm\|css\|js\)/);
+  assert.match(cgi, /Cache-Control: no-cache, no-store, must-revalidate/);
+});
+
+test("C14 cache revisions never leak into the displayed brand version", () => {
+  const app = fs.readFileSync(
+    path.join(rootDir, "app", "www", "js", "app.js"),
+    "utf8",
+  );
+  assert.match(app, /match\[1\]\.replace\(\/-r\\d\+\$\/,\s*""\)/);
 });
 
 test("C14 packageFileName follows the fnOS naming scheme", () => {

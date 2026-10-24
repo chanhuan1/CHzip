@@ -29,8 +29,8 @@
         window.CHzipFocus.initFocusManagement();
     }
 
-    // 品牌版本号与发行版本实时同步：从 <head> 里 CSS 资源的 ?v= 缓存键推导
-    // （该缓存键随 manifest 版本由打包门禁同步，永远等于当前发行版本），
+    // 品牌版本号与发行版本实时同步：从 <head> 里 CSS 资源的 ?v= 缓存键推导。
+    // 缓存键可能带 -rN 同版本重建修订号，展示时必须去掉。
     // 覆盖 HTML 里的硬编码占位。原本内联在 index.html 里，挪到这里以便
     // 页面 CSP 不必放行 unsafe-inline。
     (function syncBrandVersion() {
@@ -41,7 +41,7 @@
         }
         const match = link.getAttribute("href").match(/[?&]v=([^&"]+)/);
         if (match && match[1]) {
-            span.textContent = `v${match[1]}`;
+            span.textContent = `v${match[1].replace(/-r\d+$/, "")}`;
         }
     }());
 
@@ -49,6 +49,7 @@
     state.onAvailabilityChange = updateActionAvailability;
 
     const els = state.elements;
+    uiJobs.initJobBarLayout(state);
     uiTree.enableVerticalWheelChaining(els.fileTree);
     uiTree.enableVerticalWheelChaining(els.thumbWall);
     uiTree.enableVerticalWheelChaining(els.volumeList);
@@ -838,7 +839,9 @@
                 && state.selectedPaths.size > 0
                 && state.selectedPaths.size < state.allFilePaths.length
             );
-            els.deleteSourceInput.disabled = state.running || state.previewing;
+            els.deleteSourceInput.disabled = !state.info
+                || state.running
+                || state.previewing;
             if (isPartialSelection) {
                 els.deleteSourceInput.parentElement?.setAttribute("title", "所选文件解压成功后删除整个源压缩包（分卷则删除全部卷）；未勾选文件不会保留");
             } else {

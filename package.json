@@ -1,6 +1,6 @@
 {
   "name": "chzip",
-  "version": "4.5",
+  "version": "4.6",
   "private": true,
   "scripts": {
     "test": "node --test",

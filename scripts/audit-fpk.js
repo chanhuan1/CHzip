@@ -149,7 +149,7 @@ function auditPackage(config) {
   const fontVersion = css.match(/InterVariable\.woff2\?v=([^"')\s]+)/)?.[1];
   assert.match(
     fontVersion,
-    /^\d+\.\d+(?:\.\d+)?$/,
+    /^\d+\.\d+(?:\.\d+)?(?:-r\d+)?$/,
     "字体资源缓存键必须携带合法版本号",
   );
   assert.match(html, /id="treeSearchInput"/);

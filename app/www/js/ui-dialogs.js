@@ -229,19 +229,17 @@
         try { els.archiveType.textContent = archiveTypeLabel(info); } catch { /* 单项失败不影响其他字段 */ }
         try { els.archiveTitle.textContent = info.fileName || "-"; } catch { /* 单项失败不影响其他字段 */ }
         try { els.filePath.textContent = info.filePath || "-"; } catch { /* 单项失败不影响其他字段 */ }
+        try { els.filePath.title = info.filePath || ""; } catch { /* 单项失败不影响其他字段 */ }
         try { els.partCount.textContent = String(info.partCount || 1); } catch { /* 单项失败不影响其他字段 */ }
         try { renderWarnings(info.warnings, state); } catch { /* 单项失败不影响其他字段 */ }
         try { renderVolumes(info.parts, state); } catch { /* 单项失败不影响其他字段 */ }
         try {
             if (info.tool) {
-                const sourceMap = {
-                    bundled: "内置 7-Zip 就绪",
-                    system: "系统 7-Zip 就绪",
-                    env: "指定 7-Zip 就绪",
-                };
-                setToolStatus(sourceMap[info.tool.source] || "7-Zip 就绪", "ok", state);
+                setToolStatus("引擎就绪", "ok", state);
+                els.toolStatus.title = `${info.tool.source || "unknown"}: ${info.tool.path || ""}`;
             } else {
-                setToolStatus("缺少 7-Zip", "fail", state);
+                setToolStatus("引擎不可用", "fail", state);
+                els.toolStatus.title = "未找到内置或系统 7-Zip，请查看诊断";
             }
         } catch { /* 单项失败不影响其他字段 */ }
         try { updateOutputPreview(state); } catch { /* 单项失败不影响其他字段 */ }

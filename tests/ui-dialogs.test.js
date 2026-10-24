@@ -61,3 +61,33 @@ require("../app/www/js/ui-tree");
 test("every app.js uiTree.* call resolves to an exported function", () => {
   assertExportedCallsResolve("app.js", "uiTree", globalThis.CHzipUiTree);
 });
+
+test("engine status is concise and keeps details in the tooltip", () => {
+    const elements = {
+        archiveType: {},
+        archiveTitle: {},
+        filePath: {},
+        partCount: {},
+        warningList: {},
+        volumeList: { replaceChildren() {} },
+        volumeCount: {},
+        toolStatus: {},
+        selectedDirectoryPath: {},
+        outputPreview: {},
+    };
+    const state = { elements, selectedDirectory: "" };
+
+    DIALOGS.renderInfo({
+        filePath: "/vol1/share/a.zip",
+        fileName: "a.zip",
+        partCount: 1,
+        parts: [],
+        warnings: [],
+        tool: { source: "bundled", path: "/var/apps/CHzip/7zzs" },
+        selection: { format: "zip" },
+    }, state);
+
+    assert.equal(elements.toolStatus.textContent, "引擎就绪");
+    assert.match(elements.toolStatus.title, /bundled/);
+    assert.equal(elements.filePath.title, "/vol1/share/a.zip");
+});

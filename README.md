@@ -6,7 +6,7 @@
 
 面向 **fnOS（飞牛私有云）文件管理器右键场景**的专业压缩包处理工具 —— 解压 · 分卷 · 选择性解压 · 文件预览 · 密码管理，一键完成。
 
-[![版本](https://img.shields.io/badge/版本-v4.5-2786dc?style=flat-square)](https://github.com/chanhuan1/CHzip/releases)
+[![版本](https://img.shields.io/badge/版本-v4.6-2786dc?style=flat-square)](https://github.com/chanhuan1/CHzip/releases)
 [![平台](https://img.shields.io/badge/平台-fnOS%20(x86_64%20·%20arm64)-2786dc?style=flat-square)]()
 [![Stars](https://img.shields.io/github/stars/chanhuan1/CHzip?style=flat-square&label=Stars&color=2786dc)](https://github.com/chanhuan1/CHzip/stargazers)
 [![Forks](https://img.shields.io/github/forks/chanhuan1/CHzip?style=flat-square&label=Forks&color=2786dc)](https://github.com/chanhuan1/CHzip/forks)
@@ -30,7 +30,12 @@
 | 深色主题 | 浅色主题 |
 | :-: | :-: |
 | ![CHzip 深色主题](docs/images/1.png) | ![CHzip 浅色主题](docs/images/2.png) |
-| ![CHzip 功能设置区 ①](docs/images/3.png) | ![CHzip 功能设置区 ②](docs/images/4.png) |
+| ![CHzip 本地密码管理器](docs/images/3.png) | ![CHzip 任务历史与解压结果](docs/images/4.png) |
+
+<div align="center">
+  <img src="docs/images/mobile.png" width="320" alt="CHzip 移动端界面" />
+  <p><sub>移动端：常显预览入口与底部固定解压操作</sub></p>
+</div>
 
 ## ✨ 功能特性
 
@@ -60,7 +65,7 @@
 
 ## 🚀 快速开始
 
-1. 在飞牛应用中心手动安装 `CHzip_4.5_<架构>.fpk`（x86_64 / arm64）。
+1. 在飞牛应用中心手动安装 `CHzip_4.6_<架构>.fpk`（x86_64 / arm64）。
 2. 文件管理器右键压缩包（分卷选中首卷即可）→「使用 CHzip 打开」。
 3. 预览目录 → 选择目标路径 → 点「开始解压」。
 

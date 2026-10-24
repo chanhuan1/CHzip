@@ -106,9 +106,9 @@ esac
 
 # 4. 输出头 + 文件内容
 echo "Content-Type: $mime"
-# HTML/JS 不缓存（JS 通过资源 URL ?v= 版本号更新，避免旧包 JS 被浏览器长期缓存）
+# HTML/CSS/JS 不缓存；资源 URL 仍带版本号，避免同版本重建后复用旧文件。
 case "$ext" in
-    html|htm|js)
+    html|htm|css|js)
         echo "Cache-Control: no-cache, no-store, must-revalidate"
         echo "Pragma: no-cache"
         ;;

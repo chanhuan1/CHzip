@@ -387,7 +387,7 @@ Generates a diagnostic report for troubleshooting.
 ```json
 {
   "generatedAt": "ISO timestamp",
-  "version": "4.5",
+  "version": "4.6",
   "requestId": "16-char-hex",
   "source": {
     "path": "/vol1/share/a.7z",

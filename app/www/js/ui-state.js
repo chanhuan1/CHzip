@@ -72,6 +72,7 @@
     function createElementCache() {
         const $ = (id) => document.getElementById(id);
         return {
+            appShell: document.querySelector(".app-shell"),
             archiveType: $("archiveType"),
             archiveTitle: $("archiveTitle"),
             cancelPasswordBtn: $("cancelPasswordBtn"),
@@ -133,6 +134,7 @@
             viewListBtn: $("viewListBtn"),
             viewThumbsBtn: $("viewThumbsBtn"),
             jobState: $("jobState"),
+            jobBar: document.querySelector(".job-bar"),
             notice: $("notice"),
             outputPreview: $("outputPreview"),
             openDirectoryPickerBtn: $("openDirectoryPickerBtn"),
